@@ -1,0 +1,205 @@
+@import "tailwindcss";
+
+/* AVGST Brand System 1.0 — цветовые токены */
+:root {
+  color-scheme: light;
+
+  --avgst-green: #48b062;
+  --avgst-green-hover: #44a75d;
+  --avgst-yellow: #fcc90c;
+
+  --avgst-ink: #111111;
+  --avgst-graphite: #242424;
+  --avgst-text-secondary: #999999;
+
+  --avgst-page: #f5f6f8;
+  --avgst-mist: #eef0f4;
+  --avgst-card: #ffffff;
+  --avgst-line: #dbdbdb;
+  --avgst-silver: #c9c9c9;
+
+  --avgst-danger: #f95d51;
+  --avgst-utility: #00599b;
+
+  /* shadcn-совместимые алиасы на бренд-токены */
+  --background: var(--avgst-page);
+  --foreground: var(--avgst-ink);
+  --card: var(--avgst-card);
+  --card-foreground: var(--avgst-ink);
+  --primary: var(--avgst-green);
+  --primary-foreground: #ffffff;
+  --secondary: var(--avgst-mist);
+  --secondary-foreground: var(--avgst-ink);
+  --muted: var(--avgst-mist);
+  --muted-foreground: var(--avgst-text-secondary);
+  --accent: var(--avgst-yellow);
+  --accent-foreground: var(--avgst-ink);
+  --border: var(--avgst-line);
+  --input: var(--avgst-line);
+  --ring: var(--avgst-green);
+  --destructive: var(--avgst-danger);
+  --destructive-foreground: #ffffff;
+  --radius: 0.375rem;
+
+  --font-sans: var(--font-inter), Arial, sans-serif;
+}
+
+@theme inline {
+  --color-avgst-green: var(--avgst-green);
+  --color-avgst-green-hover: var(--avgst-green-hover);
+  --color-avgst-yellow: var(--avgst-yellow);
+  --color-avgst-ink: var(--avgst-ink);
+  --color-avgst-graphite: var(--avgst-graphite);
+  --color-avgst-muted: var(--avgst-text-secondary);
+  --color-avgst-page: var(--avgst-page);
+  --color-avgst-mist: var(--avgst-mist);
+  --color-avgst-card: var(--avgst-card);
+  --color-avgst-line: var(--avgst-line);
+  --color-avgst-silver: var(--avgst-silver);
+  --color-avgst-danger: var(--avgst-danger);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --radius-lg: var(--radius);
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Деликатный скролл: тонкий, полупрозрачный, без серого трека */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(17, 17, 17, 0.22) transparent;
+  scroll-behavior: smooth;
+}
+
+html::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+html::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html::-webkit-scrollbar-thumb {
+  background: rgba(17, 17, 17, 0.18);
+  border-radius: 999px;
+}
+
+html::-webkit-scrollbar-thumb:hover {
+  background: rgba(17, 17, 17, 0.32);
+}
+
+html::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Секции-магниты помечаются классом; дотягивание — в LandingSnap (JS) */
+
+@keyframes landing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landing-ken {
+  from {
+    transform: scale(1.06);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes landing-line {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.landing-rise {
+  animation: landing-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-rise-delay-1 {
+  animation-delay: 0.12s;
+}
+
+.landing-rise-delay-2 {
+  animation-delay: 0.24s;
+}
+
+.landing-rise-delay-3 {
+  animation-delay: 0.36s;
+}
+
+.landing-ken {
+  animation: landing-ken 8s ease-out both;
+}
+
+.landing-line {
+  transform-origin: left center;
+  animation: landing-line 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-rise,
+  .landing-ken,
+  .landing-line {
+    animation: none;
+  }
+}
+
+@keyframes signup-step-enter {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.signup-step-enter {
+  animation: signup-step-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signup-step-enter {
+    animation: none;
+  }
+}

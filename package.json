@@ -1,0 +1,18 @@
+{
+  "name": "b2b-platform",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev:api": "npm run dev -w @b2b/api",
+    "dev:portal": "npm run dev -w @b2b/portal-web",
+    "dev:site": "npm run dev -w @b2b/site-runtime",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}
