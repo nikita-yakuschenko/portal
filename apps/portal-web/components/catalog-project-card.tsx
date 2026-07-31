@@ -178,7 +178,7 @@ export function CatalogProjectCard({
           </p>
           {hasRetail ? (
             <>
-              <p className="mt-1 text-xs text-slate-500">Ваша витрина</p>
+              <p className="mt-1 text-xs text-slate-500">Ваша цена для покупателя</p>
               <p className="text-base font-semibold tabular-nums text-avgst-green">
                 {retailOnRequest || retailPrice == null
                   ? "По запросу"
@@ -186,7 +186,7 @@ export function CatalogProjectCard({
               </p>
             </>
           ) : (
-            <p className="mt-1 text-xs text-slate-400">Цена для сайта — во вкладке «Цена»</p>
+            <p className="mt-1 text-xs text-slate-400">Задайте свою цену во вкладке «Цена»</p>
           )}
         </div>
       </Link>

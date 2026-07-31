@@ -309,7 +309,7 @@ export default function PartnerCatalogProjectPage() {
                   </p>
                   {retailLabel ? (
                     <>
-                      <p className="mt-2 text-xs text-slate-500">На вашей витрине</p>
+                      <p className="mt-2 text-xs text-slate-500">Ваша цена для покупателя</p>
                       <p className="text-lg font-semibold tabular-nums text-avgst-green">
                         {retailLabel === "по запросу" ? "По запросу" : `от ${retailLabel}`}
                       </p>
@@ -388,7 +388,7 @@ export default function PartnerCatalogProjectPage() {
                 <Panel>
                   <p className="mb-4 text-sm text-slate-500">
                     Описание и фото синхронизируются с заводом. Здесь задаёте розничную цену,
-                    наценку и допы для конечного покупателя на вашей витрине.
+                    наценку и допы — то, что увидит конечный покупатель на вашем сайте дилера.
                   </p>
                   <PartnerProjectPricingPanel
                     projectId={project.id}

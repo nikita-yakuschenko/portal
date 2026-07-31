@@ -97,7 +97,7 @@ export function PartnerProjectPricingPanel({
           extras: draft.extras
         })
       });
-      setNotice("Цена и допы сохранены для витрины.");
+      setNotice("Цена и допы сохранены.");
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Не удалось сохранить");
     } finally {
@@ -117,7 +117,7 @@ export function PartnerProjectPricingPanel({
           <span className="font-medium text-slate-950">{formatRub(factoryBasePrice)}</span>
         </p>
         <p className="mt-1 text-slate-500">
-          На витрине покупателя:{" "}
+          Ваша цена для покупателя:{" "}
           <span className="font-medium text-slate-950">
             {preview.onRequest ? "по запросу" : formatRub(preview.amount)}
           </span>
@@ -189,7 +189,7 @@ export function PartnerProjectPricingPanel({
           disabled={!canManage}
           onClick={() => setDraft((prev) => ({ ...prev, isPublished: !prev.isPublished }))}
         >
-          {draft.isPublished ? "Показывать на сайте" : "Скрыт с сайта"}
+          {draft.isPublished ? "Показывать на сайте дилера" : "Скрыт с сайта дилера"}
         </Button>
       </div>
 
