@@ -1,79 +1,151 @@
-import {
-  IconActivityHeartbeat,
-  IconBuildingStore,
-  IconFolder,
-  IconRefresh,
-  IconUsersGroup
-} from "@tabler/icons-react";
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { IconFolder } from "@tabler/icons-react";
 
 import { DashboardShell } from "../../components/dashboard-shell";
 import { StatCard } from "../../components/stat-card";
+import { apiFetch } from "@/lib/api";
+import { companyCabinetLabel, companyNavigation } from "@/lib/company-nav";
 
-const navigation = [
-  { title: "Заявки", href: "/company", icon: IconFolder },
-  { title: "Партнёры", href: "/company/partners", icon: IconUsersGroup },
-  { title: "Каталог", href: "/company/catalog", icon: IconBuildingStore },
-  { title: "Синхронизации", href: "/company/sync", icon: IconRefresh }
-];
+type Application = {
+  id: string;
+  companyName: string;
+  contactName: string;
+  email: string;
+  region: string;
+  status: string;
+  createdAt: string;
+};
+
+type Dashboard = {
+  applications: Application[];
+  partners: unknown[];
+  latestSyncRun: { startedAt?: string; status?: string } | null;
+};
 
 export default function CompanyPage() {
+  const [data, setData] = useState<Dashboard | null>(null);
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      setError("");
+      const dashboard = await apiFetch<Dashboard>("/api/company/dashboard");
+      setData(dashboard);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось загрузить кабинет");
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function review(id: string, action: "approve" | "reject") {
+    setBusyId(id);
+    setNotice("");
+    try {
+      const result = await apiFetch<{ status: string; temporaryPassword?: string }>(
+        `/api/company/applications/${id}/${action}`,
+        { method: "POST", body: "{}" }
+      );
+      if (result.temporaryPassword) {
+        setNotice(`Заявка одобрена. Временный пароль: ${result.temporaryPassword}`);
+      } else {
+        setNotice(action === "approve" ? "Заявка одобрена." : "Заявка отклонена.");
+      }
+      await load();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Не удалось обработать заявку");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const pending = data?.applications.filter((item) => item.status === "new") ?? [];
+
   return (
     <DashboardShell
-      title="Кабинет вашей компании"
-      subtitle="Управление дилерской сетью"
+      cabinetLabel={companyCabinetLabel}
       currentPath="/company"
-      navigation={navigation}
+      navigation={companyNavigation}
     >
+      {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
+      {notice ? <p className="mb-4 text-sm text-slate-700">{notice}</p> : null}
+
       <div className="grid gap-4 md:grid-cols-3">
-        <StatCard title="Заявки на подключение" value="4" hint="1 требует решения сегодня" />
-        <StatCard title="Активные партнёры" value="6" hint="Текущий стартовый объём сети" />
-        <StatCard title="Последняя синхронизация" value="09:15" hint="Каталог Tilda обновлён без ошибок" />
+        <StatCard
+          title="Заявки на подключение"
+          value={String(pending.length)}
+          hint="Новые заявки в очереди"
+        />
+        <StatCard
+          title="Активные партнёры"
+          value={String(data?.partners.length ?? "—")}
+          hint="В дилерской сети"
+        />
+        <StatCard
+          title="Последняя синхронизация"
+          value={data?.latestSyncRun?.status ?? "—"}
+          hint={
+            data?.latestSyncRun?.startedAt
+              ? new Date(data.latestSyncRun.startedAt).toLocaleString("ru-RU")
+              : "Ещё не запускалась"
+          }
+        />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <IconFolder size={20} className="text-slate-500" />
-            <h2 className="text-lg font-semibold text-slate-950">Очередь заявок</h2>
-          </div>
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <IconFolder size={20} className="text-slate-500" />
+          <h2 className="text-lg font-semibold text-slate-950">Очередь заявок</h2>
+        </div>
 
-          <div className="mt-4 space-y-3">
-            {[
-              ["СтройДом Киров", "Новая заявка, 11:20"],
-              ["ДомСевер Тюмень", "На повторном рассмотрении"],
-              ["Партнёр Новосибирск", "Ожидает комментарий менеджера"]
-            ].map(([name, status]) => (
-              <div key={name} className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3">
+        <div className="mt-4 space-y-3">
+          {!data ? (
+            <p className="text-sm text-slate-500">Загрузка...</p>
+          ) : data.applications.length === 0 ? (
+            <p className="text-sm text-slate-500">Заявок пока нет.</p>
+          ) : (
+            data.applications.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-col gap-3 rounded-xl border border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
                 <div>
-                  <p className="font-medium text-slate-950">{name}</p>
-                  <p className="text-sm text-slate-500">{status}</p>
+                  <p className="font-medium text-slate-950">{item.companyName}</p>
+                  <p className="text-sm text-slate-500">
+                    {item.contactName} · {item.email} · {item.region} · {item.status}
+                  </p>
                 </div>
-                <button className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white">Открыть</button>
+                {item.status === "new" ? (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={busyId === item.id}
+                      onClick={() => void review(item.id, "approve")}
+                      className="rounded-lg bg-avgst-green px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+                    >
+                      Одобрить
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === item.id}
+                      onClick={() => void review(item.id, "reject")}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-60"
+                    >
+                      Отклонить
+                    </button>
+                  </div>
+                ) : null}
               </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <IconActivityHeartbeat size={20} className="text-slate-500" />
-            <h2 className="text-lg font-semibold text-slate-950">Активность сети</h2>
-          </div>
-
-          <div className="mt-4 space-y-4">
-            {[
-              ["Зимний 54", "12 запросов цены"],
-              ["Север 87", "8 запросов цены"],
-              ["Лето 102", "5 обращений партнёров"]
-            ].map(([project, activity]) => (
-              <div key={project} className="rounded-xl bg-slate-50 p-4">
-                <p className="font-medium text-slate-950">{project}</p>
-                <p className="mt-1 text-sm text-slate-500">{activity}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
+            ))
+          )}
+        </div>
+      </section>
     </DashboardShell>
   );
 }

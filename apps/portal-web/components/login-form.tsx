@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,19 @@ import { Input } from "@/components/ui/input";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
+type LoginUser = {
+  role: "company_admin" | "company_manager" | "partner_owner" | "partner_member";
+};
+
+function cabinetPathForRole(role: LoginUser["role"]) {
+  if (role === "company_admin" || role === "company_manager") {
+    return "/company";
+  }
+  return "/partner";
+}
+
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
+  const router = useRouter();
   const [email, setEmail] = useState("admin@avgst.local");
   const [password, setPassword] = useState("ChangeMe123!");
   const [resultMessage, setResultMessage] = useState("");
@@ -24,24 +37,29 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
-    setResultMessage("Выполняется вход...");
+    setResultMessage("");
 
-    const response = await fetch(`${apiBaseUrl}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ email, password })
-    });
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, password })
+      });
 
-    setLoading(false);
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+        setResultMessage(payload?.message ?? "Не удалось выполнить вход.");
+        return;
+      }
 
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-      setResultMessage(payload?.message ?? "Не удалось выполнить вход.");
-      return;
+      const payload = (await response.json()) as { user: LoginUser };
+      router.replace(cabinetPathForRole(payload.user.role));
+    } catch {
+      setResultMessage("Не удалось связаться с API. Проверьте, что запущен npm run dev:api.");
+    } finally {
+      setLoading(false);
     }
-
-    setResultMessage("Вход выполнен. Откройте /company или /partner.");
   }
 
   return (

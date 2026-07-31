@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { and, desc, eq, inArray } from "drizzle-orm";
 
-import type { CrmSendResult } from "@b2b/domain";
+import type { CatalogProjectDetails, CrmSendResult, PartnerPricingMode, PartnerProjectExtra } from "@b2b/domain";
 
 import { db } from "../../db/client.js";
 import {
@@ -15,6 +15,7 @@ import {
   leadEvents,
   partnerApplications,
   partnerInquiries,
+  partnerProjectPrices,
   partners,
   passwordResetTokens,
   users
@@ -22,8 +23,14 @@ import {
 import { slugify } from "../../lib/slug.js";
 import { createCrmAdapters } from "../crm/adapters.js";
 import { createResetToken, hashPassword, verifyPassword } from "../auth/passwords.js";
-import type { TildaClient } from "../catalog/tilda-client.js";
 import { mapTildaProduct } from "../catalog/catalog-service.js";
+import { buildProjectDetails, defaultOptionGroups } from "../catalog/project-details.js";
+import type { TildaClient } from "../catalog/tilda-client.js";
+import {
+  normalizeExtras,
+  normalizePricingMode,
+  resolvePartnerDisplayPrice
+} from "../partners/partner-pricing.js";
 
 type SessionUser = {
   id: string;
@@ -64,6 +71,42 @@ export class PortalService {
       email: input.email,
       fullName: input.fullName,
       role: "company_admin",
+      passwordHash: await hashPassword(input.password)
+    });
+  }
+
+  // Локальный демо-партнёр для входа в /partner
+  async ensureDemoPartner(input: {
+    email: string;
+    password: string;
+    fullName: string;
+    companyName: string;
+    region: string;
+  }): Promise<void> {
+    const existing = await db.query.users.findFirst({
+      where: eq(users.email, input.email)
+    });
+
+    if (existing) {
+      return;
+    }
+
+    const partnerId = randomUUID();
+    await db.insert(partners).values({
+      id: partnerId,
+      companyName: input.companyName,
+      status: "active",
+      region: input.region,
+      email: input.email,
+      phone: "+7 (000) 000-00-00"
+    });
+
+    await db.insert(users).values({
+      id: randomUUID(),
+      partnerId,
+      email: input.email,
+      fullName: input.fullName,
+      role: "partner_owner",
       passwordHash: await hashPassword(input.password)
     });
   }
@@ -289,6 +332,8 @@ export class PortalService {
               name: mapped.name,
               slug: slugify(mapped.name),
               description: mapped.description,
+              technology: mapped.technology,
+              details: mapped.details,
               area,
               floors,
               bedrooms,
@@ -321,6 +366,8 @@ export class PortalService {
             name: mapped.name,
             slug: mapped.slug,
             description: mapped.description,
+            technology: mapped.technology,
+            details: mapped.details,
             area,
             floors,
             bedrooms,
@@ -392,13 +439,198 @@ export class PortalService {
         )
       );
 
-    return projects.map((project) => ({
+    return projects.map((project) => this.mapCatalogProject(project, assets));
+  }
+
+  /** Каталог для витрины дилера: заводской контент + розничные цены партнёра */
+  async listPartnerStorefrontProjects(partnerId: string) {
+    const [projects, priceRows] = await Promise.all([
+      this.listCatalogProjects(),
+      db.select().from(partnerProjectPrices).where(eq(partnerProjectPrices.partnerId, partnerId))
+    ]);
+
+    const byProject = new Map(priceRows.map((row) => [row.projectId, row]));
+
+    return projects.map((project) => {
+      const row = byProject.get(project.id);
+      const pricing = row
+        ? {
+            pricingMode: normalizePricingMode(row.pricingMode),
+            markupPercent: row.markupPercent ?? undefined,
+            publicPrice: row.publicPrice ?? undefined,
+            priceOnRequest: row.priceOnRequest,
+            isPublished: row.isPublished,
+            extras: normalizeExtras(row.extras)
+          }
+        : null;
+
+      const display = resolvePartnerDisplayPrice(project.basePrice, pricing);
+
+      return {
+        ...project,
+        factoryBasePrice: project.basePrice ?? null,
+        basePrice: display.amount,
+        priceOnRequest: display.onRequest,
+        dealerPricing: pricing,
+        dealerExtras: pricing?.extras ?? []
+      };
+    });
+  }
+
+  async listPartnerProjectPrices(partnerId: string) {
+    const [projects, priceRows] = await Promise.all([
+      this.listCatalogProjects(),
+      db.select().from(partnerProjectPrices).where(eq(partnerProjectPrices.partnerId, partnerId))
+    ]);
+    const byProject = new Map(priceRows.map((row) => [row.projectId, row]));
+
+    return projects.map((project) => {
+      const row = byProject.get(project.id);
+      const pricingMode = row
+        ? normalizePricingMode(row.pricingMode)
+        : ("on_request" as PartnerPricingMode);
+      const extras = row ? normalizeExtras(row.extras) : [];
+      const display = resolvePartnerDisplayPrice(
+        project.basePrice,
+        row
+          ? {
+              pricingMode,
+              markupPercent: row.markupPercent ?? undefined,
+              publicPrice: row.publicPrice ?? undefined,
+              priceOnRequest: row.priceOnRequest
+            }
+          : null
+      );
+
+      return {
+        projectId: project.id,
+        projectName: project.name,
+        technology: project.technology,
+        factoryBasePrice: project.basePrice ?? null,
+        pricingMode,
+        markupPercent: row?.markupPercent ?? null,
+        publicPrice: row?.publicPrice ?? null,
+        priceOnRequest: row?.priceOnRequest ?? true,
+        isPublished: row?.isPublished ?? false,
+        extras,
+        displayPrice: display.amount,
+        displayOnRequest: display.onRequest,
+        primaryImage:
+          project.assets.find((asset) => asset.isPrimary)?.sourceUrl ??
+          project.assets[0]?.sourceUrl ??
+          null
+      };
+    });
+  }
+
+  async upsertPartnerProjectPrice(input: {
+    partnerId: string;
+    projectId: string;
+    pricingMode: PartnerPricingMode;
+    markupPercent?: number;
+    publicPrice?: number;
+    isPublished?: boolean;
+    extras?: PartnerProjectExtra[];
+  }) {
+    const project = await db.query.catalogProjects.findFirst({
+      where: eq(catalogProjects.id, input.projectId)
+    });
+    if (!project) {
+      throw new Error("Проект не найден");
+    }
+
+    const pricingMode = normalizePricingMode(input.pricingMode);
+    const extras = normalizeExtras(input.extras ?? []);
+    const priceOnRequest = pricingMode === "on_request";
+    const markupPercent =
+      pricingMode === "markup" && input.markupPercent != null
+        ? Math.round(input.markupPercent)
+        : null;
+    const publicPrice =
+      pricingMode === "exact" && input.publicPrice != null ? Math.round(input.publicPrice) : null;
+
+    const existing = await db.query.partnerProjectPrices.findFirst({
+      where: and(
+        eq(partnerProjectPrices.partnerId, input.partnerId),
+        eq(partnerProjectPrices.projectId, input.projectId)
+      )
+    });
+
+    const payload = {
+      pricingMode,
+      markupPercent,
+      publicPrice,
+      priceOnRequest,
+      isPublished: input.isPublished ?? existing?.isPublished ?? false,
+      extras,
+      updatedAt: new Date()
+    };
+
+    if (existing) {
+      await db
+        .update(partnerProjectPrices)
+        .set(payload)
+        .where(eq(partnerProjectPrices.id, existing.id));
+    } else {
+      await db.insert(partnerProjectPrices).values({
+        id: randomUUID(),
+        partnerId: input.partnerId,
+        projectId: input.projectId,
+        ...payload
+      });
+    }
+
+    const rows = await this.listPartnerProjectPrices(input.partnerId);
+    return rows.find((row) => row.projectId === input.projectId) ?? null;
+  }
+
+  async getCatalogProject(projectId: string) {
+    const project = await db.query.catalogProjects.findFirst({
+      where: eq(catalogProjects.id, projectId)
+    });
+
+    if (!project) {
+      return null;
+    }
+
+    const assets = await db.select().from(catalogAssets).where(eq(catalogAssets.projectId, project.id));
+    return this.mapCatalogProject(project, assets);
+  }
+
+  private mapCatalogProject(
+    project: typeof catalogProjects.$inferSelect,
+    assets: Array<typeof catalogAssets.$inferSelect>
+  ) {
+    const technology = (project.technology === "panel_frame" ? "panel_frame" : "modular") as
+      | "modular"
+      | "panel_frame";
+    const storedDetails = project.details as CatalogProjectDetails | Record<string, unknown> | null;
+    const hasDetails =
+      storedDetails &&
+      typeof storedDetails === "object" &&
+      Array.isArray((storedDetails as CatalogProjectDetails).packages);
+
+    const details = hasDetails
+      ? {
+          ...(storedDetails as CatalogProjectDetails),
+          // Актуальный перечень опций по технологии (цены — по запросу / прайсу проекта)
+          optionGroups: defaultOptionGroups(technology)
+        }
+      : buildProjectDetails({
+          name: project.name,
+          technology,
+          characteristics: []
+        });
+
+    return {
       id: project.id,
       source: project.source,
       sourceUid: project.sourceUid,
       name: project.name,
       slug: project.slug,
       description: project.description,
+      technology,
+      details,
       area: normalizeOptionalNumber(project.area),
       floors: normalizeOptionalNumber(project.floors),
       bedrooms: normalizeOptionalNumber(project.bedrooms),
@@ -411,6 +643,7 @@ export class PortalService {
       lastSyncedAt: project.lastSyncedAt.toISOString(),
       assets: assets
         .filter((asset) => asset.projectId === project.id)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((asset) => ({
           id: asset.id,
           projectId: asset.projectId,
@@ -420,7 +653,7 @@ export class PortalService {
           sortOrder: asset.sortOrder,
           isPrimary: asset.isPrimary
         }))
-    }));
+    };
   }
 
   async listCatalogSyncRuns() {
@@ -638,6 +871,14 @@ export class PortalService {
           name: project.name,
           slug: project.slug,
           description: project.description,
+          technology:
+            project.technology === "panel_frame" ? ("panel_frame" as const) : ("modular" as const),
+          details: buildProjectDetails({
+            name: project.name,
+            technology:
+              project.technology === "panel_frame" ? "panel_frame" : "modular",
+            characteristics: []
+          }),
           currency: project.currency,
           projectUrl: project.projectUrl,
           active: project.active,
@@ -651,6 +892,8 @@ export class PortalService {
           name: string;
           slug: string;
           description: string;
+          technology: "modular" | "panel_frame";
+          details: CatalogProjectDetails;
           area?: number;
           floors?: number;
           bedrooms?: number;
@@ -787,7 +1030,13 @@ export class PortalService {
     return { events, deliveries };
   }
 
-  async createInquiry(input: { actorUserId: string; partnerId: string; subject: string; message: string }) {
+  async createInquiry(input: {
+    actorUserId: string;
+    partnerId: string;
+    subject: string;
+    message: string;
+    projectId?: string;
+  }) {
     const inquiry = {
       id: randomUUID(),
       partnerId: input.partnerId,
@@ -795,7 +1044,9 @@ export class PortalService {
       message: input.message
     };
     await db.insert(partnerInquiries).values(inquiry);
-    await this.writeAuditLog(input.actorUserId, "partner.inquiry.created", "partner_inquiry", inquiry.id, {});
+    await this.writeAuditLog(input.actorUserId, "partner.inquiry.created", "partner_inquiry", inquiry.id, {
+      projectId: input.projectId ?? null
+    });
     return inquiry;
   }
 

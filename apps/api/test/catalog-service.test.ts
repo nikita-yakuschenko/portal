@@ -10,6 +10,7 @@ describe("catalog service", () => {
         id: "house-54",
         title: "Зимний 54",
         description: "Описание",
+        technology: "modular",
         price: 100,
         url: "https://example.com",
         images: ["https://example.com/main.jpg"]
@@ -19,6 +20,8 @@ describe("catalog service", () => {
 
     expect(project.source).toBe("tilda");
     expect(project.sourceUid).toBe("house-54");
+    expect(project.details.packages.length).toBeGreaterThanOrEqual(0);
+    expect(project.details.techDocs.length).toBeGreaterThan(0);
     expect(project.assets).toHaveLength(1);
     expect(project.slug).toContain("зимний-54");
   });

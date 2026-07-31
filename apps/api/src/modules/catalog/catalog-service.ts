@@ -2,6 +2,7 @@ import type { CatalogAsset, CatalogProject, TildaSyncResult } from "@b2b/domain"
 
 import { createId } from "../../lib/ids.js";
 import { slugify } from "../../lib/slug.js";
+import { buildProjectDetails } from "./project-details.js";
 import type { TildaClient, TildaProduct } from "./tilda-client.js";
 
 function mapAssets(projectId: string, product: TildaProduct): CatalogAsset[] {
@@ -18,6 +19,18 @@ function mapAssets(projectId: string, product: TildaProduct): CatalogAsset[] {
 
 export function mapTildaProduct(product: TildaProduct, now: string): CatalogProject {
   const projectId = createId();
+  const detailsInput: Parameters<typeof buildProjectDetails>[0] = {
+    name: product.title,
+    technology: product.technology,
+    characteristics: product.characteristics ?? [],
+    packages: product.packages ?? []
+  };
+  if (product.summary) detailsInput.summary = product.summary;
+  if (product.mark) detailsInput.mark = product.mark;
+  if (product.dimensionsLabel) detailsInput.dimensionsLabel = product.dimensionsLabel;
+  if (product.lengthM !== undefined) detailsInput.lengthM = product.lengthM;
+  if (product.widthM !== undefined) detailsInput.widthM = product.widthM;
+  if (product.pack) detailsInput.pack = product.pack;
 
   const project: CatalogProject = {
     id: projectId,
@@ -26,6 +39,8 @@ export function mapTildaProduct(product: TildaProduct, now: string): CatalogProj
     name: product.title,
     slug: slugify(product.title),
     description: product.description,
+    technology: product.technology,
+    details: buildProjectDetails(detailsInput),
     currency: "RUB",
     projectUrl: product.url,
     active: true,

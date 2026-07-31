@@ -108,6 +108,8 @@ export const catalogProjects = pgTable(
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     description: text("description").notNull(),
+    technology: text("technology").notNull().default("modular"),
+    details: jsonb("details").notNull().default({}),
     area: integer("area"),
     floors: integer("floors"),
     bedrooms: integer("bedrooms"),
@@ -199,6 +201,33 @@ export const partnerInquiries = pgTable("partner_inquiries", {
   status: inquiryStatusEnum("status").notNull().default("new"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
+
+/** Розничные цены и допы дилера поверх заводского каталога */
+export const partnerProjectPrices = pgTable(
+  "partner_project_prices",
+  {
+    id: text("id").primaryKey(),
+    partnerId: text("partner_id")
+      .notNull()
+      .references(() => partners.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => catalogProjects.id, { onDelete: "cascade" }),
+    pricingMode: text("pricing_mode").notNull().default("on_request"),
+    markupPercent: integer("markup_percent"),
+    publicPrice: integer("public_price"),
+    priceOnRequest: boolean("price_on_request").notNull().default(true),
+    isPublished: boolean("is_published").notNull().default(false),
+    extras: jsonb("extras").notNull().default([]),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    partnerProjectIdx: uniqueIndex("partner_project_prices_partner_project_idx").on(
+      table.partnerId,
+      table.projectId
+    )
+  })
+);
 
 export const auditLogs = pgTable("audit_logs", {
   id: text("id").primaryKey(),

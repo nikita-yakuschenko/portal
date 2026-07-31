@@ -1,79 +1,171 @@
-import {
-  IconBook,
-  IconBuilding,
-  IconHelpCircle,
-  IconMessages,
-  IconPlugConnected,
-  IconUsers
-} from "@tabler/icons-react";
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import { DashboardShell } from "../../components/dashboard-shell";
 import { StatCard } from "../../components/stat-card";
+import { apiFetch } from "@/lib/api";
+import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
 
-const navigation = [
-  { title: "Обзор", href: "/partner", icon: IconBuilding },
-  { title: "Сотрудники", href: "/partner/team", icon: IconUsers },
-  { title: "CRM", href: "/partner/crm", icon: IconPlugConnected },
-  { title: "Каталог", href: "/partner/catalog", icon: IconBook },
-  { title: "Лиды", href: "/partner/leads", icon: IconMessages },
-  { title: "Запросы", href: "/partner/inquiries", icon: IconHelpCircle }
-];
+type MeResponse = {
+  user: { fullName: string; email: string; role: string };
+  partner: { companyName: string; region: string; email: string; phone: string } | null;
+};
+
+type Lead = {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  type: string;
+  createdAt: string;
+};
+
+type LeadsResponse = {
+  events: Lead[];
+};
 
 export default function PartnerPage() {
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [counts, setCounts] = useState({ projects: 0, leads: 0, crm: 0, team: 0 });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [profile, projects, leadsPayload, crm, team] = await Promise.all([
+          apiFetch<MeResponse>("/api/partner/me"),
+          apiFetch<unknown[]>("/api/partner/catalog/projects"),
+          apiFetch<LeadsResponse>("/api/partner/leads"),
+          apiFetch<unknown[]>("/api/partner/crm-connections"),
+          apiFetch<unknown[]>("/api/partner/team")
+        ]);
+        setMe(profile);
+        setLeads(leadsPayload.events.slice(0, 5));
+        setCounts({
+          projects: projects.length,
+          leads: leadsPayload.events.length,
+          crm: crm.length,
+          team: team.length
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Не удалось загрузить кабинет");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
   return (
     <DashboardShell
-      title="Кабинет партнёра"
-      subtitle="Рабочий контур дилера"
+      cabinetLabel={partnerCabinetLabel}
       currentPath="/partner"
-      navigation={navigation}
+      navigation={partnerNavigation}
     >
-      <div className="grid gap-4 md:grid-cols-3">
-        <StatCard title="Каталог доступен" value="24" hint="Проекта готовы к работе" />
-        <StatCard title="Лиды за неделю" value="7" hint="3 отправлены в CRM сегодня" />
-        <StatCard title="CRM статус" value="OK" hint="Подключение активно" />
+      {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <StatCard title="Каталог" value={loading ? "…" : String(counts.projects)} hint="Проектов с завода" />
+        <StatCard title="Лиды" value={loading ? "…" : String(counts.leads)} hint="Всего в системе" />
+        <StatCard
+          title="CRM"
+          value={loading ? "…" : String(counts.crm)}
+          hint={counts.crm > 0 ? "Подключения активны" : "Нужно подключить"}
+        />
+        <StatCard title="Команда" value={loading ? "…" : String(counts.team)} hint="Сотрудников" />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <IconBook size={20} className="text-slate-500" />
-            <h2 className="text-lg font-semibold text-slate-950">Проекты в работе</h2>
-          </div>
+          <h2 className="text-lg font-semibold text-slate-950">Компания</h2>
+          {me?.partner ? (
+            <dl className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">Название</dt>
+                <dd className="font-medium text-slate-950">{me.partner.companyName}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">Регион</dt>
+                <dd className="font-medium text-slate-950">{me.partner.region}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">Контакт</dt>
+                <dd className="font-medium text-slate-950">{me.user.fullName}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">Email</dt>
+                <dd className="font-medium text-slate-950">{me.user.email}</dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="mt-3 text-sm text-slate-500">{loading ? "Загрузка..." : "Нет данных"}</p>
+          )}
+        </section>
 
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-slate-950">Последние лиды</h2>
+            <Link href="/partner/leads" className="text-sm font-medium text-avgst-green hover:underline">
+              Все лиды
+            </Link>
+          </div>
           <div className="mt-4 space-y-3">
-            {[
-              ["Зимний 54", "Базовая цена видна, 2 запроса"],
-              ["Север 87", "Цена по запросу, 1 запрос"],
-              ["Лето 102", "Материалы просмотрены 5 раз"]
-            ].map(([name, status]) => (
-              <div key={name} className="rounded-xl border border-slate-200 px-4 py-3">
-                <p className="font-medium text-slate-950">{name}</p>
-                <p className="mt-1 text-sm text-slate-500">{status}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <IconMessages size={20} className="text-slate-500" />
-            <h2 className="text-lg font-semibold text-slate-950">Последние действия</h2>
-          </div>
-
-          <div className="mt-4 space-y-4">
-            {[
-              ["CRM", "Новая интеграция сохранена"],
-              ["Каталог", "Синхронизация обновила 24 проекта"],
-              ["Запрос", "Отправлен запрос по комплектации дома"]
-            ].map(([label, text]) => (
-              <div key={text} className="rounded-xl bg-slate-50 p-4">
-                <p className="text-sm font-medium uppercase tracking-wide text-slate-500">{label}</p>
-                <p className="mt-1 text-sm text-slate-900">{text}</p>
-              </div>
-            ))}
+            {loading ? (
+              <p className="text-sm text-slate-500">Загрузка...</p>
+            ) : leads.length === 0 ? (
+              <p className="text-sm text-slate-500">Лидов пока нет.</p>
+            ) : (
+              leads.map((lead) => (
+                <div key={lead.id} className="rounded-xl border border-slate-200 px-4 py-3">
+                  <p className="font-medium text-slate-950">{lead.customerName}</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {lead.customerPhone} · {lead.type} ·{" "}
+                    {new Date(lead.createdAt).toLocaleString("ru-RU")}
+                  </p>
+                </div>
+              ))
+            )}
           </div>
         </section>
       </div>
+
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-950">Быстрые действия</h2>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link
+            href="/partner/catalog"
+            className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+          >
+            Каталог и цены
+          </Link>
+          <Link
+            href="/partner/site"
+            className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+          >
+            Настроить сайт
+          </Link>
+          <Link
+            href="/partner/leads"
+            className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+          >
+            Добавить лид
+          </Link>
+          <Link
+            href="/partner/crm"
+            className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+          >
+            Настроить CRM
+          </Link>
+          <Link
+            href="/partner/inquiries"
+            className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+          >
+            Запрос на завод
+          </Link>
+        </div>
+      </section>
     </DashboardShell>
   );
 }

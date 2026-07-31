@@ -91,37 +91,42 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
     setStatus("loading");
     setMessage("Отправляем заявку...");
 
-    const response = await fetch(`${apiBaseUrl}/api/public/partner-applications`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        inn: form.inn,
-        companyName: form.companyName,
-        contactName: form.contactName,
-        email: form.email,
-        region: form.region,
-        interests: form.interests,
-        message: form.message || undefined
-      })
-    });
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/public/partner-applications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inn: form.inn,
+          companyName: form.companyName,
+          contactName: form.contactName,
+          email: form.email,
+          region: form.region,
+          interests: form.interests,
+          message: form.message || undefined
+        })
+      });
 
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => null)) as
-        | { message?: string; formErrors?: string[] }
-        | null;
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | { message?: string; formErrors?: string[] }
+          | null;
+        setStatus("error");
+        setMessage(
+          payload?.message ??
+            payload?.formErrors?.[0] ??
+            "Не удалось отправить заявку. Проверьте данные и попробуйте снова."
+        );
+        return;
+      }
+
+      setStatus("success");
+      setMessage("Заявка принята. После проверки откроем доступ в кабинет.");
+      setForm(initialState);
+      goToStep(1);
+    } catch {
       setStatus("error");
-      setMessage(
-        payload?.message ??
-          payload?.formErrors?.[0] ??
-          "Не удалось отправить заявку. Проверьте данные и попробуйте снова."
-      );
-      return;
+      setMessage("Не удалось связаться с API. Проверьте, что запущен npm run dev:api.");
     }
-
-    setStatus("success");
-    setMessage("Заявка принята. После проверки откроем доступ в кабинет.");
-    setForm(initialState);
-    goToStep(1);
   }
 
   return (

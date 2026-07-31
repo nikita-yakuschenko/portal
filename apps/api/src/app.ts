@@ -1,4 +1,5 @@
 import cookie from "@fastify/cookie";
+import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import Fastify from "fastify";
 import { z } from "zod";
@@ -44,7 +45,26 @@ const createTeamUserSchema = z.object({
 
 const createInquirySchema = z.object({
   subject: z.string().min(2),
-  message: z.string().min(2)
+  message: z.string().min(2),
+  projectId: z.string().optional()
+});
+
+const upsertPartnerPriceSchema = z.object({
+  projectId: z.string().min(1),
+  pricingMode: z.enum(["markup", "exact", "on_request"]),
+  markupPercent: z.number().min(0).max(500).optional(),
+  publicPrice: z.number().int().positive().optional(),
+  isPublished: z.boolean().optional(),
+  extras: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        name: z.string().min(1),
+        price: z.number().nonnegative().optional(),
+        note: z.string().optional()
+      })
+    )
+    .optional()
 });
 
 const createLeadSchema = z.object({
@@ -84,6 +104,10 @@ export async function buildApp() {
   const app = Fastify({ logger: true });
   const portalService = new PortalService(new StoreTildaClient());
 
+  await app.register(cors, {
+    origin: true,
+    credentials: true
+  });
   await app.register(cookie);
   await app.register(jwt, {
     secret: config.jwtSecret,
@@ -97,6 +121,14 @@ export async function buildApp() {
     email: config.adminEmail,
     password: config.adminPassword,
     fullName: config.adminFullName
+  });
+
+  await portalService.ensureDemoPartner({
+    email: config.partnerEmail,
+    password: config.partnerPassword,
+    fullName: config.partnerFullName,
+    companyName: config.partnerCompanyName,
+    region: config.partnerRegion
   });
 
   async function requireAuth(
@@ -354,6 +386,14 @@ export async function buildApp() {
     return portalService.listCatalogSyncRuns();
   });
 
+  app.get("/api/company/catalog/projects", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    return portalService.listCatalogProjects();
+  });
+
   app.get("/api/company/partners", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
     if (roleCheck) {
@@ -376,6 +416,76 @@ export async function buildApp() {
       return roleCheck;
     }
     return portalService.listCatalogProjects();
+  });
+
+  app.get("/api/partner/catalog/projects/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const { id } = request.params as { id: string };
+    const project = await portalService.getCatalogProject(id);
+    if (!project) {
+      return reply.status(404).send({ message: "Проект не найден" });
+    }
+    return project;
+  });
+
+  app.get("/api/partner/pricing", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    return portalService.listPartnerProjectPrices(getAuthUser(request)!.partnerId!);
+  });
+
+  app.put("/api/partner/pricing", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const parsed = upsertPartnerPriceSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    try {
+      const extras = (parsed.data.extras ?? []).map((item) => {
+        const row: { id?: string; name: string; price?: number; note?: string } = {
+          name: item.name
+        };
+        if (item.id) row.id = item.id;
+        if (item.price !== undefined) row.price = item.price;
+        if (item.note) row.note = item.note;
+        return row;
+      });
+
+      return await portalService.upsertPartnerProjectPrice({
+        partnerId: getAuthUser(request)!.partnerId!,
+        projectId: parsed.data.projectId,
+        pricingMode: parsed.data.pricingMode,
+        ...(parsed.data.markupPercent !== undefined
+          ? { markupPercent: parsed.data.markupPercent }
+          : {}),
+        ...(parsed.data.publicPrice !== undefined ? { publicPrice: parsed.data.publicPrice } : {}),
+        ...(parsed.data.isPublished !== undefined ? { isPublished: parsed.data.isPublished } : {}),
+        extras
+      });
+    } catch (error) {
+      return reply
+        .status(400)
+        .send({ message: error instanceof Error ? error.message : "Не удалось сохранить цену" });
+    }
+  });
+
+  app.get("/api/partner/storefront/projects", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    return portalService.listPartnerStorefrontProjects(getAuthUser(request)!.partnerId!);
   });
 
   app.get("/api/partner/team", async (request, reply) => {
@@ -499,7 +609,9 @@ export async function buildApp() {
     return portalService.createInquiry({
       actorUserId: getAuthUser(request)!.sub,
       partnerId: getAuthUser(request)!.partnerId!,
-      ...parsed.data
+      subject: parsed.data.subject,
+      message: parsed.data.message,
+      ...(parsed.data.projectId ? { projectId: parsed.data.projectId } : {})
     });
   });
 

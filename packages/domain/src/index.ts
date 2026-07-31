@@ -12,6 +12,52 @@ export type LeadEventType =
   | "crm_delivery_failed";
 export type LeadDeliveryStatus = "pending" | "sent" | "failed";
 export type CrmProvider = "amocrm" | "bitrix24";
+export type CatalogTechnology = "modular" | "panel_frame";
+
+export type CatalogDocKind = "passport" | "spec" | "plan" | "manual" | "other";
+
+export interface CatalogProjectDetails {
+  summary?: string;
+  mark?: string;
+  dimensions?: {
+    lengthM?: number;
+    widthM?: number;
+    label?: string;
+  };
+  characteristics: Array<{ title: string; value: string }>;
+  packages: Array<{
+    id: string;
+    name: string;
+    price?: number;
+    description?: string;
+  }>;
+  optionGroups: Array<{
+    id: string;
+    title: string;
+    items: Array<{ id: string; name: string; note?: string }>;
+  }>;
+  techDocs: Array<{
+    id: string;
+    title: string;
+    kind: CatalogDocKind;
+    status: "available" | "on_request";
+    url?: string;
+    note?: string;
+  }>;
+  cargo: {
+    modulesNote?: string;
+    dimensionsNote?: string;
+    weightNote?: string;
+    packingNote?: string;
+  };
+  transport: {
+    method?: string;
+    leadTimeNote?: string;
+    deliveryNote?: string;
+    unloadingNote?: string;
+    mountingNote?: string;
+  };
+}
 
 export interface CatalogAsset {
   id: string;
@@ -30,6 +76,8 @@ export interface CatalogProject {
   name: string;
   slug: string;
   description: string;
+  technology: CatalogTechnology;
+  details: CatalogProjectDetails;
   area?: number;
   floors?: number;
   bedrooms?: number;
@@ -102,13 +150,28 @@ export interface PartnerSite {
   updatedAt: string;
 }
 
+export interface PartnerProjectExtra {
+  id: string;
+  name: string;
+  price?: number;
+  note?: string;
+}
+
+export type PartnerPricingMode = "markup" | "exact" | "on_request";
+
 export interface PartnerProjectPrice {
   id: string;
   partnerId: string;
   projectId: string;
+  /** Наценка % от заводской basePrice, либо точная publicPrice, либо по запросу */
+  pricingMode: PartnerPricingMode;
+  markupPercent?: number;
   publicPrice?: number;
   priceOnRequest: boolean;
   isPublished: boolean;
+  /** Допы и плюшки дилера для конечного покупателя */
+  extras: PartnerProjectExtra[];
+  updatedAt: string;
 }
 
 export interface CrmConnection {

@@ -119,21 +119,36 @@ export class PartnerService {
     return nextSite;
   }
 
-  upsertProjectPrice(partnerId: string, projectId: string, publicPrice?: number): PartnerProjectPrice {
+  upsertProjectPrice(
+    partnerId: string,
+    projectId: string,
+    input: {
+      pricingMode?: "markup" | "exact" | "on_request";
+      publicPrice?: number;
+      markupPercent?: number;
+    } = {}
+  ): PartnerProjectPrice {
     const existing = [...this.prices.values()].find(
       (price) => price.partnerId === partnerId && price.projectId === projectId
     );
 
+    const pricingMode = input.pricingMode ?? (input.publicPrice !== undefined ? "exact" : "on_request");
     const nextPrice: PartnerProjectPrice = {
       id: existing?.id ?? createId(),
       partnerId,
       projectId,
-      priceOnRequest: publicPrice === undefined,
-      isPublished: true
+      pricingMode,
+      priceOnRequest: pricingMode === "on_request",
+      isPublished: true,
+      extras: existing?.extras ?? [],
+      updatedAt: new Date().toISOString()
     };
 
-    if (publicPrice !== undefined) {
-      nextPrice.publicPrice = publicPrice;
+    if (pricingMode === "exact" && input.publicPrice !== undefined) {
+      nextPrice.publicPrice = input.publicPrice;
+    }
+    if (pricingMode === "markup" && input.markupPercent !== undefined) {
+      nextPrice.markupPercent = input.markupPercent;
     }
 
     this.prices.set(nextPrice.id, nextPrice);

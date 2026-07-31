@@ -22,17 +22,21 @@
   --avgst-utility: #00599b;
 
   /* shadcn-совместимые алиасы на бренд-токены */
-  --background: var(--avgst-page);
+  /* shadcn surface — белый; цвет страницы отдельно в body */
+  --background: var(--avgst-card);
   --foreground: var(--avgst-ink);
   --card: var(--avgst-card);
   --card-foreground: var(--avgst-ink);
+  --popover: var(--avgst-card);
+  --popover-foreground: var(--avgst-ink);
   --primary: var(--avgst-green);
   --primary-foreground: #ffffff;
   --secondary: var(--avgst-mist);
   --secondary-foreground: var(--avgst-ink);
   --muted: var(--avgst-mist);
   --muted-foreground: var(--avgst-text-secondary);
-  --accent: var(--avgst-yellow);
+  /* accent в shadcn = hover/focus UI, не бренд-жёлтый */
+  --accent: var(--avgst-mist);
   --accent-foreground: var(--avgst-ink);
   --border: var(--avgst-line);
   --input: var(--avgst-line);
@@ -61,6 +65,8 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
@@ -83,11 +89,20 @@
 
 body {
   margin: 0;
-  background: var(--background);
+  background: var(--avgst-page);
   color: var(--foreground);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Нативные контролы на Windows иначе падают в Times New Roman */
+button,
+input,
+select,
+textarea,
+option {
+  font-family: var(--font-sans);
 }
 
 /* Деликатный скролл: тонкий, полупрозрачный, без серого трека */
@@ -200,6 +215,25 @@ html::-webkit-scrollbar-corner {
 
 @media (prefers-reduced-motion: reduce) {
   .signup-step-enter {
+    animation: none;
+  }
+}
+
+@keyframes partner-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-partner-marquee {
+  animation: partner-marquee 75s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-partner-marquee {
     animation: none;
   }
 }
