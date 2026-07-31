@@ -43,6 +43,7 @@ import { formatRub } from "@/lib/partner-pricing";
 import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
 import { cn } from "@/lib/utils";
 import { PartnerProjectPricingPanel } from "@/components/partner-project-pricing-panel";
+import { PartnerProjectSiteVisibility } from "@/components/partner-project-site-visibility";
 import { ExternalLinkIcon, FileTextIcon } from "lucide-react";
 
 const DOC_KIND_LABEL: Record<string, string> = {
@@ -296,10 +297,16 @@ export default function PartnerCatalogProjectPage() {
         <div className="grid gap-6 xl:grid-cols-3">
           <div className="min-w-0 space-y-4 xl:col-span-2">
             <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <p className="text-sm font-medium text-avgst-green">
-                  {technologyLabel(project.technology)}
-                </p>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-avgst-green">
+                    {technologyLabel(project.technology)}
+                  </p>
+                  <PartnerProjectSiteVisibility
+                    projectId={project.id}
+                    canManage={canManagePricing}
+                  />
+                </div>
                 <div className="text-right">
                   <p className="text-xs text-slate-500">Заводская</p>
                   <p className="text-lg font-semibold tabular-nums text-slate-950">
@@ -387,8 +394,8 @@ export default function PartnerCatalogProjectPage() {
               <TabsContent value="price" className="mt-0">
                 <Panel>
                   <p className="mb-4 text-sm text-slate-500">
-                    Описание и фото синхронизируются с заводом. Здесь задаёте розничную цену,
-                    наценку и допы — то, что увидит конечный покупатель на вашем сайте дилера.
+                    Здесь только розничная цена, наценка и допы. Показ проекта на сайте —
+                    в шапке карточки («На сайте компании»).
                   </p>
                   <PartnerProjectPricingPanel
                     projectId={project.id}

@@ -13,8 +13,7 @@ import {
   FieldLabel
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+import { apiFetch } from "@/lib/api";
 
 type LoginUser = {
   role: "company_admin" | "company_manager" | "partner_owner" | "partner_member";
@@ -40,23 +39,15 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
     setResultMessage("");
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/auth/login`, {
+      const payload = await apiFetch<{ user: LoginUser }>("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ email, password })
       });
-
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-        setResultMessage(payload?.message ?? "Не удалось выполнить вход.");
-        return;
-      }
-
-      const payload = (await response.json()) as { user: LoginUser };
       router.replace(cabinetPathForRole(payload.user.role));
-    } catch {
-      setResultMessage("Не удалось связаться с API. Проверьте, что запущен npm run dev:api.");
+    } catch (err) {
+      setResultMessage(
+        err instanceof Error ? err.message : "Не удалось связаться с API. Проверьте npm run dev:api."
+      );
     } finally {
       setLoading(false);
     }

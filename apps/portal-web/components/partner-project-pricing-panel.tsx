@@ -23,7 +23,6 @@ type PricingState = {
   pricingMode: PricingMode;
   markupPercent: number | null;
   publicPrice: number | null;
-  isPublished: boolean;
   extras: Extra[];
 };
 
@@ -44,7 +43,6 @@ export function PartnerProjectPricingPanel({
     pricingMode: "on_request",
     markupPercent: null,
     publicPrice: null,
-    isPublished: false,
     extras: []
   });
   const [loading, setLoading] = useState(true);
@@ -60,7 +58,6 @@ export function PartnerProjectPricingPanel({
             pricingMode: PricingMode;
             markupPercent: number | null;
             publicPrice: number | null;
-            isPublished: boolean;
             extras: Extra[];
           }>
         >("/api/partner/pricing");
@@ -70,7 +67,6 @@ export function PartnerProjectPricingPanel({
             pricingMode: row.pricingMode,
             markupPercent: row.markupPercent,
             publicPrice: row.publicPrice,
-            isPublished: row.isPublished,
             extras: row.extras ?? []
           });
         }
@@ -91,10 +87,18 @@ export function PartnerProjectPricingPanel({
         body: JSON.stringify({
           projectId,
           pricingMode: draft.pricingMode,
-          markupPercent: draft.markupPercent ?? undefined,
-          publicPrice: draft.publicPrice ?? undefined,
-          isPublished: draft.isPublished,
-          extras: draft.extras
+          markupPercent:
+            draft.pricingMode === "markup" && draft.markupPercent != null
+              ? Math.round(draft.markupPercent)
+              : undefined,
+          publicPrice:
+            draft.pricingMode === "exact" && draft.publicPrice != null
+              ? Math.round(draft.publicPrice)
+              : undefined,
+          extras: draft.extras.map((item) => ({
+            ...item,
+            price: item.price != null ? Math.round(item.price) : undefined
+          }))
         })
       });
       setNotice("Цена и допы сохранены.");
@@ -180,17 +184,6 @@ export function PartnerProjectPricingPanel({
             />
           </div>
         ) : null}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant={draft.isPublished ? "secondary" : "outline"}
-          disabled={!canManage}
-          onClick={() => setDraft((prev) => ({ ...prev, isPublished: !prev.isPublished }))}
-        >
-          {draft.isPublished ? "Показывать на сайте дилера" : "Скрыт с сайта дилера"}
-        </Button>
       </div>
 
       <div className="space-y-2">

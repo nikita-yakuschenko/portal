@@ -13,8 +13,7 @@ import {
   FieldLabel
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+import { apiFetch } from "@/lib/api";
 
 const INTEREST_OPTIONS = [
   { id: "modular" as const, label: "Модульные домокомплекты" },
@@ -92,9 +91,8 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
     setMessage("Отправляем заявку...");
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/public/partner-applications`, {
+      await apiFetch("/api/public/partner-applications", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           inn: form.inn,
           companyName: form.companyName,
@@ -106,26 +104,17 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
         })
       });
 
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as
-          | { message?: string; formErrors?: string[] }
-          | null;
-        setStatus("error");
-        setMessage(
-          payload?.message ??
-            payload?.formErrors?.[0] ??
-            "Не удалось отправить заявку. Проверьте данные и попробуйте снова."
-        );
-        return;
-      }
-
       setStatus("success");
       setMessage("Заявка принята. После проверки откроем доступ в кабинет.");
       setForm(initialState);
       goToStep(1);
-    } catch {
+    } catch (err) {
       setStatus("error");
-      setMessage("Не удалось связаться с API. Проверьте, что запущен npm run dev:api.");
+      setMessage(
+        err instanceof Error
+          ? err.message
+          : "Не удалось связаться с API. Проверьте, что запущен npm run dev:api."
+      );
     }
   }
 

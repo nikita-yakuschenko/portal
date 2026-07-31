@@ -11,6 +11,11 @@ import { DashboardShell } from "../../../components/dashboard-shell";
 import { apiFetch } from "@/lib/api";
 import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
 import {
+  applySiteTemplateTexts,
+  draftDefaultsFromPartner,
+  emptyPartnerSiteDraft,
+  loadPartnerSiteDraft,
+  normalizePartnerSiteDraft,
   savePartnerSiteDraft,
   type PartnerSiteDraft
 } from "@/lib/partner-site-draft";
@@ -24,23 +29,8 @@ type MeResponse = {
   } | null;
 };
 
-const emptyForm: PartnerSiteDraft = {
-  name: "",
-  subdomain: "",
-  domain: "",
-  contactPhone: "",
-  contactEmail: "",
-  address: "",
-  seoTitle: "",
-  seoDescription: "",
-  yandexMetrika: "",
-  gtmId: "",
-  ctaLabel: "Запросить цену",
-  inquiryEmail: ""
-};
-
 export default function PartnerSitePage() {
-  const [form, setForm] = useState<PartnerSiteDraft>(emptyForm);
+  const [form, setForm] = useState<PartnerSiteDraft>(emptyPartnerSiteDraft);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -49,27 +39,14 @@ export default function PartnerSitePage() {
     void (async () => {
       try {
         const me = await apiFetch<MeResponse>("/api/partner/me");
-        const partner = me.partner;
-        if (partner) {
-          const slug = partner.companyName
-            .toLowerCase()
-            .replace(/[^a-zа-яё0-9]+/gi, "-")
-            .replace(/^-|-$/g, "")
-            .slice(0, 32);
-          const next: PartnerSiteDraft = {
-            name: partner.companyName,
-            subdomain: slug || "partner",
-            domain: "",
-            contactPhone: partner.phone,
-            contactEmail: partner.email,
-            address: partner.region,
-            seoTitle: `${partner.companyName} — модульные и панельно-каркасные дома`,
-            seoDescription: `Официальный сайт дилера ${partner.companyName}. Каталог проектов AVGST.`,
-            yandexMetrika: "",
-            gtmId: "",
-            ctaLabel: "Запросить цену",
-            inquiryEmail: partner.email
-          };
+        const stored = loadPartnerSiteDraft();
+        // Сохранённый черновик + миграция старых текстов под шаблон сайта
+        if (stored) {
+          const aligned = normalizePartnerSiteDraft(stored) ?? stored;
+          setForm(aligned);
+          savePartnerSiteDraft(aligned);
+        } else if (me.partner) {
+          const next = draftDefaultsFromPartner(me.partner);
           setForm(next);
           savePartnerSiteDraft(next);
         }
@@ -81,16 +58,38 @@ export default function PartnerSitePage() {
     })();
   }, []);
 
+  function applyTemplateTexts() {
+    setForm((prev) => {
+      const next = applySiteTemplateTexts(prev);
+      savePartnerSiteDraft(next);
+      return next;
+    });
+    setNotice("Тексты первого экрана и каталога подставлены как на сайте.");
+  }
+
   function updateField<K extends keyof PartnerSiteDraft>(key: K, value: PartnerSiteDraft[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function handleLogoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 800_000) {
+      setNotice("Логотип слишком большой. Загрузите файл до ~800 КБ (PNG/SVG/JPG).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      setForm((prev) => ({ ...prev, logoDataUrl: result }));
+    };
+    reader.readAsDataURL(file);
   }
 
   function handleSave(event: React.FormEvent) {
     event.preventDefault();
     savePartnerSiteDraft(form);
-    setNotice(
-      "Настройки сайта сохранены в черновик. Публикация и синхронизация с runtime — в релизе 01.09."
-    );
+    setNotice("Черновик сохранён. Публикация и домен — в релизе 01.09.");
   }
 
   function openPreview() {
@@ -109,12 +108,10 @@ export default function PartnerSitePage() {
       {notice ? <p className="mb-4 text-sm text-slate-700">{notice}</p> : null}
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm text-slate-500">
-            Админка публичного сайта: бренд и контакты дилера. Каталог и фото — с завода; цены и
-            допы задаются в разделе «Цены».
-          </p>
-        </div>
+        <p className="max-w-2xl text-sm text-slate-500">
+          Публичный сайт по структуре msk.avgst.ru: своё лого, свой бренд, каталог и цены из портала.
+          Без верхней плашки города и без блоков «6% / Яндекс / 10+ лет».
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">Черновик · тестовый режим</Badge>
           <Button type="button" variant="outline" onClick={openPreview} disabled={loading}>
@@ -130,11 +127,11 @@ export default function PartnerSitePage() {
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-950">Адрес сайта</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Поддомен на платформе AVGST или собственный домен.
+              Технический поддомен платформы или свой домен компании.
             </p>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="site-name">Название сайта</Label>
+                <Label htmlFor="site-name">Название компании на сайте</Label>
                 <Input
                   id="site-name"
                   value={form.name}
@@ -158,7 +155,7 @@ export default function PartnerSitePage() {
                 <Label htmlFor="site-domain">Свой домен (опционально)</Label>
                 <Input
                   id="site-domain"
-                  placeholder="doma-partner.ru"
+                  placeholder="stroy-company.ru"
                   value={form.domain}
                   onChange={(e) => updateField("domain", e.target.value)}
                 />
@@ -167,7 +164,49 @@ export default function PartnerSitePage() {
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-950">Контакты и бренд</h2>
+            <h2 className="text-lg font-semibold text-slate-950">Логотип</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Вместо заводского лого — ваш. PNG, JPG или SVG, до ~800 КБ.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-4">
+              <div className="flex h-16 min-w-[120px] items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4">
+                {form.logoDataUrl ? (
+                  <img
+                    src={form.logoDataUrl}
+                    alt="Логотип"
+                    className="max-h-12 max-w-[160px] object-contain"
+                  />
+                ) : (
+                  <span className="text-xs text-slate-400">Нет логотипа</span>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Input
+                  id="site-logo"
+                  type="file"
+                  accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                  onChange={handleLogoChange}
+                  className="max-w-xs cursor-pointer"
+                />
+                {form.logoDataUrl ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => updateField("logoDataUrl", "")}
+                  >
+                    Убрать логотип
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-950">Контакты</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Ваши телефоны и почта — то, что видит покупатель.
+            </p>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="site-phone">Телефон</Label>
@@ -189,11 +228,130 @@ export default function PartnerSitePage() {
                 />
               </div>
               <div className="space-y-1.5 md:col-span-2">
-                <Label htmlFor="site-address">Адрес / регион</Label>
+                <Label htmlFor="site-address">Адрес / город</Label>
                 <Input
                   id="site-address"
                   value={form.address}
                   onChange={(e) => updateField("address", e.target.value)}
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-950">Соцсети</h2>
+            <p className="mt-1 text-sm text-slate-500">Ссылки на ваши аккаунты — по желанию.</p>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="site-tg">Telegram</Label>
+                <Input
+                  id="site-tg"
+                  placeholder="https://t.me/..."
+                  value={form.socialTelegram}
+                  onChange={(e) => updateField("socialTelegram", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="site-vk">ВКонтакте</Label>
+                <Input
+                  id="site-vk"
+                  placeholder="https://vk.com/..."
+                  value={form.socialVk}
+                  onChange={(e) => updateField("socialVk", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="site-wa">WhatsApp</Label>
+                <Input
+                  id="site-wa"
+                  placeholder="https://wa.me/7..."
+                  value={form.socialWhatsapp}
+                  onChange={(e) => updateField("socialWhatsapp", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="site-max">MAX / другое</Label>
+                <Input
+                  id="site-max"
+                  placeholder="Ссылка"
+                  value={form.socialMax}
+                  onChange={(e) => updateField("socialMax", e.target.value)}
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-950">Тексты как на сайте</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Те же поля, что на первом экране и в каталоге превью (структура msk.avgst.ru).
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={applyTemplateTexts}>
+                Подставить шаблон сайта
+              </Button>
+            </div>
+            <div className="mt-4 grid gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="site-hero-headline">Заголовок первого экрана</Label>
+                <Textarea
+                  id="site-hero-headline"
+                  rows={3}
+                  value={form.heroHeadline}
+                  onChange={(e) => updateField("heroHeadline", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="site-hero-text">Текст под заголовком</Label>
+                <Textarea
+                  id="site-hero-text"
+                  rows={3}
+                  value={form.heroText}
+                  onChange={(e) => updateField("heroText", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="site-cta">Жёлтая кнопка на первом экране</Label>
+                <Input
+                  id="site-cta"
+                  value={form.ctaLabel}
+                  onChange={(e) => updateField("ctaLabel", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="site-catalog-title">Заголовок блока каталога</Label>
+                <Input
+                  id="site-catalog-title"
+                  value={form.catalogTitle}
+                  onChange={(e) => updateField("catalogTitle", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="site-catalog-text">Подзаголовок каталога</Label>
+                <Textarea
+                  id="site-catalog-text"
+                  rows={2}
+                  value={form.catalogText}
+                  onChange={(e) => updateField("catalogText", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="site-about-title">Страница «О нас» — заголовок</Label>
+                <Input
+                  id="site-about-title"
+                  value={form.aboutTitle}
+                  onChange={(e) => updateField("aboutTitle", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="site-about-text">Страница «О нас» — текст</Label>
+                <Textarea
+                  id="site-about-text"
+                  rows={4}
+                  value={form.aboutText}
+                  onChange={(e) => updateField("aboutText", e.target.value)}
                 />
               </div>
             </div>
@@ -223,7 +381,7 @@ export default function PartnerSitePage() {
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-950">Аналитика и CTA</h2>
+            <h2 className="text-lg font-semibold text-slate-950">Аналитика и заявки</h2>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="site-metrika">Яндекс.Метрика</Label>
@@ -243,15 +401,7 @@ export default function PartnerSitePage() {
                   onChange={(e) => updateField("gtmId", e.target.value)}
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="site-cta">Текст основной кнопки</Label>
-                <Input
-                  id="site-cta"
-                  value={form.ctaLabel}
-                  onChange={(e) => updateField("ctaLabel", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 md:col-span-2">
                 <Label htmlFor="site-inquiry-email">Email для заявок с сайта</Label>
                 <Input
                   id="site-inquiry-email"
@@ -272,7 +422,7 @@ export default function PartnerSitePage() {
               Опубликовать
             </Button>
             <p className="text-xs text-slate-500">
-              Публикация сайта и привязка домена — в полноценном релизе 01.09.
+              Публикация и привязка домена — в релизе 01.09.
             </p>
           </div>
         </form>
