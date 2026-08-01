@@ -1,9 +1,21 @@
+import {
+  Card,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card";
+
 export function StatCard(props: { title: string; value: string; hint: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-sm text-slate-500">{props.title}</p>
-      <p className="mt-3 text-3xl font-semibold text-slate-950">{props.value}</p>
-      <p className="mt-2 text-sm text-slate-500">{props.hint}</p>
-    </div>
+    <Card className="gap-3 py-5">
+      <CardHeader className="gap-1 px-5">
+        <CardDescription>{props.title}</CardDescription>
+        <CardTitle className="text-2xl font-semibold tabular-nums">{props.value}</CardTitle>
+      </CardHeader>
+      <CardFooter className="px-5">
+        <p className="text-muted-foreground text-sm">{props.hint}</p>
+      </CardFooter>
+    </Card>
   );
 }

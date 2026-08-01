@@ -3,10 +3,13 @@ import type { PartnerPricingMode, PartnerProjectExtra, PartnerProjectPrice } fro
 /** Итоговая цена для витрины дилера поверх заводской basePrice */
 export function resolvePartnerDisplayPrice(
   factoryBasePrice: number | null | undefined,
-  pricing?: Pick<
-    PartnerProjectPrice,
-    "pricingMode" | "markupPercent" | "publicPrice" | "priceOnRequest"
-  > | null
+  // markupPercent и publicPrice могут прийти как undefined из БД — функция это учитывает ниже
+  pricing?: {
+    pricingMode: PartnerPricingMode;
+    markupPercent?: number | undefined;
+    publicPrice?: number | undefined;
+    priceOnRequest: boolean;
+  } | null
 ): { amount: number | null; onRequest: boolean } {
   if (!pricing || pricing.priceOnRequest || pricing.pricingMode === "on_request") {
     return { amount: null, onRequest: true };

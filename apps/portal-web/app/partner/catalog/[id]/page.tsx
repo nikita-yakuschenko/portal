@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { IconHeart, IconHeartFilled } from "@tabler/icons-react";
 
-import { DashboardShell } from "../../../../components/dashboard-shell";
+import { DashboardShell } from "@/components/dashboard-shell";
+import { PageAlert } from "@/components/page-alert";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -15,6 +15,7 @@ import {
   BreadcrumbSeparator
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -23,8 +24,10 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -44,7 +47,7 @@ import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
 import { cn } from "@/lib/utils";
 import { PartnerProjectPricingPanel } from "@/components/partner-project-pricing-panel";
 import { PartnerProjectSiteVisibility } from "@/components/partner-project-site-visibility";
-import { ExternalLinkIcon, FileTextIcon } from "lucide-react";
+import { ExternalLinkIcon, FileTextIcon, Heart } from "lucide-react";
 
 const DOC_KIND_LABEL: Record<string, string> = {
   passport: "Паспорт",
@@ -130,9 +133,9 @@ function MetaList({ items }: { items: Array<{ label: string; value: string }> })
   return (
     <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((item) => (
-        <div key={item.label} className="rounded-xl bg-slate-50 px-3 py-2.5">
-          <dt className="text-xs uppercase tracking-wide text-slate-500">{item.label}</dt>
-          <dd className="mt-1 text-sm font-medium text-slate-950">{item.value}</dd>
+        <div key={item.label} className="bg-muted rounded-lg px-3 py-2.5">
+          <dt className="text-muted-foreground text-xs tracking-wide uppercase">{item.label}</dt>
+          <dd className="mt-1 text-sm font-medium">{item.value}</dd>
         </div>
       ))}
     </dl>
@@ -141,7 +144,9 @@ function MetaList({ items }: { items: Array<{ label: string; value: string }> })
 
 function Panel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">{children}</div>
+    <Card>
+      <CardContent>{children}</CardContent>
+    </Card>
   );
 }
 
@@ -290,41 +295,39 @@ export default function PartnerCatalogProjectPage() {
         </Button>
       }
     >
-      {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
-      {loading ? <p className="text-sm text-slate-500">Загрузка проекта...</p> : null}
+      <PageAlert message={error} variant="destructive" />
+      {loading ? <Skeleton className="h-96 w-full" /> : null}
 
       {!loading && project && details ? (
-        <div className="grid gap-6 xl:grid-cols-3">
+        <div className="grid gap-4 md:gap-6 xl:grid-cols-3">
           <div className="min-w-0 space-y-4 xl:col-span-2">
-            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-4">
+            <Card>
+              <CardContent className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-medium text-avgst-green">
+                  <p className="text-primary text-sm font-medium">
                     {technologyLabel(project.technology)}
                   </p>
-                  <PartnerProjectSiteVisibility
-                    projectId={project.id}
-                    canManage={canManagePricing}
-                  />
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-slate-500">Заводская</p>
-                  <p className="text-lg font-semibold tabular-nums text-slate-950">
+                  <p className="text-muted-foreground text-xs">Заводская</p>
+                  <p className="text-lg font-semibold tabular-nums">
                     {project.basePrice
                       ? `от ${project.basePrice.toLocaleString("ru-RU")} ₽`
                       : "Цена по запросу"}
                   </p>
                   {retailLabel ? (
                     <>
-                      <p className="mt-2 text-xs text-slate-500">Ваша цена для покупателя</p>
-                      <p className="text-lg font-semibold tabular-nums text-avgst-green">
+                      <p className="text-muted-foreground mt-2 text-xs">
+                        Ваша цена для покупателя
+                      </p>
+                      <p className="text-primary text-lg font-semibold tabular-nums">
                         {retailLabel === "по запросу" ? "По запросу" : `от ${retailLabel}`}
                       </p>
                     </>
                   ) : null}
                 </div>
-              </div>
-            </section>
+              </CardContent>
+            </Card>
 
             <Tabs defaultValue="overview" className="space-y-4">
               <TabsList className="h-auto w-full justify-start gap-1">
@@ -337,7 +340,12 @@ export default function PartnerCatalogProjectPage() {
                 <TabsTrigger value="transport">Транспорт</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="overview" className="mt-0">
+              <TabsContent value="overview" className="mt-0 space-y-4">
+                <PartnerProjectSiteVisibility
+                  projectId={project.id}
+                  canManage={canManagePricing}
+                />
+
                 <Panel>
                   <MetaList
                     items={[
@@ -369,20 +377,20 @@ export default function PartnerCatalogProjectPage() {
                   />
 
                   {details.summary ? (
-                    <p className="mt-5 text-sm leading-relaxed text-slate-600">{details.summary}</p>
+                    <p className="mt-5 text-sm leading-relaxed">{details.summary}</p>
                   ) : null}
 
                   {details.characteristics.length > 0 ? (
-                    <div className="mt-5 border-t border-slate-100 pt-5">
-                      <h4 className="text-sm font-semibold text-slate-950">Характеристики</h4>
-                      <ul className="mt-3 divide-y divide-slate-100">
+                    <div className="mt-5 border-t pt-5">
+                      <h4 className="text-sm font-semibold">Характеристики</h4>
+                      <ul className="divide-border mt-3 divide-y">
                         {details.characteristics.map((item) => (
                           <li
                             key={`${item.title}-${item.value}`}
                             className="flex items-center justify-between gap-4 py-2 text-sm"
                           >
-                            <span className="text-slate-500">{item.title}</span>
-                            <span className="font-medium text-slate-950">{item.value}</span>
+                            <span className="text-muted-foreground">{item.title}</span>
+                            <span className="font-medium">{item.value}</span>
                           </li>
                         ))}
                       </ul>
@@ -393,9 +401,9 @@ export default function PartnerCatalogProjectPage() {
 
               <TabsContent value="price" className="mt-0">
                 <Panel>
-                  <p className="mb-4 text-sm text-slate-500">
-                    Здесь только розничная цена, наценка и допы. Показ проекта на сайте —
-                    в шапке карточки («На сайте компании»).
+                  <p className="text-muted-foreground mb-4 text-sm">
+                    Здесь только розничная цена, наценка и допы. Публикация проекта на сайте —
+                    во вкладке «Обзор».
                   </p>
                   <PartnerProjectPricingPanel
                     projectId={project.id}
@@ -408,27 +416,26 @@ export default function PartnerCatalogProjectPage() {
               <TabsContent value="packages" className="mt-0">
                 <Panel>
                   {details.packages.length === 0 ? (
-                    <p className="text-sm text-slate-500">
+                    <p className="text-muted-foreground text-sm">
                       Состав комплектаций уточняется на заводе. Отправьте запрос — пришлём
                       актуальный прайс.
                     </p>
                   ) : (
                     <div className="grid gap-3">
                       {details.packages.map((item) => (
-                        <div
-                          key={item.id}
-                          className="rounded-xl border border-slate-200 px-4 py-3"
-                        >
+                        <div key={item.id} className="rounded-lg border px-4 py-3">
                           <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <p className="font-medium text-slate-950">{item.name}</p>
-                            <p className="text-sm font-semibold tabular-nums text-slate-950">
+                            <p className="font-medium">{item.name}</p>
+                            <p className="text-sm font-semibold tabular-nums">
                               {item.price
                                 ? `${item.price.toLocaleString("ru-RU")} ₽`
                                 : "Цена по запросу"}
                             </p>
                           </div>
                           {item.description ? (
-                            <p className="mt-1 text-sm text-slate-500">{item.description}</p>
+                            <p className="text-muted-foreground mt-1 text-sm">
+                              {item.description}
+                            </p>
                           ) : null}
                         </div>
                       ))}
@@ -439,7 +446,7 @@ export default function PartnerCatalogProjectPage() {
 
               <TabsContent value="options" className="mt-0">
                 <Panel>
-                  <p className="mb-4 text-sm text-slate-500">
+                  <p className="text-muted-foreground mb-4 text-sm">
                     {project.technology === "panel_frame"
                       ? "Для панельно-каркасных проектов доступны поставка домокомплекта и сборка в Нижнем Новгороде и Москве; перегородки на деревянном каркасе — для отдельных проектов."
                       : "Возможные опции и допы. Стоимость зависит от проекта — уточняйте на заводе."}
@@ -447,16 +454,15 @@ export default function PartnerCatalogProjectPage() {
                   <div className="space-y-5">
                     {details.optionGroups.map((group) => (
                       <div key={group.id}>
-                        <h4 className="text-sm font-semibold text-slate-950">{group.title}</h4>
+                        <h4 className="text-sm font-semibold">{group.title}</h4>
                         <ul className="mt-2 space-y-2">
                           {group.items.map((item) => (
-                            <li
-                              key={item.id}
-                              className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                            >
-                              <span className="font-medium text-slate-950">{item.name}</span>
+                            <li key={item.id} className="bg-muted rounded-lg px-3 py-2 text-sm">
+                              <span className="font-medium">{item.name}</span>
                               {item.note ? (
-                                <span className="mt-0.5 block text-slate-500">{item.note}</span>
+                                <span className="text-muted-foreground mt-0.5 block">
+                                  {item.note}
+                                </span>
                               ) : null}
                             </li>
                           ))}
@@ -570,9 +576,9 @@ export default function PartnerCatalogProjectPage() {
             </Tabs>
           </div>
 
-          <aside className="min-w-0 xl:sticky xl:top-0 xl:self-start">
-            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="relative aspect-[4/3] bg-slate-100">
+          <aside className="min-w-0 xl:sticky xl:top-20 xl:self-start">
+            <Card className="gap-0 overflow-hidden py-0">
+              <div className="bg-muted relative aspect-[4/3]">
                 {activeAsset ? (
                   <img
                     src={activeAsset.sourceUrl}
@@ -580,21 +586,18 @@ export default function PartnerCatalogProjectPage() {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-slate-400">
+                  <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
                     Нет фото
                   </div>
                 )}
                 <button
                   type="button"
                   onClick={toggleFavorite}
-                  className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white/90 text-slate-700 shadow-sm backdrop-blur transition hover:text-avgst-green"
+                  className="bg-background/90 text-muted-foreground hover:text-primary focus-visible:ring-ring/50 absolute top-3 right-3 inline-flex size-9 items-center justify-center rounded-md shadow-sm backdrop-blur transition focus-visible:ring-[3px] focus-visible:outline-none"
                   aria-label={favorite ? "Убрать из избранного" : "В избранное"}
+                  aria-pressed={favorite}
                 >
-                  {favorite ? (
-                    <IconHeartFilled size={18} className="text-avgst-green" />
-                  ) : (
-                    <IconHeart size={18} />
-                  )}
+                  <Heart className={cn("size-4", favorite && "fill-primary text-primary")} />
                 </button>
               </div>
 
@@ -605,23 +608,24 @@ export default function PartnerCatalogProjectPage() {
                       key={asset.id}
                       type="button"
                       onClick={() => setActiveIndex(index)}
+                      aria-label={`Показать фото ${index + 1}`}
                       className={cn(
-                        "relative aspect-square overflow-hidden rounded-lg border transition",
+                        "relative aspect-square overflow-hidden rounded-md border transition",
                         index === activeIndex
-                          ? "border-avgst-green ring-2 ring-avgst-green/20"
-                          : "border-slate-200 hover:border-slate-300"
+                          ? "border-primary ring-ring/30 ring-2"
+                          : "hover:border-muted-foreground/40"
                       )}
                     >
                       <img
                         src={asset.sourceUrl}
-                        alt={`Ассет ${index + 1}`}
+                        alt=""
                         className="h-full w-full object-cover"
                       />
                     </button>
                   ))}
                 </div>
               ) : null}
-            </section>
+            </Card>
           </aside>
         </div>
       ) : null}
@@ -637,33 +641,36 @@ export default function PartnerCatalogProjectPage() {
           </DialogHeader>
 
           <form className="space-y-4" onSubmit={handleInquiry}>
-            <div className="space-y-1.5">
-              <Label htmlFor="inquiry-subject">Тема</Label>
-              <Input
-                id="inquiry-subject"
-                required
-                value={form.subject}
-                onChange={(e) => setForm((prev) => ({ ...prev, subject: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="inquiry-message">Сообщение</Label>
-              <Textarea
-                id="inquiry-message"
-                required
-                rows={6}
-                placeholder="Например: нужна спецификация Премиум, сроки отгрузки и схема погрузки"
-                value={form.message}
-                onChange={(e) => setForm((prev) => ({ ...prev, message: e.target.value }))}
-              />
-            </div>
-            {notice ? <p className="text-sm text-slate-600">{notice}</p> : null}
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="inquiry-subject">Тема</FieldLabel>
+                <Input
+                  id="inquiry-subject"
+                  required
+                  value={form.subject}
+                  onChange={(e) => setForm((prev) => ({ ...prev, subject: e.target.value }))}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="inquiry-message">Сообщение</FieldLabel>
+                <Textarea
+                  id="inquiry-message"
+                  required
+                  rows={6}
+                  placeholder="Например: нужна спецификация Премиум, сроки отгрузки и схема погрузки"
+                  value={form.message}
+                  onChange={(e) => setForm((prev) => ({ ...prev, message: e.target.value }))}
+                />
+              </Field>
+            </FieldGroup>
+            {notice ? <p className="text-muted-foreground text-sm">{notice}</p> : null}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setInquiryOpen(false)}>
                 Отмена
               </Button>
               <Button type="submit" disabled={saving}>
-                {saving ? "Отправляем..." : "Отправить"}
+                {saving ? <Spinner /> : null}
+                {saving ? "Отправляем…" : "Отправить"}
               </Button>
             </DialogFooter>
           </form>

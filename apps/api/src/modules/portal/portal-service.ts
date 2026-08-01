@@ -530,7 +530,8 @@ export class PortalService {
     markupPercent?: number;
     publicPrice?: number;
     isPublished?: boolean;
-    extras?: PartnerProjectExtra[];
+    // id опционален: normalizeExtras сгенерирует его для новых допов
+    extras?: Array<Omit<PartnerProjectExtra, "id"> & { id?: string }>;
   }) {
     const project = await db.query.catalogProjects.findFirst({
       where: eq(catalogProjects.id, input.projectId)

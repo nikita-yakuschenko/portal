@@ -1,8 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Users } from "lucide-react";
 
-import { DashboardShell } from "../../../components/dashboard-shell";
+import { DashboardShell } from "@/components/dashboard-shell";
+import { PageAlert } from "@/components/page-alert";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle
+} from "@/components/ui/empty";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { companyCabinetLabel, companyNavigation } from "@/lib/company-nav";
 
@@ -14,6 +34,13 @@ type Partner = {
   region: string;
   status: string;
   createdAt: string;
+};
+
+// Значения partner_status на стороне API: pending | active | suspended
+const partnerStatusLabels: Record<string, string> = {
+  active: "Активен",
+  pending: "Ожидает",
+  suspended: "Приостановлен"
 };
 
 export default function CompanyPartnersPage() {
@@ -39,27 +66,72 @@ export default function CompanyPartnersPage() {
       currentPath="/company/partners"
       navigation={companyNavigation}
     >
-      {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
+      <PageAlert message={error} variant="destructive" />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-950">Список партнёров</h2>
-        <div className="mt-4 space-y-3">
+      <Card>
+        <CardHeader>
+          <CardTitle>Список партнёров</CardTitle>
+        </CardHeader>
+        <CardContent>
           {loading ? (
-            <p className="text-sm text-slate-500">Загрузка...</p>
+            <div className="space-y-3">
+              {[0, 1, 2].map((row) => (
+                <Skeleton key={row} className="h-12 w-full" />
+              ))}
+            </div>
           ) : partners.length === 0 ? (
-            <p className="text-sm text-slate-500">Партнёров пока нет.</p>
+            <Empty className="border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Users />
+                </EmptyMedia>
+                <EmptyTitle>Партнёров пока нет</EmptyTitle>
+                <EmptyDescription>
+                  Партнёр появляется в списке после одобрения заявки в разделе «Заявки».
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
-            partners.map((partner) => (
-              <div key={partner.id} className="rounded-xl border border-slate-200 px-4 py-3">
-                <p className="font-medium text-slate-950">{partner.companyName}</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  {partner.region} · {partner.email} · {partner.phone || "—"} · {partner.status}
-                </p>
-              </div>
-            ))
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Компания</TableHead>
+                    <TableHead>Регион</TableHead>
+                    <TableHead>Контакты</TableHead>
+                    <TableHead>Статус</TableHead>
+                    <TableHead>Подключён</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {partners.map((partner) => (
+                    <TableRow key={partner.id}>
+                      <TableCell className="font-medium">{partner.companyName}</TableCell>
+                      <TableCell>{partner.region}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span>{partner.email}</span>
+                          <span className="text-muted-foreground text-xs">
+                            {partner.phone || "—"}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={partner.status === "active" ? "default" : "secondary"}>
+                          {partnerStatusLabels[partner.status] ?? partner.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground whitespace-nowrap">
+                        {new Date(partner.createdAt).toLocaleDateString("ru-RU")}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
-        </div>
-      </section>
+        </CardContent>
+      </Card>
     </DashboardShell>
   );
 }

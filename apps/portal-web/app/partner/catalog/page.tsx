@@ -1,11 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { IconHeart, IconHeartFilled, IconSearch, IconX } from "@tabler/icons-react";
+import { Heart, PackageSearch, Search, X } from "lucide-react";
 
-import { CatalogProjectCard } from "../../../components/catalog-project-card";
-import { DashboardShell } from "../../../components/dashboard-shell";
+import { CatalogProjectCard } from "@/components/catalog-project-card";
+import { DashboardShell } from "@/components/dashboard-shell";
+import { PageAlert } from "@/components/page-alert";
 import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -14,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import { TECHNOLOGY_LABELS } from "@/lib/catalog-display";
 import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
@@ -163,109 +173,121 @@ export default function PartnerCatalogPage() {
       cabinetLabel={partnerCabinetLabel}
       currentPath="/partner/catalog"
       navigation={partnerNavigation}
-      headerActions={
-        <>
-          <label className="relative min-w-[220px] max-w-sm flex-1">
-            <IconSearch
-              size={16}
-              className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Поиск по названию"
-              className="bg-background pl-9"
-            />
-          </label>
-
-          <Select
-            value={technology}
-            onValueChange={(value) => setTechnology(value as TechnologyFilter)}
-          >
-            <SelectTrigger className="w-[200px] bg-background" aria-label="Технология">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectItem value="all">Технология: все</SelectItem>
-              <SelectItem value="modular">{TECHNOLOGY_LABELS.modular}</SelectItem>
-              <SelectItem value="panel_frame">{TECHNOLOGY_LABELS.panel_frame}</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={floors} onValueChange={(value) => setFloors(value as FloorsFilter)}>
-            <SelectTrigger className="w-[160px] bg-background" aria-label="Этажность">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectItem value="all">Этажи: все</SelectItem>
-              <SelectItem value="1">1 этаж</SelectItem>
-              <SelectItem value="2">2 этажа</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={price} onValueChange={(value) => setPrice(value as PriceFilter)}>
-            <SelectTrigger className="w-[150px] bg-background" aria-label="Цена">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectItem value="all">Цена: все</SelectItem>
-              <SelectItem value="priced">С ценой</SelectItem>
-              <SelectItem value="request">По запросу</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortBy)}>
-            <SelectTrigger className="w-[160px] bg-background" aria-label="Сортировка">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectItem value="name">По названию</SelectItem>
-              <SelectItem value="price">По цене</SelectItem>
-              <SelectItem value="area">По площади</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button
-            type="button"
-            variant={favoritesOnly ? "secondary" : "outline"}
-            onClick={() => setFavoritesOnly((value) => !value)}
-            className={
-              favoritesOnly
-                ? "border-avgst-green/30 bg-avgst-green/10 text-avgst-green hover:bg-avgst-green/15 hover:text-avgst-green"
-                : undefined
-            }
-          >
-            {favoritesOnly ? <IconHeartFilled size={16} /> : <IconHeart size={16} />}
-            Избранное
-            {favorites.size > 0 ? (
-              <span className="rounded-md bg-background/80 px-1.5 text-xs">{favorites.size}</span>
-            ) : null}
-          </Button>
-
-          {hasActiveFilters ? (
-            <Button type="button" variant="outline" onClick={resetFilters}>
-              <IconX size={14} />
-              Сбросить
-            </Button>
-          ) : null}
-        </>
-      }
     >
-      {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
+      <PageAlert message={error} variant="destructive" />
 
-      <p className="mb-4 text-sm text-slate-500">
-        {loading ? "Загрузка..." : `Найдено: ${filtered.length}`}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[220px] flex-1 md:max-w-sm">
+          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Поиск по названию"
+            aria-label="Поиск по названию"
+            className="pl-9"
+          />
+        </div>
+
+        <Select value={technology} onValueChange={(value) => setTechnology(value as TechnologyFilter)}>
+          <SelectTrigger className="w-[200px]" aria-label="Технология">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectItem value="all">Технология: все</SelectItem>
+            <SelectItem value="modular">{TECHNOLOGY_LABELS.modular}</SelectItem>
+            <SelectItem value="panel_frame">{TECHNOLOGY_LABELS.panel_frame}</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={floors} onValueChange={(value) => setFloors(value as FloorsFilter)}>
+          <SelectTrigger className="w-[150px]" aria-label="Этажность">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectItem value="all">Этажи: все</SelectItem>
+            <SelectItem value="1">1 этаж</SelectItem>
+            <SelectItem value="2">2 этажа</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={price} onValueChange={(value) => setPrice(value as PriceFilter)}>
+          <SelectTrigger className="w-[150px]" aria-label="Цена">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectItem value="all">Цена: все</SelectItem>
+            <SelectItem value="priced">С ценой</SelectItem>
+            <SelectItem value="request">По запросу</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortBy)}>
+          <SelectTrigger className="w-[160px]" aria-label="Сортировка">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectItem value="name">По названию</SelectItem>
+            <SelectItem value="price">По цене</SelectItem>
+            <SelectItem value="area">По площади</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Button
+          type="button"
+          variant={favoritesOnly ? "secondary" : "outline"}
+          aria-pressed={favoritesOnly}
+          onClick={() => setFavoritesOnly((value) => !value)}
+        >
+          <Heart className={favoritesOnly ? "fill-primary text-primary" : undefined} />
+          Избранное
+          {favorites.size > 0 ? (
+            <span className="text-muted-foreground tabular-nums">{favorites.size}</span>
+          ) : null}
+        </Button>
+
+        {hasActiveFilters ? (
+          <Button type="button" variant="ghost" onClick={resetFilters}>
+            <X />
+            Сбросить
+          </Button>
+        ) : null}
+      </div>
+
+      <p className="text-muted-foreground text-sm">
+        {loading ? "Загрузка каталога…" : `Найдено: ${filtered.length}`}
       </p>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {loading ? (
-          <p className="text-sm text-slate-500">Загрузка каталога...</p>
-        ) : filtered.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            Ничего не найдено. Снимите фильтры или дождитесь синхронизации.
-          </p>
-        ) : (
-          filtered.map((project) => (
+      {loading ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {[0, 1, 2, 3, 4, 5].map((row) => (
+            <Skeleton key={row} className="h-80 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <PackageSearch />
+            </EmptyMedia>
+            <EmptyTitle>Ничего не найдено</EmptyTitle>
+            <EmptyDescription>
+              {hasActiveFilters
+                ? "Снимите фильтры или измените поисковый запрос."
+                : "Каталог пуст — дождитесь синхронизации проектов с завода."}
+            </EmptyDescription>
+          </EmptyHeader>
+          {hasActiveFilters ? (
+            <EmptyContent>
+              <Button variant="outline" onClick={resetFilters}>
+                <X />
+                Сбросить фильтры
+              </Button>
+            </EmptyContent>
+          ) : null}
+        </Empty>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((project) => (
             <CatalogProjectCard
               key={project.id}
               href={`/partner/catalog/${project.id}`}
@@ -276,15 +298,15 @@ export default function PartnerCatalogPage() {
               floors={project.floors}
               bedrooms={project.bedrooms}
               basePrice={project.basePrice}
-              retailPrice={retailById[project.id]?.retailPrice}
-              retailOnRequest={retailById[project.id]?.retailOnRequest}
-              assets={project.assets}
+              retailPrice={retailById[project.id]?.retailPrice ?? null}
+              retailOnRequest={retailById[project.id]?.retailOnRequest ?? false}
+              assets={project.assets ?? []}
               favorite={favorites.has(project.id)}
               onToggleFavorite={() => toggleFavorite(project.id)}
             />
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </DashboardShell>
   );
 }

@@ -1,8 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ExternalLink, Store } from "lucide-react";
 
-import { DashboardShell } from "../../../components/dashboard-shell";
+import { DashboardShell } from "@/components/dashboard-shell";
+import { PageAlert } from "@/components/page-alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle
+} from "@/components/ui/empty";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { companyCabinetLabel, companyNavigation } from "@/lib/company-nav";
 
@@ -39,51 +60,78 @@ export default function CompanyCatalogPage() {
       currentPath="/company/catalog"
       navigation={companyNavigation}
     >
-      {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
+      <PageAlert message={error} variant="destructive" />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-950">Проекты ({projects.length})</h2>
-        <div className="mt-4 space-y-3">
+      <Card>
+        <CardHeader>
+          <CardTitle>Проекты{loading ? "" : ` (${projects.length})`}</CardTitle>
+        </CardHeader>
+        <CardContent>
           {loading ? (
-            <p className="text-sm text-slate-500">Загрузка...</p>
+            <div className="space-y-3">
+              {[0, 1, 2, 3].map((row) => (
+                <Skeleton key={row} className="h-12 w-full" />
+              ))}
+            </div>
           ) : projects.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              Каталог пуст. Запустите синхронизацию с Tilda в разделе «Синхронизации».
-            </p>
+            <Empty className="border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Store />
+                </EmptyMedia>
+                <EmptyTitle>Каталог пуст</EmptyTitle>
+                <EmptyDescription>
+                  Запустите синхронизацию с Tilda в разделе «Синхронизации».
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
-            projects.map((project) => (
-              <div
-                key={project.id}
-                className="flex flex-col gap-2 rounded-xl border border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <p className="font-medium text-slate-950">{project.name}</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {[
-                      project.area ? `${project.area} м²` : null,
-                      project.floors ? `${project.floors} эт.` : null,
-                      project.basePrice
-                        ? `${project.basePrice.toLocaleString("ru-RU")} ₽`
-                        : "цена по запросу",
-                      project.active ? "активен" : "скрыт"
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
-                </div>
-                <a
-                  href={project.projectUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm font-medium text-avgst-green hover:underline"
-                >
-                  На сайте
-                </a>
-              </div>
-            ))
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Проект</TableHead>
+                    <TableHead>Площадь</TableHead>
+                    <TableHead>Этажи</TableHead>
+                    <TableHead>Заводская цена</TableHead>
+                    <TableHead>Статус</TableHead>
+                    <TableHead className="text-right">На сайте</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {projects.map((project) => (
+                    <TableRow key={project.id}>
+                      <TableCell className="font-medium">{project.name}</TableCell>
+                      <TableCell className="tabular-nums">
+                        {project.area ? `${project.area} м²` : "—"}
+                      </TableCell>
+                      <TableCell className="tabular-nums">{project.floors ?? "—"}</TableCell>
+                      <TableCell className="tabular-nums whitespace-nowrap">
+                        {project.basePrice
+                          ? `${project.basePrice.toLocaleString("ru-RU")} ₽`
+                          : "по запросу"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={project.active ? "default" : "secondary"}>
+                          {project.active ? "Активен" : "Скрыт"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" asChild>
+                          <a href={project.projectUrl} target="_blank" rel="noreferrer">
+                            Открыть
+                            <ExternalLink />
+                          </a>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
-        </div>
-      </section>
+        </CardContent>
+      </Card>
     </DashboardShell>
   );
 }

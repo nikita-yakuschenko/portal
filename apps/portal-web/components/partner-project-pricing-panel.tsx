@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -12,6 +13,8 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { apiFetch } from "@/lib/api";
 import { formatRub, resolveDealerDisplayPrice } from "@/lib/partner-pricing";
 
@@ -28,6 +31,12 @@ type PricingState = {
 
 function newExtraId() {
   return `extra_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Extra с price: undefined нельзя собрать спредом при exactOptionalPropertyTypes */
+function withPrice(extra: Extra, price: number | undefined): Extra {
+  const { price: _omit, ...rest } = extra;
+  return price === undefined ? rest : { ...rest, price };
 }
 
 export function PartnerProjectPricingPanel({
@@ -95,10 +104,9 @@ export function PartnerProjectPricingPanel({
             draft.pricingMode === "exact" && draft.publicPrice != null
               ? Math.round(draft.publicPrice)
               : undefined,
-          extras: draft.extras.map((item) => ({
-            ...item,
-            price: item.price != null ? Math.round(item.price) : undefined
-          }))
+          extras: draft.extras.map((item) =>
+            withPrice(item, item.price != null ? Math.round(item.price) : undefined)
+          )
         })
       });
       setNotice("Цена и допы сохранены.");
@@ -110,27 +118,26 @@ export function PartnerProjectPricingPanel({
   }
 
   if (loading) {
-    return <p className="text-sm text-slate-500">Загрузка цены...</p>;
+    return <Skeleton className="h-40 w-full" />;
   }
 
   return (
     <div className="space-y-5">
-      <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
-        <p className="text-slate-500">
-          Заводская цена:{" "}
-          <span className="font-medium text-slate-950">{formatRub(factoryBasePrice)}</span>
+      <div className="bg-muted rounded-lg px-4 py-3 text-sm">
+        <p className="text-muted-foreground">
+          Заводская цена: <span className="text-foreground font-medium">{formatRub(factoryBasePrice)}</span>
         </p>
-        <p className="mt-1 text-slate-500">
+        <p className="text-muted-foreground mt-1">
           Ваша цена для покупателя:{" "}
-          <span className="font-medium text-slate-950">
+          <span className="text-foreground font-medium">
             {preview.onRequest ? "по запросу" : formatRub(preview.amount)}
           </span>
         </p>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label>Режим цены</Label>
+      <FieldGroup className="md:grid md:grid-cols-2 md:gap-4">
+        <Field>
+          <FieldLabel htmlFor="pricing-mode">Режим цены</FieldLabel>
           <Select
             value={draft.pricingMode}
             disabled={!canManage}
@@ -138,7 +145,7 @@ export function PartnerProjectPricingPanel({
               setDraft((prev) => ({ ...prev, pricingMode: value as PricingMode }))
             }
           >
-            <SelectTrigger>
+            <SelectTrigger id="pricing-mode" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -147,12 +154,13 @@ export function PartnerProjectPricingPanel({
               <SelectItem value="on_request">По запросу</SelectItem>
             </SelectContent>
           </Select>
-        </div>
+        </Field>
 
         {draft.pricingMode === "markup" ? (
-          <div className="space-y-1.5">
-            <Label>Наценка, %</Label>
+          <Field>
+            <FieldLabel htmlFor="pricing-markup">Наценка, %</FieldLabel>
             <Input
+              id="pricing-markup"
               type="number"
               min={0}
               disabled={!canManage}
@@ -164,13 +172,14 @@ export function PartnerProjectPricingPanel({
                 }))
               }
             />
-          </div>
+          </Field>
         ) : null}
 
         {draft.pricingMode === "exact" ? (
-          <div className="space-y-1.5">
-            <Label>Ваша цена, ₽</Label>
+          <Field>
+            <FieldLabel htmlFor="pricing-public">Ваша цена, ₽</FieldLabel>
             <Input
+              id="pricing-public"
               type="number"
               min={0}
               disabled={!canManage}
@@ -182,13 +191,15 @@ export function PartnerProjectPricingPanel({
                 }))
               }
             />
-          </div>
+          </Field>
         ) : null}
-      </div>
+      </FieldGroup>
 
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <Label>Допы для покупателя</Label>
+          <FieldLabel asChild>
+            <p>Допы для покупателя</p>
+          </FieldLabel>
           {canManage ? (
             <Button
               type="button"
@@ -201,18 +212,21 @@ export function PartnerProjectPricingPanel({
                 }))
               }
             >
+              <Plus />
               Добавить
             </Button>
           ) : null}
         </div>
+
         {draft.extras.length === 0 ? (
-          <p className="text-sm text-slate-500">Пока без допов.</p>
+          <p className="text-muted-foreground text-sm">Пока без допов.</p>
         ) : (
           draft.extras.map((extra, index) => (
             <div key={extra.id} className="grid gap-2 md:grid-cols-[1fr_140px_auto]">
               <Input
                 value={extra.name}
                 disabled={!canManage}
+                aria-label="Название опции"
                 onChange={(e) => {
                   const extras = [...draft.extras];
                   extras[index] = { ...extra, name: e.target.value };
@@ -223,13 +237,14 @@ export function PartnerProjectPricingPanel({
                 type="number"
                 placeholder="Цена"
                 disabled={!canManage}
+                aria-label="Цена опции"
                 value={extra.price ?? ""}
                 onChange={(e) => {
                   const extras = [...draft.extras];
-                  extras[index] = {
-                    ...extra,
-                    price: e.target.value === "" ? undefined : Number(e.target.value)
-                  };
+                  extras[index] = withPrice(
+                    extra,
+                    e.target.value === "" ? undefined : Number(e.target.value)
+                  );
                   setDraft((prev) => ({ ...prev, extras }));
                 }}
               />
@@ -237,6 +252,8 @@ export function PartnerProjectPricingPanel({
                 <Button
                   type="button"
                   variant="ghost"
+                  size="icon"
+                  aria-label={`Удалить «${extra.name}»`}
                   onClick={() =>
                     setDraft((prev) => ({
                       ...prev,
@@ -244,7 +261,7 @@ export function PartnerProjectPricingPanel({
                     }))
                   }
                 >
-                  Удалить
+                  <Trash2 />
                 </Button>
               ) : null}
             </div>
@@ -252,14 +269,17 @@ export function PartnerProjectPricingPanel({
         )}
       </div>
 
-      {notice ? <p className="text-sm text-slate-600">{notice}</p> : null}
+      {notice ? <p className="text-muted-foreground text-sm">{notice}</p> : null}
 
       {canManage ? (
         <Button type="button" disabled={saving} onClick={() => void handleSave()}>
-          {saving ? "Сохраняем..." : "Сохранить цену"}
+          {saving ? <Spinner /> : null}
+          {saving ? "Сохраняем…" : "Сохранить цену"}
         </Button>
       ) : (
-        <p className="text-sm text-slate-500">Изменять цены может только владелец кабинета.</p>
+        <p className="text-muted-foreground text-sm">
+          Изменять цены может только владелец кабинета.
+        </p>
       )}
     </div>
   );

@@ -1,11 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { CircleHelp, Send } from "lucide-react";
 
+import { DashboardShell } from "@/components/dashboard-shell";
+import { PageAlert } from "@/components/page-alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle
+} from "@/components/ui/empty";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { DashboardShell } from "../../../components/dashboard-shell";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/api";
 import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
 
@@ -53,7 +67,7 @@ export default function PartnerInquiriesPage() {
       setNotice("Запрос отправлен на завод.");
       await load();
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Не удалось отправить запрос");
+      setError(err instanceof Error ? err.message : "Не удалось отправить запрос");
     } finally {
       setSaving(false);
     }
@@ -65,59 +79,90 @@ export default function PartnerInquiriesPage() {
       currentPath="/partner/inquiries"
       navigation={partnerNavigation}
     >
-      {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
-      {notice ? <p className="mb-4 text-sm text-slate-700">{notice}</p> : null}
+      <PageAlert message={error} variant="destructive" />
+      <PageAlert message={notice} />
 
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold">Запросы на завод</h2>
-          <div className="mt-4 space-y-3">
+      <div className="grid gap-4 md:gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Запросы на завод</CardTitle>
+          </CardHeader>
+          <CardContent>
             {loading ? (
-              <p className="text-sm text-slate-500">Загрузка...</p>
+              <div className="space-y-3">
+                {[0, 1, 2].map((row) => (
+                  <Skeleton key={row} className="h-20 w-full" />
+                ))}
+              </div>
             ) : items.length === 0 ? (
-              <p className="text-sm text-slate-500">Запросов пока нет.</p>
+              <Empty className="border">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <CircleHelp />
+                  </EmptyMedia>
+                  <EmptyTitle>Запросов пока нет</EmptyTitle>
+                  <EmptyDescription>
+                    Спросите завод о комплектации, сроках или документации — ответ придёт вашему
+                    менеджеру.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
-              items.map((item) => (
-                <div key={item.id} className="rounded-xl border border-slate-200 px-4 py-3">
-                  <p className="font-medium">{item.subject}</p>
-                  <p className="mt-1 text-sm text-slate-700">{item.message}</p>
-                  <p className="mt-2 text-xs text-slate-500">
-                    {item.status ?? "new"} · {new Date(item.createdAt).toLocaleString("ru-RU")}
-                  </p>
-                </div>
-              ))
+              <ul className="divide-border divide-y">
+                {items.map((item) => (
+                  <li key={item.id} className="py-4 first:pt-0 last:pb-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium">{item.subject}</p>
+                      <Badge variant="secondary">{item.status ?? "new"}</Badge>
+                    </div>
+                    <p className="mt-1 text-sm whitespace-pre-line">{item.message}</p>
+                    <p className="text-muted-foreground mt-2 text-xs">
+                      {new Date(item.createdAt).toLocaleString("ru-RU")}
+                    </p>
+                  </li>
+                ))}
+              </ul>
             )}
-          </div>
-        </section>
+          </CardContent>
+        </Card>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold">Новый запрос</h2>
-          <form className="mt-4 space-y-3" onSubmit={handleCreate}>
-            <div className="space-y-1.5">
-              <Label htmlFor="subject">Тема</Label>
-              <Input
-                id="subject"
-                required
-                value={form.subject}
-                onChange={(e) => setForm((prev) => ({ ...prev, subject: e.target.value }))}
-                placeholder="Комплектация / сроки / материалы"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="message">Сообщение</Label>
-              <textarea
-                id="message"
-                required
-                className="min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-                value={form.message}
-                onChange={(e) => setForm((prev) => ({ ...prev, message: e.target.value }))}
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={saving}>
-              {saving ? "Отправляем..." : "Отправить на завод"}
-            </Button>
-          </form>
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Новый запрос</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCreate}>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="subject">Тема</FieldLabel>
+                  <Input
+                    id="subject"
+                    required
+                    value={form.subject}
+                    onChange={(e) => setForm((prev) => ({ ...prev, subject: e.target.value }))}
+                    placeholder="Комплектация / сроки / материалы"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="message">Сообщение</FieldLabel>
+                  <Textarea
+                    id="message"
+                    required
+                    rows={8}
+                    value={form.message}
+                    onChange={(e) => setForm((prev) => ({ ...prev, message: e.target.value }))}
+                  />
+                </Field>
+                <Field>
+                  <Button type="submit" disabled={saving}>
+                    {saving ? <Spinner /> : <Send />}
+                    {saving ? "Отправляем…" : "Отправить на завод"}
+                  </Button>
+                </Field>
+              </FieldGroup>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </DashboardShell>
   );

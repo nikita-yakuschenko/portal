@@ -2,9 +2,20 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { BookOpen, CircleHelp, Globe, MessagesSquare, Plug } from "lucide-react";
 
-import { DashboardShell } from "../../components/dashboard-shell";
-import { StatCard } from "../../components/stat-card";
+import { DashboardShell } from "@/components/dashboard-shell";
+import { PageAlert } from "@/components/page-alert";
+import { StatCard } from "@/components/stat-card";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
 
@@ -24,6 +35,14 @@ type Lead = {
 type LeadsResponse = {
   events: Lead[];
 };
+
+const QUICK_ACTIONS = [
+  { href: "/partner/catalog", label: "Каталог и цены", icon: BookOpen },
+  { href: "/partner/site", label: "Настроить сайт", icon: Globe },
+  { href: "/partner/leads", label: "Добавить лид", icon: MessagesSquare },
+  { href: "/partner/crm", label: "Настроить CRM", icon: Plug },
+  { href: "/partner/inquiries", label: "Запрос на завод", icon: CircleHelp }
+];
 
 export default function PartnerPage() {
   const [me, setMe] = useState<MeResponse | null>(null);
@@ -58,114 +77,128 @@ export default function PartnerPage() {
     })();
   }, []);
 
+  const companyRows = me?.partner
+    ? [
+        { label: "Название", value: me.partner.companyName },
+        { label: "Регион", value: me.partner.region },
+        { label: "Контакт", value: me.user.fullName },
+        { label: "Email", value: me.user.email }
+      ]
+    : [];
+
   return (
     <DashboardShell
       cabinetLabel={partnerCabinetLabel}
       currentPath="/partner"
       navigation={partnerNavigation}
     >
-      {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
+      <PageAlert message={error} variant="destructive" />
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <StatCard title="Каталог" value={loading ? "…" : String(counts.projects)} hint="Проектов с завода" />
-        <StatCard title="Лиды" value={loading ? "…" : String(counts.leads)} hint="Всего в системе" />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Каталог"
+          value={loading ? "…" : String(counts.projects)}
+          hint="Проектов с завода"
+        />
+        <StatCard
+          title="Лиды"
+          value={loading ? "…" : String(counts.leads)}
+          hint="Всего в системе"
+        />
         <StatCard
           title="CRM"
           value={loading ? "…" : String(counts.crm)}
           hint={counts.crm > 0 ? "Подключения активны" : "Нужно подключить"}
         />
-        <StatCard title="Команда" value={loading ? "…" : String(counts.team)} hint="Сотрудников" />
+        <StatCard
+          title="Команда"
+          value={loading ? "…" : String(counts.team)}
+          hint="Сотрудников"
+        />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-950">Компания</h2>
-          {me?.partner ? (
-            <dl className="mt-4 space-y-2 text-sm">
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-500">Название</dt>
-                <dd className="font-medium text-slate-950">{me.partner.companyName}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-500">Регион</dt>
-                <dd className="font-medium text-slate-950">{me.partner.region}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-500">Контакт</dt>
-                <dd className="font-medium text-slate-950">{me.user.fullName}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-500">Email</dt>
-                <dd className="font-medium text-slate-950">{me.user.email}</dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="mt-3 text-sm text-slate-500">{loading ? "Загрузка..." : "Нет данных"}</p>
-          )}
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-slate-950">Последние лиды</h2>
-            <Link href="/partner/leads" className="text-sm font-medium text-avgst-green hover:underline">
-              Все лиды
-            </Link>
-          </div>
-          <div className="mt-4 space-y-3">
+      <div className="grid gap-4 md:gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Компания</CardTitle>
+          </CardHeader>
+          <CardContent>
             {loading ? (
-              <p className="text-sm text-slate-500">Загрузка...</p>
-            ) : leads.length === 0 ? (
-              <p className="text-sm text-slate-500">Лидов пока нет.</p>
+              <div className="space-y-3">
+                {[0, 1, 2, 3].map((row) => (
+                  <Skeleton key={row} className="h-5 w-full" />
+                ))}
+              </div>
+            ) : companyRows.length === 0 ? (
+              <p className="text-muted-foreground text-sm">Нет данных о компании.</p>
             ) : (
-              leads.map((lead) => (
-                <div key={lead.id} className="rounded-xl border border-slate-200 px-4 py-3">
-                  <p className="font-medium text-slate-950">{lead.customerName}</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {lead.customerPhone} · {lead.type} ·{" "}
-                    {new Date(lead.createdAt).toLocaleString("ru-RU")}
-                  </p>
-                </div>
-              ))
+              <dl className="divide-border divide-y text-sm">
+                {companyRows.map((row) => (
+                  <div key={row.label} className="flex justify-between gap-4 py-2 first:pt-0">
+                    <dt className="text-muted-foreground">{row.label}</dt>
+                    <dd className="text-right font-medium">{row.value}</dd>
+                  </div>
+                ))}
+              </dl>
             )}
-          </div>
-        </section>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Последние лиды</CardTitle>
+            <CardAction>
+              <Button variant="link" size="sm" asChild>
+                <Link href="/partner/leads">Все лиды</Link>
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-3">
+                {[0, 1, 2].map((row) => (
+                  <Skeleton key={row} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : leads.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                Лидов пока нет. Они появятся здесь после заявок с вашего сайта.
+              </p>
+            ) : (
+              <ul className="divide-border divide-y">
+                {leads.map((lead) => (
+                  <li key={lead.id} className="py-3 first:pt-0 last:pb-0">
+                    <p className="text-sm font-medium">{lead.customerName}</p>
+                    <p className="text-muted-foreground mt-0.5 text-sm">
+                      {lead.customerPhone} · {lead.type} ·{" "}
+                      {new Date(lead.createdAt).toLocaleString("ru-RU")}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-950">Быстрые действия</h2>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Link
-            href="/partner/catalog"
-            className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium hover:bg-slate-100"
-          >
-            Каталог и цены
-          </Link>
-          <Link
-            href="/partner/site"
-            className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium hover:bg-slate-100"
-          >
-            Настроить сайт
-          </Link>
-          <Link
-            href="/partner/leads"
-            className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium hover:bg-slate-100"
-          >
-            Добавить лид
-          </Link>
-          <Link
-            href="/partner/crm"
-            className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium hover:bg-slate-100"
-          >
-            Настроить CRM
-          </Link>
-          <Link
-            href="/partner/inquiries"
-            className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium hover:bg-slate-100"
-          >
-            Запрос на завод
-          </Link>
-        </div>
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>Быстрые действия</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {QUICK_ACTIONS.map((action) => {
+            const Icon = action.icon;
+            return (
+              <Button key={action.href} variant="outline" asChild>
+                <Link href={action.href}>
+                  <Icon />
+                  {action.label}
+                </Link>
+              </Button>
+            );
+          })}
+        </CardContent>
+      </Card>
     </DashboardShell>
   );
 }

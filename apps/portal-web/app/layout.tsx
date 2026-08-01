@@ -1,8 +1,15 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Geist, Inter } from "next/font/google";
 
 import "./globals.css";
 
+const geistSans = Geist({
+  subsets: ["latin", "cyrillic"],
+  display: "swap",
+  variable: "--font-geist-sans"
+});
+
+// Inter остаётся вторым уровнем стека по ADS 1.1 §9.1
 const inter = Inter({
   subsets: ["latin", "cyrillic"],
   display: "swap",
@@ -22,8 +29,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ru" className={inter.variable}>
-      <body className={inter.className}>{children}</body>
+    <html lang="ru" className={`${geistSans.variable} ${inter.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }

@@ -1,11 +1,31 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Plug } from "lucide-react";
 
+import { DashboardShell } from "@/components/dashboard-shell";
+import { PageAlert } from "@/components/page-alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle
+} from "@/components/ui/empty";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { DashboardShell } from "../../../components/dashboard-shell";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { apiFetch } from "@/lib/api";
 import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
 
@@ -18,6 +38,11 @@ type CrmConnection = {
 
 type MeResponse = {
   user: { role: string };
+};
+
+const PROVIDER_LABEL: Record<string, string> = {
+  bitrix24: "Bitrix24",
+  amocrm: "amoCRM"
 };
 
 export default function PartnerCrmPage() {
@@ -60,9 +85,7 @@ export default function PartnerCrmPage() {
     setNotice("");
 
     const credentials =
-      provider === "bitrix24"
-        ? { webhookUrl }
-        : { clientId, clientSecret, refreshToken };
+      provider === "bitrix24" ? { webhookUrl } : { clientId, clientSecret, refreshToken };
 
     try {
       await apiFetch("/api/partner/crm-connections", {
@@ -76,7 +99,7 @@ export default function PartnerCrmPage() {
       setRefreshToken("");
       await load();
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Не удалось подключить CRM");
+      setError(err instanceof Error ? err.message : "Не удалось подключить CRM");
     } finally {
       setSaving(false);
     }
@@ -88,103 +111,147 @@ export default function PartnerCrmPage() {
       currentPath="/partner/crm"
       navigation={partnerNavigation}
     >
-      {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
-      {notice ? <p className="mb-4 text-sm text-slate-700">{notice}</p> : null}
+      <PageAlert message={error} variant="destructive" />
+      <PageAlert message={notice} />
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold">Подключения</h2>
-          <div className="mt-4 space-y-3">
+      <div className="grid gap-4 md:gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Подключения</CardTitle>
+          </CardHeader>
+          <CardContent>
             {loading ? (
-              <p className="text-sm text-slate-500">Загрузка...</p>
+              <div className="space-y-3">
+                {[0, 1].map((row) => (
+                  <Skeleton key={row} className="h-16 w-full" />
+                ))}
+              </div>
             ) : items.length === 0 ? (
-              <p className="text-sm text-slate-500">CRM ещё не подключена.</p>
+              <Empty className="border">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Plug />
+                  </EmptyMedia>
+                  <EmptyTitle>CRM ещё не подключена</EmptyTitle>
+                  <EmptyDescription>
+                    Подключите Bitrix24 или amoCRM — лиды с сайта будут уходить туда автоматически.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
-              items.map((item) => (
-                <div key={item.id} className="rounded-xl border border-slate-200 px-4 py-3">
-                  <p className="font-medium uppercase">{item.provider}</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {item.portalUrl} · {item.isEnabled ? "включено" : "выключено"}
-                  </p>
-                </div>
-              ))
+              <ul className="divide-border divide-y">
+                {items.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium">
+                        {PROVIDER_LABEL[item.provider] ?? item.provider}
+                      </p>
+                      <p className="text-muted-foreground truncate text-sm">{item.portalUrl}</p>
+                    </div>
+                    <Badge variant={item.isEnabled ? "default" : "secondary"}>
+                      {item.isEnabled ? "Включено" : "Выключено"}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
             )}
-          </div>
-        </section>
+          </CardContent>
+        </Card>
 
         {canManage ? (
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-semibold">Подключить CRM</h2>
-            <form className="mt-4 space-y-3" onSubmit={handleCreate}>
-              <div className="space-y-1.5">
-                <Label htmlFor="provider">Провайдер</Label>
-                <select
-                  id="provider"
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 font-sans text-sm"
-                  value={provider}
-                  onChange={(e) => setProvider(e.target.value as "amocrm" | "bitrix24")}
-                >
-                  <option value="bitrix24">Bitrix24</option>
-                  <option value="amocrm">amoCRM</option>
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="portalUrl">URL портала</Label>
-                <Input
-                  id="portalUrl"
-                  type="url"
-                  required
-                  value={portalUrl}
-                  onChange={(e) => setPortalUrl(e.target.value)}
-                />
-              </div>
-              {provider === "bitrix24" ? (
-                <div className="space-y-1.5">
-                  <Label htmlFor="webhookUrl">Webhook URL</Label>
-                  <Input
-                    id="webhookUrl"
-                    required
-                    value={webhookUrl}
-                    onChange={(e) => setWebhookUrl(e.target.value)}
-                    placeholder="https://.../rest/1/xxx/"
-                  />
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="clientId">Client ID</Label>
+          <Card>
+            <CardHeader>
+              <CardTitle>Подключить CRM</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleCreate}>
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="provider">Провайдер</FieldLabel>
+                    <Select
+                      value={provider}
+                      onValueChange={(value) => setProvider(value as "amocrm" | "bitrix24")}
+                    >
+                      <SelectTrigger id="provider" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bitrix24">Bitrix24</SelectItem>
+                        <SelectItem value="amocrm">amoCRM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  <Field>
+                    <FieldLabel htmlFor="portalUrl">URL портала</FieldLabel>
                     <Input
-                      id="clientId"
+                      id="portalUrl"
+                      type="url"
                       required
-                      value={clientId}
-                      onChange={(e) => setClientId(e.target.value)}
+                      value={portalUrl}
+                      onChange={(e) => setPortalUrl(e.target.value)}
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="clientSecret">Client Secret</Label>
-                    <Input
-                      id="clientSecret"
-                      required
-                      value={clientSecret}
-                      onChange={(e) => setClientSecret(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="refreshToken">Refresh Token</Label>
-                    <Input
-                      id="refreshToken"
-                      required
-                      value={refreshToken}
-                      onChange={(e) => setRefreshToken(e.target.value)}
-                    />
-                  </div>
-                </>
-              )}
-              <Button type="submit" className="w-full" disabled={saving}>
-                {saving ? "Подключаем..." : "Сохранить подключение"}
-              </Button>
-            </form>
-          </section>
+                  </Field>
+
+                  {provider === "bitrix24" ? (
+                    <Field>
+                      <FieldLabel htmlFor="webhookUrl">Webhook URL</FieldLabel>
+                      <Input
+                        id="webhookUrl"
+                        required
+                        value={webhookUrl}
+                        onChange={(e) => setWebhookUrl(e.target.value)}
+                        placeholder="https://.../rest/1/xxx/"
+                      />
+                      <FieldDescription>
+                        Входящий вебхук с правом создавать лиды.
+                      </FieldDescription>
+                    </Field>
+                  ) : (
+                    <>
+                      <Field>
+                        <FieldLabel htmlFor="clientId">Client ID</FieldLabel>
+                        <Input
+                          id="clientId"
+                          required
+                          value={clientId}
+                          onChange={(e) => setClientId(e.target.value)}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="clientSecret">Client Secret</FieldLabel>
+                        <Input
+                          id="clientSecret"
+                          required
+                          value={clientSecret}
+                          onChange={(e) => setClientSecret(e.target.value)}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="refreshToken">Refresh Token</FieldLabel>
+                        <Input
+                          id="refreshToken"
+                          required
+                          value={refreshToken}
+                          onChange={(e) => setRefreshToken(e.target.value)}
+                        />
+                      </Field>
+                    </>
+                  )}
+
+                  <Field>
+                    <Button type="submit" disabled={saving}>
+                      {saving ? <Spinner /> : null}
+                      {saving ? "Подключаем…" : "Сохранить подключение"}
+                    </Button>
+                  </Field>
+                </FieldGroup>
+              </form>
+            </CardContent>
+          </Card>
         ) : null}
       </div>
     </DashboardShell>

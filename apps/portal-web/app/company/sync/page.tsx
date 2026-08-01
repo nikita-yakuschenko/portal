@@ -1,8 +1,36 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { History, RefreshCw } from "lucide-react";
 
-import { DashboardShell } from "../../../components/dashboard-shell";
+import { DashboardShell } from "@/components/dashboard-shell";
+import { PageAlert } from "@/components/page-alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle
+} from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
 import { companyCabinetLabel, companyNavigation } from "@/lib/company-nav";
 
@@ -19,6 +47,13 @@ type SyncRun = {
 type TildaStatus = {
   officialApi: { ok: boolean; message?: string };
   storeSources: Array<{ key: string; catalogPath: string }>;
+};
+
+// Значения sync_status на стороне API: running | completed | failed
+const runStatusMeta: Record<string, { label: string; variant: "default" | "secondary" | "destructive" }> = {
+  completed: { label: "Завершена", variant: "default" },
+  running: { label: "Выполняется", variant: "secondary" },
+  failed: { label: "Ошибка", variant: "destructive" }
 };
 
 export default function CompanySyncPage() {
@@ -56,11 +91,11 @@ export default function CompanySyncPage() {
         assetsDiscovered: number;
       }>("/api/company/catalog/sync/tilda", { method: "POST", body: "{}" });
       setNotice(
-        `Синхронизация завершена: +${result.createdCount} / ~${result.updatedCount}, ассетов ${result.assetsDiscovered}`
+        `Синхронизация завершена: +${result.createdCount} новых, ${result.updatedCount} обновлено, ассетов ${result.assetsDiscovered}`
       );
       await load();
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Синхронизация не удалась");
+      setError(err instanceof Error ? err.message : "Синхронизация не удалась");
     } finally {
       setSyncing(false);
     }
@@ -72,54 +107,103 @@ export default function CompanySyncPage() {
       currentPath="/company/sync"
       navigation={companyNavigation}
     >
-      {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
-      {notice ? <p className="mb-4 text-sm text-slate-700">{notice}</p> : null}
+      <PageAlert message={error} variant="destructive" />
+      <PageAlert message={notice} />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-950">Синхронизация с Tilda</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Official API:{" "}
-              {status ? (status.officialApi.ok ? "доступен" : status.officialApi.message ?? "ошибка") : "…"}
-            </p>
-            {status?.storeSources?.length ? (
-              <p className="mt-1 text-sm text-slate-500">
-                Источники: {status.storeSources.map((source) => source.key).join(", ")}
-              </p>
-            ) : null}
+      <Card>
+        <CardHeader>
+          <CardTitle>Синхронизация с Tilda</CardTitle>
+          <CardDescription>
+            Каталог проектов подтягивается из магазина Tilda вместе с изображениями.
+          </CardDescription>
+          <CardAction>
+            <Button type="button" disabled={syncing} onClick={() => void runSync()}>
+              {syncing ? <Spinner /> : <RefreshCw />}
+              {syncing ? "Синхронизация…" : "Запустить синхронизацию"}
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">Official API:</span>
+            {status ? (
+              <Badge variant={status.officialApi.ok ? "default" : "destructive"}>
+                {status.officialApi.ok ? "доступен" : status.officialApi.message ?? "ошибка"}
+              </Badge>
+            ) : (
+              <span className="text-muted-foreground">…</span>
+            )}
           </div>
-          <button
-            type="button"
-            disabled={syncing}
-            onClick={() => void runSync()}
-            className="rounded-lg bg-avgst-green px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {syncing ? "Синхронизация..." : "Запустить синхронизацию"}
-          </button>
-        </div>
-      </section>
+          {status?.storeSources?.length ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-muted-foreground">Источники:</span>
+              {status.storeSources.map((source) => (
+                <Badge key={source.key} variant="outline">
+                  {source.key}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-950">История запусков</h2>
-        <div className="mt-4 space-y-3">
+      <Card>
+        <CardHeader>
+          <CardTitle>История запусков</CardTitle>
+        </CardHeader>
+        <CardContent>
           {runs.length === 0 ? (
-            <p className="text-sm text-slate-500">Запусков ещё не было.</p>
+            <Empty className="border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <History />
+                </EmptyMedia>
+                <EmptyTitle>Запусков ещё не было</EmptyTitle>
+                <EmptyDescription>
+                  Нажмите «Запустить синхронизацию», чтобы загрузить каталог с Tilda.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
-            runs.map((run) => (
-              <div key={run.id} className="rounded-xl border border-slate-200 px-4 py-3">
-                <p className="font-medium text-slate-950">
-                  {run.status} · +{run.createdCount} / ~{run.updatedCount} · ассеты {run.assetsDiscovered}
-                </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  {new Date(run.startedAt).toLocaleString("ru-RU")}
-                  {run.finishedAt ? ` → ${new Date(run.finishedAt).toLocaleString("ru-RU")}` : ""}
-                </p>
-              </div>
-            ))
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Статус</TableHead>
+                    <TableHead>Создано</TableHead>
+                    <TableHead>Обновлено</TableHead>
+                    <TableHead>Ассеты</TableHead>
+                    <TableHead>Начало</TableHead>
+                    <TableHead>Завершение</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {runs.map((run) => (
+                    <TableRow key={run.id}>
+                      <TableCell>
+                        <Badge variant={runStatusMeta[run.status]?.variant ?? "secondary"}>
+                          {runStatusMeta[run.status]?.label ?? run.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="tabular-nums">{run.createdCount}</TableCell>
+                      <TableCell className="tabular-nums">{run.updatedCount}</TableCell>
+                      <TableCell className="tabular-nums">{run.assetsDiscovered}</TableCell>
+                      <TableCell className="text-muted-foreground whitespace-nowrap">
+                        {new Date(run.startedAt).toLocaleString("ru-RU")}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground whitespace-nowrap">
+                        {run.finishedAt
+                          ? new Date(run.finishedAt).toLocaleString("ru-RU")
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
-        </div>
-      </section>
+        </CardContent>
+      </Card>
     </DashboardShell>
   );
 }

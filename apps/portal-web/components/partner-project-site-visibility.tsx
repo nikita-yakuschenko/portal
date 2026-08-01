@@ -1,8 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CheckCircle2, EyeOff } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { apiFetch } from "@/lib/api";
 
 type PricingRow = {
@@ -40,11 +52,10 @@ export function PartnerProjectSiteVisibility({
 
   const published = row?.isPublished ?? false;
 
-  async function toggle() {
+  async function toggle(nextPublished: boolean) {
     if (!canManage) return;
     setSaving(true);
     setNotice("");
-    const nextPublished = !published;
     try {
       await apiFetch("/api/partner/pricing", {
         method: "PUT",
@@ -69,7 +80,6 @@ export function PartnerProjectSiteVisibility({
               extras: []
             }
       );
-      setNotice(nextPublished ? "Проект на сайте" : "Проект скрыт с сайта");
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Не удалось сохранить");
     } finally {
@@ -78,35 +88,39 @@ export function PartnerProjectSiteVisibility({
   }
 
   if (loading) {
-    return <p className="text-xs text-slate-400">Сайт…</p>;
+    return <Skeleton className="h-32 w-full" />;
   }
 
   return (
-    <div className="flex flex-col items-start gap-1 sm:items-end">
-      <Button
-        type="button"
-        size="sm"
-        variant={published ? "default" : "outline"}
-        disabled={!canManage || saving}
-        onClick={() => void toggle()}
-        className={
-          published
-            ? "bg-avgst-green text-white hover:bg-avgst-green/90"
-            : undefined
-        }
-      >
-        {saving
-          ? "Сохраняем…"
-          : published
-            ? "На сайте компании"
-            : "Не на сайте"}
-      </Button>
-      <p className="text-xs text-slate-500">
-        {published
-          ? "Показывается в каталоге вашего сайта"
-          : "Скрыт — покупатели его не видят"}
-      </p>
-      {notice ? <p className="text-xs text-slate-600">{notice}</p> : null}
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Публикация на сайте</CardTitle>
+        <CardDescription>
+          {published
+            ? "Проект показывается в каталоге вашего сайта — покупатели могут оставить заявку."
+            : "Проект виден только в кабинете. На сайте покупатели его не найдут."}
+        </CardDescription>
+        {canManage ? (
+          <CardAction>
+            <Button
+              type="button"
+              variant={published ? "outline" : "default"}
+              disabled={saving}
+              onClick={() => void toggle(!published)}
+            >
+              {saving ? <Spinner /> : null}
+              {published ? "Снять с публикации" : "Опубликовать"}
+            </Button>
+          </CardAction>
+        ) : null}
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center gap-3">
+        <Badge variant={published ? "default" : "secondary"}>
+          {published ? <CheckCircle2 /> : <EyeOff />}
+          {published ? "Опубликован на сайте" : "Скрыт с сайта"}
+        </Badge>
+        {notice ? <span className="text-destructive text-xs">{notice}</span> : null}
+      </CardContent>
+    </Card>
   );
 }

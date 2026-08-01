@@ -186,7 +186,8 @@ function productUrl(product: Record<string, unknown>, source: TildaSource): stri
   return `${config.tilda.siteBaseUrl}${source.catalogPath}/tproduct/${productUid(product)}`;
 }
 
-function normalizeCharacteristicsText(text: string): string {
+/** Tilda отдаёт descr/text с HTML-разметкой — приводим к чистому тексту */
+function stripTildaHtml(text: string): string {
   return text
     .replace(/<sup>\s*2\s*<\/sup>/gi, "²")
     .replace(/<\/li>/gi, "\n")
@@ -207,7 +208,7 @@ function parseCharacteristics(text: string): {
   lengthM?: number;
   widthM?: number;
 } {
-  const normalized = normalizeCharacteristicsText(text);
+  const normalized = stripTildaHtml(text);
   const lines = normalized
     .split(/\n+/)
     .map((line) => line.trim())
@@ -380,8 +381,8 @@ function mapProduct(
 ): TildaProduct {
   const rawTitle = String(product.title ?? product.name ?? `Проект ${productUid(product)}`);
   const title = cleanCatalogTitle(rawTitle);
-  const description = String(product.descr ?? product.description ?? "");
-  const summary = String(product.text ?? "").trim();
+  const description = stripTildaHtml(String(product.descr ?? product.description ?? ""));
+  const summary = stripTildaHtml(String(product.text ?? ""));
   const mark = String(product.mark ?? "").trim();
   const parsed = parseCharacteristics(`${rawTitle}\n${summary}\n${description}`);
   const charRows = parseCharacteristicRows(product);

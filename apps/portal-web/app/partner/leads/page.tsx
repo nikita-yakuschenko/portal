@@ -1,11 +1,32 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { MessagesSquare, Plus } from "lucide-react";
 
+import { DashboardShell } from "@/components/dashboard-shell";
+import { PageAlert } from "@/components/page-alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle
+} from "@/components/ui/empty";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { DashboardShell } from "../../../components/dashboard-shell";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/api";
 import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
 
@@ -30,6 +51,8 @@ type Project = {
   name: string;
 };
 
+const NO_PROJECT = "__none__";
+
 export default function PartnerLeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [deliveries, setDeliveries] = useState<LeadsResponse["deliveries"]>([]);
@@ -42,7 +65,7 @@ export default function PartnerLeadsPage() {
     customerName: "",
     customerPhone: "",
     customerEmail: "",
-    projectId: "",
+    projectId: NO_PROJECT,
     message: ""
   });
 
@@ -78,7 +101,7 @@ export default function PartnerLeadsPage() {
           customerName: form.customerName,
           customerPhone: form.customerPhone,
           customerEmail: form.customerEmail || undefined,
-          projectId: form.projectId || undefined,
+          projectId: form.projectId === NO_PROJECT ? undefined : form.projectId,
           message: form.message || undefined
         })
       });
@@ -86,13 +109,13 @@ export default function PartnerLeadsPage() {
         customerName: "",
         customerPhone: "",
         customerEmail: "",
-        projectId: "",
+        projectId: NO_PROJECT,
         message: ""
       });
       setNotice("Лид создан.");
       await load();
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Не удалось создать лид");
+      setError(err instanceof Error ? err.message : "Не удалось создать лид");
     } finally {
       setSaving(false);
     }
@@ -108,105 +131,145 @@ export default function PartnerLeadsPage() {
       currentPath="/partner/leads"
       navigation={partnerNavigation}
     >
-      {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
-      {notice ? <p className="mb-4 text-sm text-slate-700">{notice}</p> : null}
+      <PageAlert message={error} variant="destructive" />
+      <PageAlert message={notice} />
 
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold">Список лидов</h2>
-          <div className="mt-4 space-y-3">
+      <div className="grid gap-4 md:gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Список лидов</CardTitle>
+          </CardHeader>
+          <CardContent>
             {loading ? (
-              <p className="text-sm text-slate-500">Загрузка...</p>
-            ) : leads.length === 0 ? (
-              <p className="text-sm text-slate-500">Лидов пока нет.</p>
-            ) : (
-              leads.map((lead) => {
-                const delivery = deliveryFor(lead.id);
-                const project = projects.find((item) => item.id === lead.projectId);
-                return (
-                  <div key={lead.id} className="rounded-xl border border-slate-200 px-4 py-3">
-                    <p className="font-medium">{lead.customerName}</p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {lead.customerPhone}
-                      {lead.customerEmail ? ` · ${lead.customerEmail}` : ""}
-                      {project ? ` · ${project.name}` : ""}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {lead.type} · {new Date(lead.createdAt).toLocaleString("ru-RU")}
-                      {delivery
-                        ? ` · CRM: ${delivery.status}${delivery.externalLeadId ? ` (${delivery.externalLeadId})` : ""}`
-                        : " · CRM: не отправлен"}
-                    </p>
-                    {lead.message ? (
-                      <p className="mt-2 text-sm text-slate-700">{lead.message}</p>
-                    ) : null}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold">Новый лид</h2>
-          <form className="mt-4 space-y-3" onSubmit={handleCreate}>
-            <div className="space-y-1.5">
-              <Label htmlFor="customerName">Имя клиента</Label>
-              <Input
-                id="customerName"
-                required
-                value={form.customerName}
-                onChange={(e) => setForm((prev) => ({ ...prev, customerName: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="customerPhone">Телефон</Label>
-              <Input
-                id="customerPhone"
-                required
-                value={form.customerPhone}
-                onChange={(e) => setForm((prev) => ({ ...prev, customerPhone: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="customerEmail">Email</Label>
-              <Input
-                id="customerEmail"
-                type="email"
-                value={form.customerEmail}
-                onChange={(e) => setForm((prev) => ({ ...prev, customerEmail: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="projectId">Проект</Label>
-              <select
-                id="projectId"
-                className="h-9 w-full rounded-md border border-input bg-transparent px-3 font-sans text-sm"
-                value={form.projectId}
-                onChange={(e) => setForm((prev) => ({ ...prev, projectId: e.target.value }))}
-              >
-                <option value="">Без проекта</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
+              <div className="space-y-3">
+                {[0, 1, 2].map((row) => (
+                  <Skeleton key={row} className="h-20 w-full" />
                 ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="message">Комментарий</Label>
-              <textarea
-                id="message"
-                className="min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-                value={form.message}
-                onChange={(e) => setForm((prev) => ({ ...prev, message: e.target.value }))}
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={saving}>
-              {saving ? "Сохраняем..." : "Создать лид"}
-            </Button>
-          </form>
-        </section>
+              </div>
+            ) : leads.length === 0 ? (
+              <Empty className="border">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <MessagesSquare />
+                  </EmptyMedia>
+                  <EmptyTitle>Лидов пока нет</EmptyTitle>
+                  <EmptyDescription>
+                    Заявки с вашего сайта попадают сюда автоматически. Лид можно добавить и вручную.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <ul className="divide-border divide-y">
+                {leads.map((lead) => {
+                  const delivery = deliveryFor(lead.id);
+                  const project = projects.find((item) => item.id === lead.projectId);
+
+                  return (
+                    <li key={lead.id} className="py-4 first:pt-0 last:pb-0">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-medium">{lead.customerName}</p>
+                        <Badge variant={delivery ? "default" : "outline"}>
+                          {delivery ? `CRM: ${delivery.status}` : "CRM: не отправлен"}
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground mt-1 text-sm">
+                        {lead.customerPhone}
+                        {lead.customerEmail ? ` · ${lead.customerEmail}` : ""}
+                        {project ? ` · ${project.name}` : ""}
+                      </p>
+                      <p className="text-muted-foreground mt-0.5 text-sm">
+                        {lead.type} · {new Date(lead.createdAt).toLocaleString("ru-RU")}
+                        {delivery?.externalLeadId ? ` · ID ${delivery.externalLeadId}` : ""}
+                      </p>
+                      {lead.message ? (
+                        <p className="mt-2 text-sm whitespace-pre-line">{lead.message}</p>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Новый лид</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCreate}>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="customerName">Имя клиента</FieldLabel>
+                  <Input
+                    id="customerName"
+                    required
+                    value={form.customerName}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, customerName: e.target.value }))
+                    }
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="customerPhone">Телефон</FieldLabel>
+                  <Input
+                    id="customerPhone"
+                    required
+                    value={form.customerPhone}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, customerPhone: e.target.value }))
+                    }
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="customerEmail">Email</FieldLabel>
+                  <Input
+                    id="customerEmail"
+                    type="email"
+                    value={form.customerEmail}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, customerEmail: e.target.value }))
+                    }
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="projectId">Проект</FieldLabel>
+                  <Select
+                    value={form.projectId}
+                    onValueChange={(value) => setForm((prev) => ({ ...prev, projectId: value }))}
+                  >
+                    <SelectTrigger id="projectId" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_PROJECT}>Без проекта</SelectItem>
+                      {projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="message">Комментарий</FieldLabel>
+                  <Textarea
+                    id="message"
+                    rows={4}
+                    value={form.message}
+                    onChange={(e) => setForm((prev) => ({ ...prev, message: e.target.value }))}
+                  />
+                </Field>
+                <Field>
+                  <Button type="submit" disabled={saving}>
+                    {saving ? <Spinner /> : <Plus />}
+                    {saving ? "Сохраняем…" : "Создать лид"}
+                  </Button>
+                </Field>
+              </FieldGroup>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </DashboardShell>
   );
