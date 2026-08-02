@@ -59,6 +59,7 @@ type OpenLeadFormOptions = {
 type PreviewState = {
   draft: PartnerSiteDraft | null;
   partnerLegal: PartnerLegalInfo | null;
+  partnerId: string | null;
   projects: StorefrontProject[];
   host: string;
   socials: Array<{ label: string; href: string }>;
@@ -248,6 +249,7 @@ export function PartnerSitePreviewProvider({ children }: { children: ReactNode }
     () => ({
       draft,
       partnerLegal,
+      partnerId,
       projects,
       host,
       socials: draft ? socialLinks(draft) : [],
@@ -269,6 +271,7 @@ export function PartnerSitePreviewProvider({ children }: { children: ReactNode }
     [
       draft,
       partnerLegal,
+      partnerId,
       projects,
       host,
       favorites,

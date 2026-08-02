@@ -32,9 +32,11 @@ import {
   previewPaths,
   primaryImage,
   groupStorefrontAssets,
+  isPublicSiteRuntime,
   type StorefrontProject
 } from "@/lib/partner-site-preview";
 import { catalogProseDescription } from "@/lib/strip-html";
+import { projectShareCopy } from "@/lib/project-share-copy";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -220,7 +222,7 @@ type LightboxItem = { sourceUrl: string; label?: string | null };
 
 export default function PartnerSiteProjectDetailPage() {
   const params = useParams<{ slug: string }>();
-  const { draft, projects, favorites, toggleFavorite, openLeadForm, loading } =
+  const { draft, partnerLegal, partnerId, projects, favorites, toggleFavorite, openLeadForm, loading } =
     usePartnerSitePreview();
   const [detail, setDetail] = useState<StorefrontProject | null>(null);
 
@@ -238,13 +240,15 @@ export default function PartnerSiteProjectDetailPage() {
   useEffect(() => {
     const key = params.slug;
     if (!key) return;
+    if (isPublicSiteRuntime && !partnerId) return;
     let cancelled = false;
     setDetail(null);
     void (async () => {
       try {
-        const full = await apiFetch<StorefrontProject>(
-          `/api/partner/storefront/projects/${encodeURIComponent(key)}`
-        );
+        const path = isPublicSiteRuntime
+          ? `/api/public/sites/${partnerId}/projects/${encodeURIComponent(key)}`
+          : `/api/partner/storefront/projects/${encodeURIComponent(key)}`;
+        const full = await apiFetch<StorefrontProject>(path);
         if (!cancelled) setDetail(full);
       } catch {
         if (!cancelled) setDetail(null);
@@ -253,7 +257,7 @@ export default function PartnerSiteProjectDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.slug]);
+  }, [params.slug, partnerId]);
 
   const project = detail ?? lite;
 
@@ -363,11 +367,20 @@ export default function PartnerSiteProjectDetailPage() {
   async function shareProject() {
     if (!project) return;
     const url = typeof window !== "undefined" ? window.location.href : "";
-    const shareData = {
-      title: project.name,
-      text: `Проект «${project.name}»`,
-      url
-    };
+    const company =
+      draft?.name.trim() || partnerLegal?.companyName.trim() || "";
+    const { title, text } = projectShareCopy(
+      {
+        name: project.name,
+        technology: project.technology,
+        floors: project.floors,
+        area: project.area,
+        bedrooms: project.bedrooms,
+        bathrooms: project.bathrooms
+      },
+      company
+    );
+    const shareData = { title, text, url };
 
     try {
       if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
