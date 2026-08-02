@@ -568,33 +568,40 @@ function PartnerSiteContent() {
             <TabsContent value="seo" className="mt-0 space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>SEO</CardTitle>
+                  <CardTitle>SEO и превью ссылок</CardTitle>
                   <CardDescription>
-                    Title и описание вкладки браузера; favicon — иконка рядом с заголовком.
+                    Title, описание и favicon для вкладки браузера и превью в Telegram /
+                    мессенджерах. После правок нажмите «Опубликовать».
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <FieldGroup>
                     <Field>
-                      <FieldLabel htmlFor="site-seo-title">Title вкладки браузера</FieldLabel>
+                      <FieldLabel htmlFor="site-seo-title">Title (название в превью)</FieldLabel>
                       <Input
                         id="site-seo-title"
-                        placeholder={form.name.trim() || "Название сайта"}
+                        placeholder={form.name.trim() || "Например: PRO DOM"}
                         value={form.seoTitle}
                         onChange={(e) => updateField("seoTitle", e.target.value)}
                       />
                       <p className="text-muted-foreground text-xs">
-                        Если пусто — подставится название сайта из раздела «Основное».
+                        Если пусто — название сайта из раздела «Основное».
                       </p>
                     </Field>
                     <Field>
-                      <FieldLabel htmlFor="site-seo-description">Description</FieldLabel>
+                      <FieldLabel htmlFor="site-seo-description">
+                        Description (пометка / слоган)
+                      </FieldLabel>
                       <Textarea
                         id="site-seo-description"
                         rows={3}
+                        placeholder="Например: PRO DOM помогает выбрать проект, рассчитать смету и построить дом."
                         value={form.seoDescription}
                         onChange={(e) => updateField("seoDescription", e.target.value)}
                       />
+                      <p className="text-muted-foreground text-xs">
+                        Короткий текст под названием в превью ссылки.
+                      </p>
                     </Field>
                   </FieldGroup>
 

@@ -21,14 +21,20 @@ export function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // Favicon по Host партнёра (не общая иконка кабинета)
+  if (pathname === "/favicon.ico" || pathname === "/icon.svg") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/site-branding/icon";
+    return NextResponse.rewrite(url);
+  }
+
   // Статика и API пропускаем
   if (
     pathname.startsWith("/api") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/landing") ||
+    pathname.startsWith("/site-branding") ||
     pathname === "/logo.svg" ||
-    pathname === "/icon.svg" ||
-    pathname === "/favicon.ico" ||
     /\.\w+$/.test(pathname)
   ) {
     return NextResponse.next();

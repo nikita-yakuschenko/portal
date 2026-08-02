@@ -7,6 +7,8 @@ import type { PartnerSiteDraft } from "@/lib/partner-site-draft";
 const FAVICON_ATTR = "data-partner-site-favicon";
 const APPLE_ICON_ATTR = "data-partner-site-apple-icon";
 const DESC_ATTR = "data-partner-site-description";
+const OG_TITLE_ATTR = "data-partner-site-og-title";
+const OG_DESC_ATTR = "data-partner-site-og-description";
 
 function upsertLink(rel: string, marker: string, href: string, type?: string) {
   let el = document.head.querySelector<HTMLLinkElement>(`link[${marker}]`);
@@ -23,6 +25,22 @@ function upsertLink(rel: string, marker: string, href: string, type?: string) {
 
 function removeMarked(marker: string) {
   document.head.querySelectorAll(`[${marker}]`).forEach((node) => node.remove());
+}
+
+function upsertMeta(
+  marker: string,
+  attrs: { name?: string; property?: string },
+  content: string
+) {
+  let el = document.head.querySelector<HTMLMetaElement>(`meta[${marker}]`);
+  if (!el) {
+    el = document.createElement("meta");
+    el.setAttribute(marker, "1");
+    document.head.appendChild(el);
+  }
+  if (attrs.name) el.name = attrs.name;
+  if (attrs.property) el.setAttribute("property", attrs.property);
+  el.content = content;
 }
 
 function faviconType(dataUrl: string): string | undefined {
@@ -43,18 +61,15 @@ export function SiteDocumentHead({ draft }: { draft: PartnerSiteDraft }) {
     document.title = title;
 
     const description = draft.seoDescription.trim();
-    let meta = document.head.querySelector<HTMLMetaElement>(`meta[${DESC_ATTR}]`);
     if (description) {
-      if (!meta) {
-        meta = document.createElement("meta");
-        meta.setAttribute(DESC_ATTR, "1");
-        meta.name = "description";
-        document.head.appendChild(meta);
-      }
-      meta.content = description;
-    } else if (meta) {
-      meta.remove();
+      upsertMeta(DESC_ATTR, { name: "description" }, description);
+      upsertMeta(OG_DESC_ATTR, { property: "og:description" }, description);
+    } else {
+      removeMarked(DESC_ATTR);
+      removeMarked(OG_DESC_ATTR);
     }
+
+    upsertMeta(OG_TITLE_ATTR, { property: "og:title" }, title);
 
     const favicon = draft.faviconDataUrl.trim();
     if (favicon) {
@@ -72,6 +87,8 @@ export function SiteDocumentHead({ draft }: { draft: PartnerSiteDraft }) {
     return () => {
       document.title = previousTitle;
       removeMarked(DESC_ATTR);
+      removeMarked(OG_TITLE_ATTR);
+      removeMarked(OG_DESC_ATTR);
       removeMarked(FAVICON_ATTR);
       removeMarked(APPLE_ICON_ATTR);
     };
