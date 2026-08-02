@@ -51,8 +51,9 @@ services:
     environment:
       API_BASE_URL: ${API_BASE_URL:-http://api:4000}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://b2b.avgst.ru}
+      PORT: "3410"
     expose:
-      - "3000"
+      - "3410"
 
   site-runtime:
     build:
@@ -68,5 +69,6 @@ services:
       NEXT_PUBLIC_APP_ROLE: site
       API_BASE_URL: ${API_BASE_URL:-http://api:4000}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://b2b.avgst.ru}
+      PORT: "3410"
     expose:
-      - "3000"
+      - "3410"

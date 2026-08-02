@@ -39,7 +39,7 @@ COPY --from=builder /app/apps/portal-web/next.config.mjs ./next.config.mjs
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/apps/portal-web/node_modules ./node_modules
 COPY --from=builder /app/packages /app/packages
-EXPOSE 3000
+EXPOSE 3410
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD wget -qO- http://127.0.0.1:3000/ || exit 1
-CMD ["npx", "next", "start", "-H", "0.0.0.0", "-p", "3000"]
+  CMD wget -qO- http://127.0.0.1:3410/ || exit 1
+CMD ["npx", "next", "start", "-H", "0.0.0.0", "-p", "3410"]
