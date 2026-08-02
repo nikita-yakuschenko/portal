@@ -4,6 +4,20 @@ const apiOrigin = process.env.API_BASE_URL ?? "http://localhost:4000";
 const nextConfig = {
   transpilePackages: ["@b2b/domain"],
   // Браузер ходит на тот же origin (:3000) — без CORS и без cookie на :4000
+  async redirects() {
+    return [
+      {
+        source: "/partner/site/preview/projects",
+        destination: "/partner/site/preview/catalog",
+        permanent: true
+      },
+      {
+        source: "/partner/site/preview/projects/:slug",
+        destination: "/partner/site/preview/catalog/:slug",
+        permanent: true
+      }
+    ];
+  },
   async rewrites() {
     return [
       { source: "/api/auth/:path*", destination: `${apiOrigin}/api/auth/:path*` },

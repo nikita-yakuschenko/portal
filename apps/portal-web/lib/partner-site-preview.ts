@@ -1,17 +1,35 @@
 import type { PartnerSiteDraft } from "@/lib/partner-site-draft";
+import { resolvePartnerSiteSocials } from "@/lib/partner-site-socials";
 
 export const PREVIEW_BASE = "/partner/site/preview";
 
 export const previewPaths = {
   home: PREVIEW_BASE,
-  projects: `${PREVIEW_BASE}/projects`,
-  project: (id: string) => `${PREVIEW_BASE}/projects/${id}`,
+  catalog: `${PREVIEW_BASE}/catalog`,
+  /** Каталог с фильтром по технологии */
+  catalogByTechnology: (technology: "modular" | "panel_frame") =>
+    `${PREVIEW_BASE}/catalog?technology=${technology}`,
+  project: (slug: string) => `${PREVIEW_BASE}/catalog/${slug}`,
   about: `${PREVIEW_BASE}/about`,
-  contacts: `${PREVIEW_BASE}/contacts`
+  contacts: `${PREVIEW_BASE}/contacts`,
+  policy: `${PREVIEW_BASE}/policy`
 } as const;
+
+export type StorefrontAssetType = "exterior" | "floor_plan" | "interior" | "unknown";
+
+export type StorefrontAsset = {
+  id?: string;
+  sourceUrl: string;
+  isPrimary: boolean;
+  sortOrder?: number;
+  altText?: string | null;
+  type?: StorefrontAssetType;
+  floorNumber?: number | null;
+};
 
 export type StorefrontProject = {
   id: string;
+  slug?: string;
   name: string;
   description?: string | null;
   technology: "modular" | "panel_frame";
@@ -22,9 +40,13 @@ export type StorefrontProject = {
   factoryBasePrice?: number | null;
   basePrice: number | null;
   priceOnRequest?: boolean;
-  dealerExtras?: Array<{ id: string; name: string; price?: number; note?: string }>;
+  dealerExtras?: Array<{
+    id: string;
+    title: string;
+    items: Array<{ id: string; name: string; price?: number; note?: string }>;
+  }>;
   dealerPricing?: { isPublished?: boolean } | null;
-  assets?: Array<{ sourceUrl: string; isPrimary: boolean; sortOrder?: number; altText?: string | null }>;
+  assets?: StorefrontAsset[];
   details?: {
     summary?: string | null;
     optionGroups?: Array<{
@@ -43,24 +65,58 @@ export function primaryImage(project: StorefrontProject): string | null {
   return sorted[0]?.sourceUrl ?? null;
 }
 
+/** Категория ассета для витрины; unknown по URL-подсказкам, иначе exterior */
+export function storefrontAssetKind(
+  asset: StorefrontAsset
+): "floor_plan" | "exterior" | "interior" {
+  if (asset.type === "floor_plan" || asset.type === "interior" || asset.type === "exterior") {
+    return asset.type;
+  }
+  const url = asset.sourceUrl.toLowerCase();
+  if (/plan|floor|планир/.test(url)) return "floor_plan";
+  if (/interior|interier|интерьер/.test(url)) return "interior";
+  return "exterior";
+}
+
+export function groupStorefrontAssets(assets: StorefrontAsset[]) {
+  const sorted = [...assets].sort(
+    (a, b) => Number(b.isPrimary) - Number(a.isPrimary) || (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+  );
+  const floorPlans = sorted
+    .filter((asset) => storefrontAssetKind(asset) === "floor_plan")
+    .sort(
+      (a, b) =>
+        (a.floorNumber ?? 999) - (b.floorNumber ?? 999) ||
+        (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+    );
+  return {
+    floorPlans,
+    exteriors: sorted.filter((asset) => storefrontAssetKind(asset) === "exterior"),
+    interiors: sorted.filter((asset) => storefrontAssetKind(asset) === "interior")
+  };
+}
+
 export function projectSpecs(project: StorefrontProject): string[] {
   return [
     project.area ? `${project.area} м²` : null,
     project.floors ? `${project.floors} эт.` : null,
-    project.bedrooms ? `${project.bedrooms} сп.` : null
+    project.bedrooms ? `${project.bedrooms} сп.` : null,
+    project.bathrooms ? `${project.bathrooms} с/у` : null
   ].filter((item): item is string => Boolean(item));
 }
 
 export function socialLinks(draft: PartnerSiteDraft): Array<{ label: string; href: string }> {
-  return [
-    { label: "Telegram", href: draft.socialTelegram },
-    { label: "ВКонтакте", href: draft.socialVk },
-    { label: "WhatsApp", href: draft.socialWhatsapp },
-    { label: "MAX", href: draft.socialMax }
-  ].filter((item) => item.href.trim());
+  return resolvePartnerSiteSocials(draft).map(({ label, href }) => ({ label, href }));
 }
 
 export function filterStorefrontProjects(projects: StorefrontProject[]): StorefrontProject[] {
   const published = projects.filter((p) => p.dealerPricing?.isPublished);
   return published.length > 0 ? published : projects;
+}
+
+/** Сегмент URL проекта: slug из API, иначе id */
+export function storefrontProjectKey(
+  project: Pick<StorefrontProject, "id" | "slug">
+): string {
+  return project.slug?.trim() || project.id;
 }

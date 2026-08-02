@@ -65,8 +65,11 @@ export interface CatalogAsset {
   sourceUrl: string;
   localPath: string;
   type: "exterior" | "floor_plan" | "interior" | "unknown";
+  /** Номер этажа для планировки (если у дома больше одного этажа) */
+  floorNumber?: number | null;
   sortOrder: number;
   isPrimary: boolean;
+  isHidden?: boolean;
 }
 
 export interface CatalogProject {
@@ -95,6 +98,7 @@ export interface Partner {
   id: string;
   companyName: string;
   legalName?: string;
+  inn?: string;
   status: PartnerStatus;
   region: string;
   managerName?: string;
@@ -157,6 +161,16 @@ export interface PartnerProjectExtra {
   note?: string;
 }
 
+/** Раздел допов дилера; title="" — опции без раздела */
+export interface PartnerProjectExtraGroup {
+  id: string;
+  title: string;
+  items: PartnerProjectExtra[];
+}
+
+/** Библиотека разделов/опций партнёра (переиспользование между проектами) */
+export type PartnerExtraOptionLibrary = PartnerProjectExtraGroup[];
+
 export type PartnerPricingMode = "markup" | "exact" | "on_request";
 
 export interface PartnerProjectPrice {
@@ -169,8 +183,8 @@ export interface PartnerProjectPrice {
   publicPrice?: number;
   priceOnRequest: boolean;
   isPublished: boolean;
-  /** Допы и плюшки дилера для конечного покупателя */
-  extras: PartnerProjectExtra[];
+  /** Допы дилера: разделы с опциями (JSONB, совместим со старым плоским массивом через normalize) */
+  extras: PartnerProjectExtraGroup[];
   updatedAt: string;
 }
 

@@ -1,4 +1,4 @@
-import { CircleAlert, Info } from "lucide-react";
+import { IconAlertCircle, IconInfoCircle } from "@tabler/icons-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -14,7 +14,7 @@ export function PageAlert({
 
   return (
     <Alert variant={variant}>
-      {variant === "destructive" ? <CircleAlert /> : <Info />}
+      {variant === "destructive" ? <IconAlertCircle /> : <IconInfoCircle />}
       <AlertDescription>{message}</AlertDescription>
     </Alert>
   );

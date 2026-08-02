@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { History, RefreshCw } from "lucide-react";
+import { IconHistory, IconRefresh } from "@tabler/icons-react";
+import { toast } from "sonner";
 
 import { DashboardShell } from "@/components/dashboard-shell";
 import { PageAlert } from "@/components/page-alert";
@@ -22,7 +23,6 @@ import {
   EmptyMedia,
   EmptyTitle
 } from "@/components/ui/empty";
-import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -60,7 +60,6 @@ export default function CompanySyncPage() {
   const [runs, setRuns] = useState<SyncRun[]>([]);
   const [status, setStatus] = useState<TildaStatus | null>(null);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
@@ -83,19 +82,18 @@ export default function CompanySyncPage() {
 
   async function runSync() {
     setSyncing(true);
-    setNotice("");
     try {
       const result = await apiFetch<{
         createdCount: number;
         updatedCount: number;
         assetsDiscovered: number;
       }>("/api/company/catalog/sync/tilda", { method: "POST", body: "{}" });
-      setNotice(
-        `Синхронизация завершена: +${result.createdCount} новых, ${result.updatedCount} обновлено, ассетов ${result.assetsDiscovered}`
-      );
+      toast.success("Синхронизация завершена", {
+        description: `+${result.createdCount} новых, ${result.updatedCount} обновлено, ассетов ${result.assetsDiscovered}`
+      });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Синхронизация не удалась");
+      toast.error(err instanceof Error ? err.message : "Синхронизация не удалась");
     } finally {
       setSyncing(false);
     }
@@ -108,8 +106,6 @@ export default function CompanySyncPage() {
       navigation={companyNavigation}
     >
       <PageAlert message={error} variant="destructive" />
-      <PageAlert message={notice} />
-
       <Card>
         <CardHeader>
           <CardTitle>Синхронизация с Tilda</CardTitle>
@@ -118,7 +114,7 @@ export default function CompanySyncPage() {
           </CardDescription>
           <CardAction>
             <Button type="button" disabled={syncing} onClick={() => void runSync()}>
-              {syncing ? <Spinner /> : <RefreshCw />}
+              <IconRefresh className={syncing ? "animate-spin" : undefined} />
               {syncing ? "Синхронизация…" : "Запустить синхронизацию"}
             </Button>
           </CardAction>
@@ -156,7 +152,7 @@ export default function CompanySyncPage() {
             <Empty className="border">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
-                  <History />
+                  <IconHistory />
                 </EmptyMedia>
                 <EmptyTitle>Запусков ещё не было</EmptyTitle>
                 <EmptyDescription>

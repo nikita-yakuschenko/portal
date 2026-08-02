@@ -1,6 +1,7 @@
 "use client";
 
 import { AppSidebar, type NavigationItem } from "@/components/app-sidebar";
+import { ModeToggle } from "@/components/mode-toggle";
 import { Separator } from "@/components/ui/separator";
 import {
   SidebarInset,
@@ -68,7 +69,7 @@ export function DashboardShell(props: {
 
         <header
           className={[
-            "bg-background sticky top-0 z-10 flex min-h-16 shrink-0 flex-wrap items-center gap-2 border-b px-4 py-3",
+            "bg-background sticky top-0 z-30 flex min-h-16 shrink-0 flex-wrap items-center gap-2 border-b px-4 py-3",
             isPartnerCabinet ? "" : "md:rounded-t-xl"
           ].join(" ")}
         >
@@ -77,11 +78,11 @@ export function DashboardShell(props: {
           {props.breadcrumbs ?? (
             <h1 className="truncate text-base font-medium">{sectionTitle}</h1>
           )}
-          {props.headerActions ? (
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              {props.headerActions}
-            </div>
-          ) : null}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {props.headerActions}
+            {/* Тема — в Настройках партнёра; для HQ оставляем быстрый переключатель */}
+            {!isPartnerCabinet ? <ModeToggle /> : null}
+          </div>
         </header>
 
         <div className="flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">{props.children}</div>

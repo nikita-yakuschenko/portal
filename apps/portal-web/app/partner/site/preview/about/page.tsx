@@ -7,7 +7,7 @@ import { usePartnerSitePreview } from "@/components/partner-site/preview-context
 import { previewPaths } from "@/lib/partner-site-preview";
 
 export default function PartnerSiteAboutPage() {
-  const { draft } = usePartnerSitePreview();
+  const { draft, openLeadForm } = usePartnerSitePreview();
   if (!draft) return null;
 
   return (
@@ -32,10 +32,10 @@ export default function PartnerSiteAboutPage() {
 
       <div className="mt-10 flex flex-wrap gap-3">
         <Button asChild className="bg-slate-900 text-white hover:bg-slate-800">
-          <Link href={previewPaths.projects}>Смотреть проекты</Link>
+          <Link href={previewPaths.catalog}>Смотреть проекты</Link>
         </Button>
-        <Button asChild variant="outline">
-          <Link href={previewPaths.contacts}>Связаться</Link>
+        <Button type="button" variant="outline" onClick={() => openLeadForm({ kind: "contact" })}>
+          Связаться
         </Button>
       </div>
     </div>

@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ExternalLink, Upload } from "lucide-react";
+import { IconExternalLink, IconUpload } from "@tabler/icons-react";
+import { toast } from "sonner";
 
-import { DashboardShell } from "@/components/dashboard-shell";
+import { PartnerShell } from "@/components/partner-shell";
 import { PageAlert } from "@/components/page-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,12 +16,12 @@ import {
   CardHeader,
   CardTitle
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/api";
-import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
 import {
   applySiteTemplateTexts,
   draftDefaultsFromPartner,
@@ -30,6 +31,7 @@ import {
   savePartnerSiteDraft,
   type PartnerSiteDraft
 } from "@/lib/partner-site-draft";
+import { PARTNER_SITE_SOCIALS } from "@/lib/partner-site-socials";
 
 type MeResponse = {
   partner: {
@@ -44,7 +46,6 @@ export default function PartnerSitePage() {
   const [form, setForm] = useState<PartnerSiteDraft>(emptyPartnerSiteDraft);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     void (async () => {
@@ -75,7 +76,7 @@ export default function PartnerSitePage() {
       savePartnerSiteDraft(next);
       return next;
     });
-    setNotice("Тексты первого экрана и каталога подставлены как на сайте.");
+    toast.success("Тексты первого экрана и каталога подставлены как на сайте");
   }
 
   function updateField<K extends keyof PartnerSiteDraft>(key: K, value: PartnerSiteDraft[K]) {
@@ -86,7 +87,9 @@ export default function PartnerSitePage() {
     const file = event.target.files?.[0];
     if (!file) return;
     if (file.size > 800_000) {
-      setNotice("Логотип слишком большой. Загрузите файл до ~800 КБ (PNG/SVG/JPG).");
+      toast.error("Логотип слишком большой", {
+        description: "Загрузите файл до ~800 КБ (PNG/SVG/JPG)."
+      });
       return;
     }
     const reader = new FileReader();
@@ -100,7 +103,9 @@ export default function PartnerSitePage() {
   function handleSave(event: React.FormEvent) {
     event.preventDefault();
     savePartnerSiteDraft(form);
-    setNotice("Черновик сохранён. Публикация и домен — в релизе 01.09.");
+    toast.success("Черновик сохранён", {
+      description: "Публикация и домен — в релизе 01.09."
+    });
   }
 
   function openPreview() {
@@ -109,23 +114,20 @@ export default function PartnerSitePage() {
   }
 
   return (
-    <DashboardShell
-      cabinetLabel={partnerCabinetLabel}
+    <PartnerShell
       currentPath="/partner/site"
-      navigation={partnerNavigation}
       title="Сайт"
       headerActions={
         <>
           <Badge variant="secondary">Черновик · тестовый режим</Badge>
           <Button type="button" variant="outline" onClick={openPreview} disabled={loading}>
-            <ExternalLink />
+            <IconExternalLink />
             Предпросмотр
           </Button>
         </>
       }
     >
       <PageAlert message={error} variant="destructive" />
-      <PageAlert message={notice} />
 
       <p className="text-muted-foreground max-w-3xl text-sm">
         Публичный сайт по структуре msk.avgst.ru: своё лого, свой бренд, каталог и цены из портала.
@@ -222,7 +224,7 @@ export default function PartnerSitePage() {
                   </Button>
                 ) : (
                   <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                    <Upload className="size-3.5" />
+                    <IconUpload className="size-3.5" />
                     Загрузите файл, чтобы заменить заводской знак
                   </p>
                 )}
@@ -275,43 +277,87 @@ export default function PartnerSitePage() {
             </CardHeader>
             <CardContent>
               <FieldGroup className="md:grid md:grid-cols-2 md:gap-4">
-                <Field>
-                  <FieldLabel htmlFor="site-tg">Telegram</FieldLabel>
-                  <Input
-                    id="site-tg"
-                    placeholder="https://t.me/..."
-                    value={form.socialTelegram}
-                    onChange={(e) => updateField("socialTelegram", e.target.value)}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="site-vk">ВКонтакте</FieldLabel>
-                  <Input
-                    id="site-vk"
-                    placeholder="https://vk.com/..."
-                    value={form.socialVk}
-                    onChange={(e) => updateField("socialVk", e.target.value)}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="site-wa">WhatsApp</FieldLabel>
-                  <Input
-                    id="site-wa"
-                    placeholder="https://wa.me/7..."
-                    value={form.socialWhatsapp}
-                    onChange={(e) => updateField("socialWhatsapp", e.target.value)}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="site-max">MAX / другое</FieldLabel>
-                  <Input
-                    id="site-max"
-                    placeholder="Ссылка"
-                    value={form.socialMax}
-                    onChange={(e) => updateField("socialMax", e.target.value)}
-                  />
-                </Field>
+                {PARTNER_SITE_SOCIALS.map((social) => (
+                  <Field key={social.id}>
+                    <FieldLabel htmlFor={`site-${social.id}`}>{social.label}</FieldLabel>
+                    <Input
+                      id={`site-${social.id}`}
+                      placeholder={social.placeholder}
+                      value={String(form[social.field] ?? "")}
+                      onChange={(e) => updateField(social.field, e.target.value)}
+                    />
+                  </Field>
+                ))}
               </FieldGroup>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>После заявки</CardTitle>
+              <CardDescription>
+                Выберите сети для ротации: каждая новая заявка получит следующую по кругу.
+                Так разные пользователи увидят разные соцсети. Нужны ссылки в блоке «Соцсети».
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-3">
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-2.5">
+                  <Checkbox
+                    checked={form.postLeadOfferSocials.length === 0}
+                    onCheckedChange={(value) => {
+                      if (value === true) updateField("postLeadOfferSocials", []);
+                    }}
+                    className="mt-0.5"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">Не предлагать</span>
+                    <span className="text-muted-foreground text-xs">
+                      После e-mail шаг с подпиской не покажется
+                    </span>
+                  </span>
+                </label>
+                {PARTNER_SITE_SOCIALS.map((social) => {
+                  const hasUrl = String(form[social.field] ?? "").trim().length > 0;
+                  const selected = form.postLeadOfferSocials.includes(social.id);
+                  return (
+                    <label
+                      key={social.id}
+                      className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-2.5"
+                    >
+                      <Checkbox
+                        checked={selected}
+                        disabled={!hasUrl}
+                        onCheckedChange={(value) => {
+                          const current = form.postLeadOfferSocials;
+                          if (value === true) {
+                            updateField(
+                              "postLeadOfferSocials",
+                              current.includes(social.id)
+                                ? current
+                                : [...current, social.id]
+                            );
+                          } else {
+                            updateField(
+                              "postLeadOfferSocials",
+                              current.filter((id) => id !== social.id)
+                            );
+                          }
+                        }}
+                        className="mt-0.5"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium">{social.label}</span>
+                        <span className="text-muted-foreground text-xs">
+                          {hasUrl
+                            ? "Участвует в ротации после заявки"
+                            : "Сначала укажите ссылку в блоке «Соцсети»"}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
             </CardContent>
           </Card>
 
@@ -463,7 +509,7 @@ export default function PartnerSitePage() {
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit">Сохранить черновик</Button>
             <Button type="button" variant="outline" onClick={openPreview}>
-              <ExternalLink />
+              <IconExternalLink />
               Открыть предпросмотр
             </Button>
             <Button type="button" variant="secondary" disabled>
@@ -475,6 +521,6 @@ export default function PartnerSitePage() {
           </div>
         </form>
       )}
-    </DashboardShell>
+    </PartnerShell>
   );
 }

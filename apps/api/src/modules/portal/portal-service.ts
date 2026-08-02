@@ -1,8 +1,13 @@
 import { randomBytes, randomUUID } from "node:crypto";
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 
-import type { CatalogProjectDetails, CrmSendResult, PartnerPricingMode, PartnerProjectExtra } from "@b2b/domain";
+import type {
+  CatalogProjectDetails,
+  CrmSendResult,
+  PartnerPricingMode,
+  PartnerProjectExtraGroup
+} from "@b2b/domain";
 
 import { db } from "../../db/client.js";
 import {
@@ -20,14 +25,15 @@ import {
   passwordResetTokens,
   users
 } from "../../db/schema.js";
-import { slugify } from "../../lib/slug.js";
+import { projectSlug } from "../../lib/slug.js";
 import { createCrmAdapters } from "../crm/adapters.js";
 import { createResetToken, hashPassword, verifyPassword } from "../auth/passwords.js";
 import { mapTildaProduct } from "../catalog/catalog-service.js";
 import { buildProjectDetails, defaultOptionGroups } from "../catalog/project-details.js";
 import type { TildaClient } from "../catalog/tilda-client.js";
 import {
-  normalizeExtras,
+  mergeExtraOptionLibrary,
+  normalizeExtraGroups,
   normalizePricingMode,
   resolvePartnerDisplayPrice
 } from "../partners/partner-pricing.js";
@@ -195,6 +201,8 @@ export class PortalService {
     await db.insert(partners).values({
       id: partnerId,
       companyName: application.companyName,
+      legalName: application.companyName,
+      inn: application.inn,
       status: "active",
       region: application.region,
       email: application.email,
@@ -330,7 +338,7 @@ export class PortalService {
             .update(catalogProjects)
             .set({
               name: mapped.name,
-              slug: slugify(mapped.name),
+              slug: projectSlug(mapped.name),
               description: mapped.description,
               technology: mapped.technology,
               details: mapped.details,
@@ -347,13 +355,27 @@ export class PortalService {
             })
             .where(eq(catalogProjects.id, existing.id));
 
+          // Сохраняем ручные правки (тип / главный / скрыт) по URL при пересинхронизации
+          const previousAssets = await db
+            .select()
+            .from(catalogAssets)
+            .where(eq(catalogAssets.projectId, existing.id));
+          const previousByUrl = new Map(previousAssets.map((asset) => [asset.sourceUrl, asset]));
+
           await db.delete(catalogAssets).where(eq(catalogAssets.projectId, existing.id));
           if (mapped.assets.length > 0) {
             await db.insert(catalogAssets).values(
-              mapped.assets.map((asset) => ({
-                ...asset,
-                projectId: existing.id
-              }))
+              mapped.assets.map((asset) => {
+                const previous = previousByUrl.get(asset.sourceUrl);
+                return {
+                  ...asset,
+                  projectId: existing.id,
+                  type: previous?.type ?? asset.type,
+                  floorNumber: previous?.floorNumber ?? asset.floorNumber ?? null,
+                  isPrimary: previous?.isPrimary ?? asset.isPrimary,
+                  isHidden: previous?.isHidden ?? false
+                };
+              })
             );
           }
 
@@ -451,7 +473,7 @@ export class PortalService {
 
     const byProject = new Map(priceRows.map((row) => [row.projectId, row]));
 
-    return projects.map((project) => {
+    const mapped = projects.map((project) => {
       const row = byProject.get(project.id);
       const pricing = row
         ? {
@@ -460,20 +482,122 @@ export class PortalService {
             publicPrice: row.publicPrice ?? undefined,
             priceOnRequest: row.priceOnRequest,
             isPublished: row.isPublished,
-            extras: normalizeExtras(row.extras)
+            extras: normalizeExtraGroups(row.extras)
           }
         : null;
 
       const display = resolvePartnerDisplayPrice(project.basePrice, pricing);
+      const visible = this.withVisibleAssets(project);
+      // Список витрины: только обложка — иначе JSON и сеть раздуваются десятками фото
+      const cover =
+        visible.assets.find((asset) => asset.isPrimary) ?? visible.assets[0] ?? null;
 
       return {
-        ...project,
+        ...visible,
+        assets: cover ? [cover] : [],
         factoryBasePrice: project.basePrice ?? null,
         basePrice: display.amount,
         priceOnRequest: display.onRequest,
         dealerPricing: pricing,
         dealerExtras: pricing?.extras ?? []
       };
+    });
+
+    return this.applyPartnerCatalogOrder(partnerId, mapped);
+  }
+
+  /** Полная карточка витрины по slug или id (все ассеты) */
+  async getPartnerStorefrontProject(partnerId: string, key: string) {
+    const project = await db.query.catalogProjects.findFirst({
+      where: or(eq(catalogProjects.slug, key), eq(catalogProjects.id, key))
+    });
+    if (!project) return null;
+
+    const [assets, priceRows] = await Promise.all([
+      db.select().from(catalogAssets).where(eq(catalogAssets.projectId, project.id)),
+      db
+        .select()
+        .from(partnerProjectPrices)
+        .where(
+          and(
+            eq(partnerProjectPrices.partnerId, partnerId),
+            eq(partnerProjectPrices.projectId, project.id)
+          )
+        )
+        .limit(1)
+    ]);
+
+    const mapped = this.mapCatalogProject(project, assets);
+    const row = priceRows[0];
+    const pricing = row
+      ? {
+          pricingMode: normalizePricingMode(row.pricingMode),
+          markupPercent: row.markupPercent ?? undefined,
+          publicPrice: row.publicPrice ?? undefined,
+          priceOnRequest: row.priceOnRequest,
+          isPublished: row.isPublished,
+          extras: normalizeExtraGroups(row.extras)
+        }
+      : null;
+
+    const display = resolvePartnerDisplayPrice(mapped.basePrice, pricing);
+    const visible = this.withVisibleAssets(mapped);
+
+    return {
+      ...visible,
+      factoryBasePrice: mapped.basePrice ?? null,
+      basePrice: display.amount,
+      priceOnRequest: display.onRequest,
+      dealerPricing: pricing,
+      dealerExtras: pricing?.extras ?? []
+    };
+  }
+
+  /** Порядок проектов партнёра для кабинета и витрины */
+  async getPartnerCatalogOrder(partnerId: string): Promise<string[]> {
+    const [partner] = await db
+      .select({ catalogProjectOrder: partners.catalogProjectOrder })
+      .from(partners)
+      .where(eq(partners.id, partnerId))
+      .limit(1);
+    const raw = partner?.catalogProjectOrder;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((id): id is string => typeof id === "string");
+  }
+
+  async setPartnerCatalogOrder(partnerId: string, projectIds: string[]): Promise<string[]> {
+    const catalog = await this.listCatalogProjects();
+    const allowed = new Set(catalog.map((project) => project.id));
+    const unique: string[] = [];
+    for (const id of projectIds) {
+      if (!allowed.has(id) || unique.includes(id)) continue;
+      unique.push(id);
+    }
+    // Новые проекты каталога, которых ещё нет в порядке — в конец
+    for (const project of catalog) {
+      if (!unique.includes(project.id)) unique.push(project.id);
+    }
+
+    await db
+      .update(partners)
+      .set({ catalogProjectOrder: unique })
+      .where(eq(partners.id, partnerId));
+
+    return unique;
+  }
+
+  async applyPartnerCatalogOrder<T extends { id: string }>(
+    partnerId: string,
+    projects: T[]
+  ): Promise<T[]> {
+    const order = await this.getPartnerCatalogOrder(partnerId);
+    if (order.length === 0) return projects;
+    const rank = new Map(order.map((id, index) => [id, index]));
+    return [...projects].sort((a, b) => {
+      const ai = rank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+      const bi = rank.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+      if (ai !== bi) return ai - bi;
+      return 0;
     });
   }
 
@@ -489,7 +613,7 @@ export class PortalService {
       const pricingMode = row
         ? normalizePricingMode(row.pricingMode)
         : ("on_request" as PartnerPricingMode);
-      const extras = row ? normalizeExtras(row.extras) : [];
+      const extras = row ? normalizeExtraGroups(row.extras) : [];
       const display = resolvePartnerDisplayPrice(
         project.basePrice,
         row
@@ -516,8 +640,8 @@ export class PortalService {
         displayPrice: display.amount,
         displayOnRequest: display.onRequest,
         primaryImage:
-          project.assets.find((asset) => asset.isPrimary)?.sourceUrl ??
-          project.assets[0]?.sourceUrl ??
+          project.assets.find((asset) => !asset.isHidden && asset.isPrimary)?.sourceUrl ??
+          project.assets.find((asset) => !asset.isHidden)?.sourceUrl ??
           null
       };
     });
@@ -530,8 +654,8 @@ export class PortalService {
     markupPercent?: number;
     publicPrice?: number;
     isPublished?: boolean;
-    // id опционален: normalizeExtras сгенерирует его для новых допов
-    extras?: Array<Omit<PartnerProjectExtra, "id"> & { id?: string }>;
+    /** Группы допов; id опциональны — normalizeExtraGroups проставит */
+    extras?: PartnerProjectExtraGroup[];
   }) {
     const project = await db.query.catalogProjects.findFirst({
       where: eq(catalogProjects.id, input.projectId)
@@ -541,7 +665,7 @@ export class PortalService {
     }
 
     const pricingMode = normalizePricingMode(input.pricingMode);
-    const extras = normalizeExtras(input.extras ?? []);
+    const extras = normalizeExtraGroups(input.extras ?? []);
     const priceOnRequest = pricingMode === "on_request";
     const markupPercent =
       pricingMode === "markup" && input.markupPercent != null
@@ -581,8 +705,60 @@ export class PortalService {
       });
     }
 
+    // Пополняем библиотеку разделов/опций партнёра для подсказок в других проектах
+    await this.mergePartnerExtraOptionLibrary(input.partnerId, extras);
+
     const rows = await this.listPartnerProjectPrices(input.partnerId);
     return rows.find((row) => row.projectId === input.projectId) ?? null;
+  }
+
+  /** Библиотека разделов/опций партнёра (для подсказок при редактировании цен) */
+  async getPartnerExtraOptionLibrary(partnerId: string): Promise<PartnerProjectExtraGroup[]> {
+    const [partner] = await db
+      .select({ extraOptionLibrary: partners.extraOptionLibrary })
+      .from(partners)
+      .where(eq(partners.id, partnerId))
+      .limit(1);
+
+    let library = normalizeExtraGroups(partner?.extraOptionLibrary);
+    if (library.length > 0) return library;
+
+    // Первый заход: собрать библиотеку из уже сохранённых цен проектов
+    const priceRows = await db
+      .select({ extras: partnerProjectPrices.extras })
+      .from(partnerProjectPrices)
+      .where(eq(partnerProjectPrices.partnerId, partnerId));
+
+    library = [];
+    for (const row of priceRows) {
+      library = mergeExtraOptionLibrary(library, normalizeExtraGroups(row.extras));
+    }
+    if (library.length === 0) return [];
+
+    await db
+      .update(partners)
+      .set({ extraOptionLibrary: library })
+      .where(eq(partners.id, partnerId));
+
+    return library;
+  }
+
+  async mergePartnerExtraOptionLibrary(
+    partnerId: string,
+    incoming: PartnerProjectExtraGroup[]
+  ): Promise<PartnerProjectExtraGroup[]> {
+    const [partner] = await db
+      .select({ extraOptionLibrary: partners.extraOptionLibrary })
+      .from(partners)
+      .where(eq(partners.id, partnerId))
+      .limit(1);
+
+    const next = mergeExtraOptionLibrary(partner?.extraOptionLibrary, incoming);
+    await db
+      .update(partners)
+      .set({ extraOptionLibrary: next })
+      .where(eq(partners.id, partnerId));
+    return next;
   }
 
   async getCatalogProject(projectId: string) {
@@ -596,6 +772,97 @@ export class PortalService {
 
     const assets = await db.select().from(catalogAssets).where(eq(catalogAssets.projectId, project.id));
     return this.mapCatalogProject(project, assets);
+  }
+
+  /** Правка карточки проекта в кабинете компании (описание, характеристики) */
+  async updateCatalogProject(
+    projectId: string,
+    patch: {
+      name?: string | undefined;
+      description?: string | undefined;
+      technology?: "modular" | "panel_frame" | undefined;
+      area?: number | null | undefined;
+      floors?: number | null | undefined;
+      bedrooms?: number | null | undefined;
+      bathrooms?: string | null | undefined;
+      basePrice?: number | null | undefined;
+      active?: boolean | undefined;
+    }
+  ) {
+    const existing = await db.query.catalogProjects.findFirst({
+      where: eq(catalogProjects.id, projectId)
+    });
+    if (!existing) {
+      return null;
+    }
+
+    await db
+      .update(catalogProjects)
+      .set({
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.description !== undefined ? { description: patch.description } : {}),
+        ...(patch.technology !== undefined ? { technology: patch.technology } : {}),
+        ...(patch.area !== undefined ? { area: patch.area } : {}),
+        ...(patch.floors !== undefined ? { floors: patch.floors } : {}),
+        ...(patch.bedrooms !== undefined ? { bedrooms: patch.bedrooms } : {}),
+        ...(patch.bathrooms !== undefined ? { bathrooms: patch.bathrooms } : {}),
+        ...(patch.basePrice !== undefined ? { basePrice: patch.basePrice } : {}),
+        ...(patch.active !== undefined ? { active: patch.active } : {})
+      })
+      .where(eq(catalogProjects.id, projectId));
+
+    // Одноэтажный дом — этаж у планировок не нужен
+    if (patch.floors !== undefined && (patch.floors == null || patch.floors <= 1)) {
+      await db
+        .update(catalogAssets)
+        .set({ floorNumber: null })
+        .where(eq(catalogAssets.projectId, projectId));
+    }
+
+    return this.getCatalogProject(projectId);
+  }
+
+  /** Тип / этаж планировки / главный кадр / скрытие; при isPrimary сбрасываем остальные у проекта */
+  async updateCatalogAsset(
+    assetId: string,
+    patch: {
+      type?: "exterior" | "floor_plan" | "interior" | "unknown" | undefined;
+      floorNumber?: number | null | undefined;
+      isPrimary?: boolean | undefined;
+      isHidden?: boolean | undefined;
+    }
+  ) {
+    const [asset] = await db.select().from(catalogAssets).where(eq(catalogAssets.id, assetId)).limit(1);
+    if (!asset) {
+      return null;
+    }
+
+    if (patch.isPrimary === true) {
+      await db
+        .update(catalogAssets)
+        .set({ isPrimary: false })
+        .where(eq(catalogAssets.projectId, asset.projectId));
+    }
+
+    const nextType = patch.type !== undefined ? patch.type : asset.type;
+    // Этаж только у планировок; при смене типа сбрасываем
+    let nextFloorNumber =
+      patch.floorNumber !== undefined ? patch.floorNumber : asset.floorNumber;
+    if (nextType !== "floor_plan") {
+      nextFloorNumber = null;
+    }
+
+    await db
+      .update(catalogAssets)
+      .set({
+        ...(patch.type !== undefined ? { type: patch.type } : {}),
+        floorNumber: nextFloorNumber,
+        ...(patch.isPrimary !== undefined ? { isPrimary: patch.isPrimary } : {}),
+        ...(patch.isHidden !== undefined ? { isHidden: patch.isHidden } : {})
+      })
+      .where(eq(catalogAssets.id, assetId));
+
+    return this.getCatalogProject(asset.projectId);
   }
 
   private mapCatalogProject(
@@ -651,9 +918,19 @@ export class PortalService {
           sourceUrl: asset.sourceUrl,
           localPath: asset.localPath,
           type: asset.type as "exterior" | "floor_plan" | "interior" | "unknown",
+          floorNumber: asset.floorNumber ?? null,
           sortOrder: asset.sortOrder,
-          isPrimary: asset.isPrimary
+          isPrimary: asset.isPrimary,
+          isHidden: asset.isHidden
         }))
+    };
+  }
+
+  /** Витрина / кабинет партнёра: без скрытых ассетов */
+  withVisibleAssets<T extends { assets: Array<{ isHidden?: boolean }> }>(project: T): T {
+    return {
+      ...project,
+      assets: project.assets.filter((asset) => !asset.isHidden)
     };
   }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users } from "lucide-react";
+import { IconUsers } from "@tabler/icons-react";
 
 import { DashboardShell } from "@/components/dashboard-shell";
 import { PageAlert } from "@/components/page-alert";
@@ -83,7 +83,7 @@ export default function CompanyPartnersPage() {
             <Empty className="border">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
-                  <Users />
+                  <IconUsers />
                 </EmptyMedia>
                 <EmptyTitle>Партнёров пока нет</EmptyTitle>
                 <EmptyDescription>

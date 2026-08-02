@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { DashboardShell } from "@/components/dashboard-shell";
+import { PartnerShell } from "@/components/partner-shell";
 import { PageAlert } from "@/components/page-alert";
 import {
   Breadcrumb,
@@ -14,6 +14,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator
 } from "@/components/ui/breadcrumb";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -41,13 +42,25 @@ import {
   AttachmentTrigger
 } from "@/components/ui/attachment";
 import { apiFetch } from "@/lib/api";
-import { technologyLabel } from "@/lib/catalog-display";
+import {
+  technologyBadgeCode,
+  technologyBadgeVariant,
+  technologyLabel
+} from "@/lib/catalog-display";
 import { formatRub } from "@/lib/partner-pricing";
-import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
+import { floorPlanLabel } from "@/lib/floor-plan";
 import { cn } from "@/lib/utils";
 import { PartnerProjectPricingPanel } from "@/components/partner-project-pricing-panel";
 import { PartnerProjectSiteVisibility } from "@/components/partner-project-site-visibility";
-import { ExternalLinkIcon, FileTextIcon, Heart } from "lucide-react";
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconExternalLink,
+  IconFileText,
+  IconHeart,
+  IconX
+} from "@tabler/icons-react";
+import { toast } from "sonner";
 
 const DOC_KIND_LABEL: Record<string, string> = {
   passport: "Паспорт",
@@ -108,6 +121,7 @@ type Project = {
     id: string;
     sourceUrl: string;
     type: string;
+    floorNumber?: number | null;
     sortOrder: number;
     isPrimary: boolean;
   }>;
@@ -158,10 +172,10 @@ export default function PartnerCatalogProjectPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [favorite, setFavorite] = useState(false);
   const [inquiryOpen, setInquiryOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState("");
   const [form, setForm] = useState({ subject: "", message: "" });
   const [canManagePricing, setCanManagePricing] = useState(false);
   const [retailLabel, setRetailLabel] = useState<string | null>(null);
@@ -221,6 +235,11 @@ export default function PartnerCatalogProjectPage() {
   const activeAsset = assets[activeIndex] ?? assets[0];
   const details = project?.details;
 
+  function stepPreview(delta: number) {
+    if (assets.length < 2) return;
+    setActiveIndex((prev) => (prev + delta + assets.length) % assets.length);
+  }
+
   function toggleFavorite() {
     setFavorite((prev) => {
       const nextFav = !prev;
@@ -237,7 +256,6 @@ export default function PartnerCatalogProjectPage() {
     if (!project) return;
 
     setSaving(true);
-    setNotice("");
     try {
       await apiFetch("/api/partner/inquiries", {
         method: "POST",
@@ -247,30 +265,25 @@ export default function PartnerCatalogProjectPage() {
           projectId: project.id
         })
       });
-      setNotice("Запрос отправлен на завод.");
       setForm((prev) => ({ ...prev, message: "" }));
-      setTimeout(() => {
-        setInquiryOpen(false);
-        setNotice("");
-      }, 900);
+      setInquiryOpen(false);
+      toast.success("Запрос отправлен на завод");
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Не удалось отправить запрос");
+      toast.error(err instanceof Error ? err.message : "Не удалось отправить запрос");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <DashboardShell
-      cabinetLabel={partnerCabinetLabel}
+    <PartnerShell
       currentPath={`/partner/catalog/${projectId}`}
-      navigation={partnerNavigation}
       breadcrumbs={
         <Breadcrumb>
           <BreadcrumbList className="text-sm">
             <BreadcrumbItem>
               <BreadcrumbLink asChild>
-                <Link href="/partner">Обзор</Link>
+                <Link href="/partner">Главная</Link>
               </BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
@@ -303,10 +316,24 @@ export default function PartnerCatalogProjectPage() {
           <div className="min-w-0 space-y-4 xl:col-span-2">
             <Card>
               <CardContent className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="text-primary text-sm font-medium">
-                    {technologyLabel(project.technology)}
-                  </p>
+                <div className="min-w-0 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-xl font-semibold tracking-tight">{project.name}</h2>
+                    <Badge variant={technologyBadgeVariant(project.technology)}>
+                      {technologyBadgeCode(project.technology)}
+                    </Badge>
+                  </div>
+                  {project.area || project.floors || project.bedrooms ? (
+                    <p className="text-muted-foreground text-sm">
+                      {[
+                        project.area ? `${project.area} м²` : null,
+                        project.floors ? `${project.floors} эт.` : null,
+                        project.bedrooms ? `${project.bedrooms} сп.` : null
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="text-right">
                   <p className="text-muted-foreground text-xs">Заводская</p>
@@ -330,14 +357,17 @@ export default function PartnerCatalogProjectPage() {
             </Card>
 
             <Tabs defaultValue="overview" className="space-y-4">
-              <TabsList className="h-auto w-full justify-start gap-1">
+              <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
                 <TabsTrigger value="overview">Обзор</TabsTrigger>
                 <TabsTrigger value="price">Цена</TabsTrigger>
                 <TabsTrigger value="packages">Комплектации</TabsTrigger>
                 <TabsTrigger value="options">Опции</TabsTrigger>
-                <TabsTrigger value="docs">Документация</TabsTrigger>
-                <TabsTrigger value="cargo">Груз</TabsTrigger>
-                <TabsTrigger value="transport">Транспорт</TabsTrigger>
+                <TabsTrigger value="docs" disabled title="Скоро">
+                  Документация
+                </TabsTrigger>
+                <TabsTrigger value="logistics" disabled title="Скоро">
+                  Логистика
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="mt-0 space-y-4">
@@ -401,13 +431,8 @@ export default function PartnerCatalogProjectPage() {
 
               <TabsContent value="price" className="mt-0">
                 <Panel>
-                  <p className="text-muted-foreground mb-4 text-sm">
-                    Здесь только розничная цена, наценка и допы. Публикация проекта на сайте —
-                    во вкладке «Обзор».
-                  </p>
                   <PartnerProjectPricingPanel
                     projectId={project.id}
-                    factoryBasePrice={project.basePrice}
                     canManage={canManagePricing}
                   />
                 </Panel>
@@ -489,7 +514,7 @@ export default function PartnerCatalogProjectPage() {
                         state="done"
                       >
                         <AttachmentMedia>
-                          <FileTextIcon />
+                          <IconFileText />
                         </AttachmentMedia>
                         <AttachmentContent>
                           <AttachmentTitle>{doc.title}</AttachmentTitle>
@@ -500,7 +525,7 @@ export default function PartnerCatalogProjectPage() {
                             <AttachmentActions>
                               <AttachmentAction asChild aria-label={`Открыть «${doc.title}»`}>
                                 <a href={doc.url} target="_blank" rel="noreferrer">
-                                  <ExternalLinkIcon />
+                                  <IconExternalLink />
                                 </a>
                               </AttachmentAction>
                             </AttachmentActions>
@@ -520,8 +545,9 @@ export default function PartnerCatalogProjectPage() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="cargo" className="mt-0">
+              <TabsContent value="logistics" className="mt-0 space-y-4">
                 <Panel>
+                  <h4 className="mb-3 text-sm font-semibold">Груз</h4>
                   <MetaList
                     items={[
                       {
@@ -543,10 +569,8 @@ export default function PartnerCatalogProjectPage() {
                     ]}
                   />
                 </Panel>
-              </TabsContent>
-
-              <TabsContent value="transport" className="mt-0">
                 <Panel>
+                  <h4 className="mb-3 text-sm font-semibold">Доставка и монтаж</h4>
                   <MetaList
                     items={[
                       {
@@ -578,28 +602,50 @@ export default function PartnerCatalogProjectPage() {
 
           <aside className="min-w-0 xl:sticky xl:top-20 xl:self-start">
             <Card className="gap-0 overflow-hidden py-0">
-              <div className="bg-muted relative aspect-[4/3]">
+              <div className="bg-muted relative aspect-[16/9] w-full overflow-hidden">
                 {activeAsset ? (
-                  <img
-                    src={activeAsset.sourceUrl}
-                    alt={project.name}
-                    className="h-full w-full object-cover"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setPreviewOpen(true)}
+                    className="absolute inset-0 cursor-zoom-in focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none"
+                    aria-label={`Открыть фото «${project.name}» на весь экран`}
+                  >
+                    <img
+                      src={activeAsset.sourceUrl}
+                      alt={
+                        activeAsset.type === "floor_plan"
+                          ? floorPlanLabel(activeAsset.floorNumber)
+                          : project.name
+                      }
+                      className="absolute inset-0 size-full object-cover"
+                    />
+                  </button>
                 ) : (
-                  <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
+                  <div className="text-muted-foreground absolute inset-0 flex items-center justify-center text-sm">
                     Нет фото
                   </div>
                 )}
                 <button
                   type="button"
                   onClick={toggleFavorite}
-                  className="bg-background/90 text-muted-foreground hover:text-primary focus-visible:ring-ring/50 absolute top-3 right-3 inline-flex size-9 items-center justify-center rounded-md shadow-sm backdrop-blur transition focus-visible:ring-[3px] focus-visible:outline-none"
+                  className="bg-background/90 text-muted-foreground hover:text-primary focus-visible:ring-ring/50 absolute top-3 right-3 z-10 inline-flex size-9 items-center justify-center rounded-md shadow-sm backdrop-blur transition focus-visible:ring-[3px] focus-visible:outline-none"
                   aria-label={favorite ? "Убрать из избранного" : "В избранное"}
                   aria-pressed={favorite}
                 >
-                  <Heart className={cn("size-4", favorite && "fill-primary text-primary")} />
+                  <IconHeart
+                    className={cn(
+                      "size-4 transition-transform duration-200 motion-reduce:transition-none",
+                      favorite && "scale-110 fill-primary text-primary"
+                    )}
+                  />
                 </button>
               </div>
+
+              {activeAsset?.type === "floor_plan" && activeAsset.floorNumber != null ? (
+                <p className="text-muted-foreground border-b px-3 py-2 text-center text-xs font-medium">
+                  {floorPlanLabel(activeAsset.floorNumber)}
+                </p>
+              ) : null}
 
               {assets.length > 1 ? (
                 <div className="grid grid-cols-4 gap-2 p-3">
@@ -608,7 +654,11 @@ export default function PartnerCatalogProjectPage() {
                       key={asset.id}
                       type="button"
                       onClick={() => setActiveIndex(index)}
-                      aria-label={`Показать фото ${index + 1}`}
+                      aria-label={
+                        asset.type === "floor_plan"
+                          ? floorPlanLabel(asset.floorNumber)
+                          : `Показать фото ${index + 1}`
+                      }
                       className={cn(
                         "relative aspect-square overflow-hidden rounded-md border transition",
                         index === activeIndex
@@ -619,8 +669,13 @@ export default function PartnerCatalogProjectPage() {
                       <img
                         src={asset.sourceUrl}
                         alt=""
-                        className="h-full w-full object-cover"
+                        className="absolute inset-0 size-full object-cover"
                       />
+                      {asset.type === "floor_plan" && asset.floorNumber != null ? (
+                        <span className="absolute inset-x-0 bottom-0 bg-black/55 px-0.5 py-0.5 text-center text-[10px] leading-tight font-medium text-white">
+                          {asset.floorNumber} эт.
+                        </span>
+                      ) : null}
                     </button>
                   ))}
                 </div>
@@ -629,6 +684,82 @@ export default function PartnerCatalogProjectPage() {
           </aside>
         </div>
       ) : null}
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent
+          showCloseButton={false}
+          overlayClassName="bg-black/90"
+          aria-describedby={undefined}
+          className="fixed inset-0 top-0 left-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-transparent p-0 shadow-none sm:max-w-none"
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft") {
+              event.preventDefault();
+              stepPreview(-1);
+            }
+            if (event.key === "ArrowRight") {
+              event.preventDefault();
+              stepPreview(1);
+            }
+          }}
+        >
+          <DialogTitle className="sr-only">
+            Просмотр фото{project ? ` — ${project.name}` : ""}
+          </DialogTitle>
+
+          <div className="relative flex min-h-0 flex-1 items-center justify-center p-4 sm:p-10">
+            {activeAsset ? (
+              <img
+                src={activeAsset.sourceUrl}
+                alt={
+                  activeAsset.type === "floor_plan"
+                    ? floorPlanLabel(activeAsset.floorNumber)
+                    : (project?.name ?? "Фото проекта")
+                }
+                className="max-h-full max-w-full object-contain select-none"
+              />
+            ) : null}
+
+            <Button
+              type="button"
+              size="icon"
+              variant="secondary"
+              className="absolute top-4 right-4 z-10 size-10 rounded-full"
+              onClick={() => setPreviewOpen(false)}
+              aria-label="Закрыть просмотр"
+            >
+              <IconX className="size-5" />
+            </Button>
+
+            {assets.length > 1 ? (
+              <>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="secondary"
+                  className="absolute top-1/2 left-3 z-10 size-10 -translate-y-1/2 rounded-full sm:left-6"
+                  onClick={() => stepPreview(-1)}
+                  aria-label="Предыдущее фото"
+                >
+                  <IconChevronLeft className="size-5" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="secondary"
+                  className="absolute top-1/2 right-3 z-10 size-10 -translate-y-1/2 rounded-full sm:right-6"
+                  onClick={() => stepPreview(1)}
+                  aria-label="Следующее фото"
+                >
+                  <IconChevronRight className="size-5" />
+                </Button>
+                <p className="text-background absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-sm tabular-nums backdrop-blur">
+                  {activeIndex + 1} / {assets.length}
+                </p>
+              </>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={inquiryOpen} onOpenChange={setInquiryOpen}>
         <DialogContent className="sm:max-w-lg">
@@ -663,7 +794,6 @@ export default function PartnerCatalogProjectPage() {
                 />
               </Field>
             </FieldGroup>
-            {notice ? <p className="text-muted-foreground text-sm">{notice}</p> : null}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setInquiryOpen(false)}>
                 Отмена
@@ -676,6 +806,6 @@ export default function PartnerCatalogProjectPage() {
           </form>
         </DialogContent>
       </Dialog>
-    </DashboardShell>
+    </PartnerShell>
   );
 }

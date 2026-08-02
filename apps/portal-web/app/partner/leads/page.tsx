@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MessagesSquare, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { IconMessages, IconPlus } from "@tabler/icons-react";
+import { toast } from "sonner";
 
-import { DashboardShell } from "@/components/dashboard-shell";
+import { PartnerShell } from "@/components/partner-shell";
 import { PageAlert } from "@/components/page-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,7 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/api";
-import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
+import { readPartnerModules } from "@/lib/partner-modules";
 
 type Lead = {
   id: string;
@@ -54,11 +56,12 @@ type Project = {
 const NO_PROJECT = "__none__";
 
 export default function PartnerLeadsPage() {
+  const router = useRouter();
+  const [allowed, setAllowed] = useState(false);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [deliveries, setDeliveries] = useState<LeadsResponse["deliveries"]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -87,13 +90,17 @@ export default function PartnerLeadsPage() {
   }, []);
 
   useEffect(() => {
+    if (!readPartnerModules().leadsEnabled) {
+      router.replace("/partner/settings");
+      return;
+    }
+    setAllowed(true);
     void load();
-  }, [load]);
+  }, [load, router]);
 
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
-    setNotice("");
     try {
       await apiFetch("/api/partner/leads", {
         method: "POST",
@@ -112,10 +119,10 @@ export default function PartnerLeadsPage() {
         projectId: NO_PROJECT,
         message: ""
       });
-      setNotice("Лид создан.");
+      toast.success("Лид создан");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось создать лид");
+      toast.error(err instanceof Error ? err.message : "Не удалось создать лид");
     } finally {
       setSaving(false);
     }
@@ -125,14 +132,17 @@ export default function PartnerLeadsPage() {
     return deliveries.find((item) => item.leadEventId === leadId);
   }
 
+  if (!allowed) {
+    return (
+      <div className="text-muted-foreground flex min-h-[40vh] items-center justify-center text-sm">
+        Переход в настройки…
+      </div>
+    );
+  }
+
   return (
-    <DashboardShell
-      cabinetLabel={partnerCabinetLabel}
-      currentPath="/partner/leads"
-      navigation={partnerNavigation}
-    >
+    <PartnerShell currentPath="/partner/leads">
       <PageAlert message={error} variant="destructive" />
-      <PageAlert message={notice} />
 
       <div className="grid gap-4 md:gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card>
@@ -150,7 +160,7 @@ export default function PartnerLeadsPage() {
               <Empty className="border">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
-                    <MessagesSquare />
+                    <IconMessages />
                   </EmptyMedia>
                   <EmptyTitle>Лидов пока нет</EmptyTitle>
                   <EmptyDescription>
@@ -262,7 +272,7 @@ export default function PartnerLeadsPage() {
                 </Field>
                 <Field>
                   <Button type="submit" disabled={saving}>
-                    {saving ? <Spinner /> : <Plus />}
+                    {saving ? <Spinner /> : <IconPlus />}
                     {saving ? "Сохраняем…" : "Создать лид"}
                   </Button>
                 </Field>
@@ -271,6 +281,6 @@ export default function PartnerLeadsPage() {
           </CardContent>
         </Card>
       </div>
-    </DashboardShell>
+    </PartnerShell>
   );
 }

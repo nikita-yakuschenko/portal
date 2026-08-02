@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { IconArrowUpRight } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ const MSK_GREEN =
 const MSK_DARK =
   "для комфортной жизни, отдыха и постоянного проживания";
 
-/** Как на msk: зелёная часть до «дома», дальше тёмный текст */
+/** Как на msk: зелёная часть до «дома», дальше светлый текст на оверлее */
 function splitHeadline(text: string): [string, string] {
   const normalized = text.trim().replace(/\s+/g, " ");
   const lower = normalized.toLowerCase();
@@ -32,14 +32,15 @@ function splitHeadline(text: string): [string, string] {
 }
 
 export default function PartnerSiteHomePage() {
-  const { draft, projects } = usePartnerSitePreview();
-  const [slide, setSlide] = useState(0);
+  const { draft, projects, favorites, toggleFavorite, openLeadForm } =
+    usePartnerSitePreview();
 
-  const slides = useMemo(() => {
-    return projects
-      .map((p) => ({ id: p.id, name: p.name, url: primaryImage(p) }))
-      .filter((p): p is { id: string; name: string; url: string } => Boolean(p.url))
-      .slice(0, 6);
+  const hero = useMemo(() => {
+    for (const project of projects) {
+      const url = primaryImage(project);
+      if (url) return { name: project.name, url };
+    }
+    return null;
   }, [projects]);
 
   if (!draft) return null;
@@ -48,83 +49,62 @@ export default function PartnerSiteHomePage() {
     draft.heroHeadline?.trim() ||
     `${MSK_GREEN} ${MSK_DARK}`;
   const [greenPart, darkPart] = splitHeadline(headline);
-  const current = slides[slide] ?? null;
-  const featured = projects.slice(0, 3);
-
-  function prevSlide() {
-    if (!slides.length) return;
-    setSlide((i) => (i - 1 + slides.length) % slides.length);
-  }
-
-  function nextSlide() {
-    if (!slides.length) return;
-    setSlide((i) => (i + 1) % slides.length);
-  }
+  const featured = projects.slice(0, 6);
 
   return (
     <>
-      {/* Центральный блок как msk.avgst.ru — без плашек 6% / Яндекс / 10+ лет */}
-      <section className="bg-[#F5F6F8]">
-        <div className="mx-auto grid max-w-6xl gap-5 px-4 py-6 lg:grid-cols-2 lg:items-stretch lg:gap-5 lg:px-6 lg:py-8">
-          <div className="flex flex-col justify-center rounded-3xl bg-[#ECEEF1] px-7 py-9 md:px-10 md:py-12">
+      <section className="relative min-h-[560px] overflow-hidden bg-slate-800 md:min-h-[70vh]">
+        {hero ? (
+          <img
+            src={hero.url}
+            alt={hero.name}
+            fetchPriority="high"
+            decoding="async"
+            className="pointer-events-none absolute inset-0 size-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-700 text-sm text-slate-300">
+            Нет фото проектов
+          </div>
+        )}
+
+        <div className="absolute inset-0 bg-[linear-gradient(105deg,rgba(15,18,22,0.88)_0%,rgba(15,18,22,0.62)_42%,rgba(15,18,22,0.28)_72%,rgba(15,18,22,0.12)_100%)]" />
+
+        <div className="relative z-10 mx-auto flex min-h-[560px] max-w-6xl flex-col justify-end px-4 pb-10 pt-28 md:min-h-[70vh] md:px-6 md:pb-14 md:pt-32 lg:justify-center">
+          <div className="max-w-xl md:max-w-2xl">
             <h1 className="text-[1.65rem] font-extrabold uppercase leading-[1.12] tracking-tight sm:text-3xl md:text-[2.15rem] lg:text-[2.35rem]">
               <span className="text-avgst-green">{greenPart}</span>
               {darkPart ? (
                 <>
                   {" "}
-                  <span className="text-slate-900">{darkPart}</span>
+                  <span className="text-white">{darkPart}</span>
                 </>
               ) : null}
             </h1>
-            <p className="mt-5 max-w-xl text-sm leading-relaxed text-slate-800 md:text-[15px]">
+            <p className="mt-5 max-w-xl text-sm leading-relaxed text-white/85 md:text-[15px]">
               {draft.heroText || emptyPartnerSiteDraft.heroText}
             </p>
-            <Button
-              asChild
-              size="lg"
-              className="mt-8 w-fit rounded-md bg-avgst-yellow px-5 text-sm font-bold uppercase tracking-wide text-slate-950 hover:bg-avgst-yellow/90"
-            >
-              <Link href={previewPaths.projects} className="inline-flex items-center gap-2">
-                <IconArrowUpRight size={18} stroke={2.5} className="shrink-0" />
-                {draft.ctaLabel || "Посмотреть каталог проектов"}
-              </Link>
-            </Button>
-          </div>
-
-          <div className="relative min-h-[280px]">
-            <div className="h-full overflow-hidden rounded-3xl bg-slate-200">
-              {current ? (
-                <img
-                  src={current.url}
-                  alt={current.name}
-                  className="h-full min-h-[320px] w-full object-cover lg:min-h-full"
-                />
-              ) : (
-                <div className="flex min-h-[320px] items-center justify-center text-sm text-slate-400">
-                  Нет фото проектов
-                </div>
-              )}
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                size="lg"
+                className="w-fit rounded-md bg-avgst-yellow px-5 text-sm font-bold uppercase tracking-wide text-slate-950 hover:bg-avgst-yellow/90"
+                onClick={() => openLeadForm({ kind: "consultation" })}
+              >
+                Получить консультацию
+              </Button>
+              <Button
+                asChild
+                size="lg"
+                variant="outline"
+                className="w-fit border-white/40 bg-white/5 px-5 text-sm font-bold uppercase tracking-wide text-white hover:bg-white/15 hover:text-white"
+              >
+                <Link href={previewPaths.catalog} className="inline-flex items-center gap-2">
+                  <IconArrowUpRight size={18} stroke={2.5} className="shrink-0" />
+                  Каталог
+                </Link>
+              </Button>
             </div>
-            {slides.length > 1 ? (
-              <>
-                <button
-                  type="button"
-                  onClick={prevSlide}
-                  aria-label="Предыдущее фото"
-                  className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-xl text-white hover:bg-black/70"
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  onClick={nextSlide}
-                  aria-label="Следующее фото"
-                  className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-xl text-white hover:bg-black/70"
-                >
-                  ›
-                </button>
-              </>
-            ) : null}
           </div>
         </div>
       </section>
@@ -140,7 +120,7 @@ export default function PartnerSiteHomePage() {
             </h2>
           </div>
           <Button asChild variant="outline" className="border-slate-300">
-            <Link href={previewPaths.projects}>Весь каталог</Link>
+            <Link href={previewPaths.catalog}>Весь каталог</Link>
           </Button>
         </div>
 
@@ -153,6 +133,8 @@ export default function PartnerSiteHomePage() {
                 key={project.id}
                 project={project}
                 ctaLabel="Посмотреть проект"
+                favorite={favorites.has(project.id)}
+                onToggleFavorite={() => toggleFavorite(project.id)}
               />
             ))}
           </div>

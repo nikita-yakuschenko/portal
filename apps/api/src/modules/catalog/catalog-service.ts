@@ -1,7 +1,7 @@
 import type { CatalogAsset, CatalogProject, TildaSyncResult } from "@b2b/domain";
 
 import { createId } from "../../lib/ids.js";
-import { slugify } from "../../lib/slug.js";
+import { projectSlug } from "../../lib/slug.js";
 import { buildProjectDetails } from "./project-details.js";
 import type { TildaClient, TildaProduct } from "./tilda-client.js";
 
@@ -37,7 +37,7 @@ export function mapTildaProduct(product: TildaProduct, now: string): CatalogProj
     source: "tilda",
     sourceUid: product.id,
     name: product.title,
-    slug: slugify(product.title),
+    slug: projectSlug(product.title),
     description: product.description,
     technology: product.technology,
     details: buildProjectDetails(detailsInput),

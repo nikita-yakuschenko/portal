@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Inbox } from "lucide-react";
+import { IconInbox } from "@tabler/icons-react";
+import { toast } from "sonner";
 
 import { DashboardShell } from "@/components/dashboard-shell";
 import { PageAlert } from "@/components/page-alert";
@@ -65,7 +66,6 @@ export default function CompanyPage() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -82,22 +82,29 @@ export default function CompanyPage() {
 
   async function review(id: string, action: "approve" | "reject") {
     setBusyId(id);
-    setNotice("");
     try {
       const result = await apiFetch<{ status: string; temporaryPassword?: string }>(
         `/api/company/applications/${id}/${action}`,
         { method: "POST", body: "{}" }
       );
-      setNotice(
-        result.temporaryPassword
-          ? `Заявка одобрена. Временный пароль: ${result.temporaryPassword}`
-          : action === "approve"
-            ? "Заявка одобрена."
-            : "Заявка отклонена."
-      );
+      const password = result.temporaryPassword;
+      if (password) {
+        // Пароль показывается один раз — тост живёт до закрытия вручную
+        toast.success("Заявка одобрена", {
+          description: `Временный пароль: ${password}`,
+          duration: Infinity,
+          closeButton: true,
+          action: {
+            label: "Скопировать",
+            onClick: () => void navigator.clipboard.writeText(password)
+          }
+        });
+      } else {
+        toast.success(action === "approve" ? "Заявка одобрена" : "Заявка отклонена");
+      }
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось обработать заявку");
+      toast.error(err instanceof Error ? err.message : "Не удалось обработать заявку");
     } finally {
       setBusyId(null);
     }
@@ -113,7 +120,6 @@ export default function CompanyPage() {
       navigation={companyNavigation}
     >
       <PageAlert message={error} variant="destructive" />
-      <PageAlert message={notice} />
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard
@@ -152,7 +158,7 @@ export default function CompanyPage() {
             <Empty className="border">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
-                  <Inbox />
+                  <IconInbox />
                 </EmptyMedia>
                 <EmptyTitle>Заявок пока нет</EmptyTitle>
                 <EmptyDescription>

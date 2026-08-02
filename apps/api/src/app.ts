@@ -59,9 +59,15 @@ const upsertPartnerPriceSchema = z.object({
     .array(
       z.object({
         id: z.string().optional(),
-        name: z.string().min(1),
-        price: z.number().nonnegative().optional(),
-        note: z.string().optional()
+        title: z.string(),
+        items: z.array(
+          z.object({
+            id: z.string().optional(),
+            name: z.string().min(1),
+            price: z.number().nonnegative().optional(),
+            note: z.string().optional()
+          })
+        )
       })
     )
     .optional()
@@ -77,6 +83,25 @@ const createLeadSchema = z.object({
 
 const passwordResetRequestSchema = z.object({
   email: z.email()
+});
+
+const updateCatalogProjectSchema = z.object({
+  name: z.string().min(1).optional(),
+  description: z.string().optional(),
+  technology: z.enum(["modular", "panel_frame"]).optional(),
+  area: z.number().int().positive().nullable().optional(),
+  floors: z.number().int().positive().nullable().optional(),
+  bedrooms: z.number().int().nonnegative().nullable().optional(),
+  bathrooms: z.string().nullable().optional(),
+  basePrice: z.number().int().nonnegative().nullable().optional(),
+  active: z.boolean().optional()
+});
+
+const updateCatalogAssetSchema = z.object({
+  type: z.enum(["exterior", "floor_plan", "interior", "unknown"]).optional(),
+  floorNumber: z.number().int().positive().nullable().optional(),
+  isPrimary: z.boolean().optional(),
+  isHidden: z.boolean().optional()
 });
 
 const passwordResetConfirmSchema = z.object({
@@ -394,6 +419,69 @@ export async function buildApp() {
     return portalService.listCatalogProjects();
   });
 
+  app.get("/api/company/catalog/projects/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const { id } = request.params as { id: string };
+    const project = await portalService.getCatalogProject(id);
+    if (!project) {
+      return reply.status(404).send({ message: "Проект не найден" });
+    }
+    return project;
+  });
+
+  app.patch("/api/company/catalog/projects/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const parsed = updateCatalogProjectSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    const { id } = request.params as { id: string };
+    const project = await portalService.updateCatalogProject(id, parsed.data);
+    if (!project) {
+      return reply.status(404).send({ message: "Проект не найден" });
+    }
+    return project;
+  });
+
+  app.patch("/api/company/catalog/assets/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const parsed = updateCatalogAssetSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    if (
+      parsed.data.type === undefined &&
+      parsed.data.floorNumber === undefined &&
+      parsed.data.isPrimary === undefined &&
+      parsed.data.isHidden === undefined
+    ) {
+      return reply.status(400).send({
+        message: "Нужно передать type, floorNumber, isPrimary и/или isHidden"
+      });
+    }
+
+    const { id } = request.params as { id: string };
+    const project = await portalService.updateCatalogAsset(id, parsed.data);
+    if (!project) {
+      return reply.status(404).send({ message: "Ассет не найден" });
+    }
+    return project;
+  });
+
   app.get("/api/company/partners", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
     if (roleCheck) {
@@ -415,7 +503,30 @@ export async function buildApp() {
     if (roleCheck) {
       return roleCheck;
     }
-    return portalService.listCatalogProjects();
+    const partnerId = getAuthUser(request)!.partnerId!;
+    const projects = await portalService.listCatalogProjects();
+    const ordered = await portalService.applyPartnerCatalogOrder(partnerId, projects);
+    return ordered.map((project) => portalService.withVisibleAssets(project));
+  });
+
+  app.put("/api/partner/catalog/order", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const parsed = z
+      .object({ projectIds: z.array(z.string().min(1)).min(1) })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    const order = await portalService.setPartnerCatalogOrder(
+      getAuthUser(request)!.partnerId!,
+      parsed.data.projectIds
+    );
+    return { projectIds: order };
   });
 
   app.get("/api/partner/catalog/projects/:id", async (request, reply) => {
@@ -429,7 +540,7 @@ export async function buildApp() {
     if (!project) {
       return reply.status(404).send({ message: "Проект не найден" });
     }
-    return project;
+    return portalService.withVisibleAssets(project);
   });
 
   app.get("/api/partner/pricing", async (request, reply) => {
@@ -438,6 +549,14 @@ export async function buildApp() {
       return roleCheck;
     }
     return portalService.listPartnerProjectPrices(getAuthUser(request)!.partnerId!);
+  });
+
+  app.get("/api/partner/pricing/library", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    return portalService.getPartnerExtraOptionLibrary(getAuthUser(request)!.partnerId!);
   });
 
   app.put("/api/partner/pricing", async (request, reply) => {
@@ -452,16 +571,6 @@ export async function buildApp() {
     }
 
     try {
-      const extras = (parsed.data.extras ?? []).map((item) => {
-        const row: { id?: string; name: string; price?: number; note?: string } = {
-          name: item.name
-        };
-        if (item.id) row.id = item.id;
-        if (item.price !== undefined) row.price = item.price;
-        if (item.note) row.note = item.note;
-        return row;
-      });
-
       return await portalService.upsertPartnerProjectPrice({
         partnerId: getAuthUser(request)!.partnerId!,
         projectId: parsed.data.projectId,
@@ -471,7 +580,28 @@ export async function buildApp() {
           : {}),
         ...(parsed.data.publicPrice !== undefined ? { publicPrice: parsed.data.publicPrice } : {}),
         ...(parsed.data.isPublished !== undefined ? { isPublished: parsed.data.isPublished } : {}),
-        extras
+        ...(parsed.data.extras !== undefined
+          ? {
+              extras: parsed.data.extras.map((group) => ({
+                id: group.id ?? `group_${Math.random().toString(36).slice(2, 10)}`,
+                title: group.title,
+                items: group.items.map((item) => {
+                  const row: {
+                    id: string;
+                    name: string;
+                    price?: number;
+                    note?: string;
+                  } = {
+                    id: item.id ?? `extra_${Math.random().toString(36).slice(2, 10)}`,
+                    name: item.name
+                  };
+                  if (item.price !== undefined) row.price = item.price;
+                  if (item.note) row.note = item.note;
+                  return row;
+                })
+              }))
+            }
+          : {})
       });
     } catch (error) {
       return reply
@@ -486,6 +616,23 @@ export async function buildApp() {
       return roleCheck;
     }
     return portalService.listPartnerStorefrontProjects(getAuthUser(request)!.partnerId!);
+  });
+
+  app.get("/api/partner/storefront/projects/:key", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const { key } = request.params as { key: string };
+    const project = await portalService.getPartnerStorefrontProject(
+      getAuthUser(request)!.partnerId!,
+      key
+    );
+    if (!project) {
+      return reply.status(404).send({ message: "Проект не найден" });
+    }
+    return project;
   });
 
   app.get("/api/partner/team", async (request, reply) => {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
+import type { TablerIcon } from "@tabler/icons-react";
 
 import { NavUser } from "@/components/nav-user";
 import {
@@ -21,7 +21,7 @@ import {
 export type NavigationItem = {
   title: string;
   href: string;
-  icon: LucideIcon;
+  icon: TablerIcon;
 };
 
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {

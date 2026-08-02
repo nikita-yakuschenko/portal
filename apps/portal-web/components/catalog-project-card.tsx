@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { Heart } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { IconCircleCheck, IconEyeOff, IconHeart } from "@tabler/icons-react";
 
 import { technologyBadgeCode, technologyBadgeVariant } from "@/lib/catalog-display";
 import { catalogProseDescription } from "@/lib/strip-html";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type Asset = {
   sourceUrl: string;
@@ -29,8 +30,18 @@ type CatalogProjectCardProps = {
   retailPrice: number | null;
   retailOnRequest: boolean;
   assets: Asset[];
-  favorite: boolean;
-  onToggleFavorite: () => void;
+  /** Если не передано — кнопка избранного скрыта */
+  favorite?: boolean;
+  onToggleFavorite?: () => void;
+  /** Статус публикации на сайт партнёра; если не передан — индикатор скрыт */
+  isPublished?: boolean;
+  /** Выбор для массовых действий */
+  selected?: boolean;
+  onSelectedChange?: (selected: boolean) => void;
+  /** Ручка drag-and-drop (слева в ряду с чекбоксом/статусом) */
+  dragHandle?: ReactNode;
+  /** Скрыть блок розничной цены (кабинет компании) */
+  hideRetail?: boolean;
 };
 
 const MAX_PREVIEW_ASSETS = 10;
@@ -70,15 +81,20 @@ function CatalogMediaPreview({
 
   return (
     <div
-      className="bg-muted relative aspect-[4/3] cursor-pointer"
+      className="bg-muted relative w-full shrink-0 cursor-pointer overflow-hidden pt-[56.25%]"
       onMouseMove={handleMove}
       onMouseLeave={() => setIndex(0)}
       onClick={() => router.push(href)}
     >
       {current ? (
-        <img src={current} alt={alt} className="h-full w-full object-cover" draggable={false} />
+        <img
+          src={current}
+          alt={alt}
+          className="absolute inset-0 size-full object-cover"
+          draggable={false}
+        />
       ) : (
-        <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
+        <div className="text-muted-foreground absolute inset-0 flex items-center justify-center text-sm">
           Нет фото
         </div>
       )}
@@ -121,8 +137,13 @@ export function CatalogProjectCard({
   retailPrice,
   retailOnRequest,
   assets,
-  favorite,
-  onToggleFavorite
+  favorite = false,
+  onToggleFavorite,
+  isPublished,
+  selected,
+  onSelectedChange,
+  dragHandle,
+  hideRetail = false
 }: CatalogProjectCardProps) {
   const prose = catalogProseDescription(description);
   const urls = previewUrls(assets);
@@ -133,25 +154,77 @@ export function CatalogProjectCard({
     bedrooms ? `${bedrooms} сп.` : null
   ].filter(Boolean);
 
-  const hasRetail = retailPrice != null || retailOnRequest;
+  const hasRetail = !hideRetail && (retailPrice != null || retailOnRequest);
+  const showRetailHint = !hideRetail && !hasRetail;
+  const showFavorite = typeof onToggleFavorite === "function";
+  const showPublishState = typeof isPublished === "boolean";
+  const showSelect = typeof onSelectedChange === "function";
+  const showTopControls = Boolean(dragHandle) || showSelect || showPublishState;
 
   return (
-    <Card className="group gap-0 overflow-hidden py-0 transition-shadow hover:shadow-md">
+    <Card
+      className={cn(
+        "group gap-0 overflow-hidden py-0 transition-shadow hover:shadow-md",
+        // grid вместо flex — иначе превью может схлопнуть aspect-ratio
+        "grid grid-rows-[auto_1fr]",
+        selected && "ring-primary ring-2"
+      )}
+    >
       <div className="relative">
         <CatalogMediaPreview urls={urls} alt={name} href={href} />
-        <button
-          type="button"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onToggleFavorite();
-          }}
-          className="bg-background/90 text-muted-foreground hover:text-primary focus-visible:ring-ring/50 absolute top-3 right-3 z-10 inline-flex size-9 items-center justify-center rounded-md shadow-sm backdrop-blur transition focus-visible:ring-[3px] focus-visible:outline-none"
-          aria-label={favorite ? "Убрать из избранного" : "В избранное"}
-          aria-pressed={favorite}
-        >
-          <Heart className={cn("size-4", favorite && "fill-primary text-primary")} />
-        </button>
+        {showTopControls ? (
+          <div className="absolute top-3 left-3 z-[1] flex items-center gap-1.5">
+            {dragHandle}
+            {showSelect ? (
+              <label
+                className="bg-background/90 inline-flex size-9 cursor-pointer items-center justify-center rounded-md shadow-sm backdrop-blur"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <Checkbox
+                  checked={Boolean(selected)}
+                  onCheckedChange={(value) => onSelectedChange?.(value === true)}
+                  aria-label={`Выбрать ${name}`}
+                />
+              </label>
+            ) : null}
+            {showPublishState ? (
+              <span
+                className={cn(
+                  "bg-background/90 inline-flex size-9 items-center justify-center rounded-md shadow-sm backdrop-blur",
+                  isPublished ? "text-primary" : "text-muted-foreground"
+                )}
+                title={isPublished ? "Опубликован на сайте" : "Скрыт с сайта"}
+                aria-label={isPublished ? "Опубликован на сайте" : "Скрыт с сайта"}
+              >
+                {isPublished ? (
+                  <IconCircleCheck className="size-4" />
+                ) : (
+                  <IconEyeOff className="size-4" />
+                )}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+        {showFavorite ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onToggleFavorite?.();
+            }}
+            className="bg-background/90 text-muted-foreground hover:text-primary focus-visible:ring-ring/50 absolute top-3 right-3 z-[1] inline-flex size-9 items-center justify-center rounded-md shadow-sm backdrop-blur transition focus-visible:ring-[3px] focus-visible:outline-none"
+            aria-label={favorite ? "Убрать из избранного" : "В избранное"}
+            aria-pressed={favorite}
+          >
+            <IconHeart
+              className={cn(
+                "size-4 transition-transform duration-200 motion-reduce:transition-none",
+                favorite && "scale-110 fill-primary text-primary"
+              )}
+            />
+          </button>
+        ) : null}
       </div>
 
       <Link href={href} className="flex flex-col gap-3 p-4">
@@ -184,11 +257,11 @@ export function CatalogProjectCard({
                   : `${retailPrice.toLocaleString("ru-RU")} ₽`}
               </p>
             </>
-          ) : (
+          ) : showRetailHint ? (
             <p className="text-muted-foreground mt-1 text-xs">
               Задайте свою цену во вкладке «Цена»
             </p>
-          )}
+          ) : null}
         </div>
       </Link>
     </Card>

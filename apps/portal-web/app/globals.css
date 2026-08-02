@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -143,11 +144,12 @@
 
   --primary: oklch(0.72 0.145 149);
   --primary-foreground: oklch(0.178 0 0);
-  --secondary: oklch(0.269 0 0);
+  /* Шаг от --card (0.26) сохраняем каноническим (~0.06), иначе поверхности сливаются */
+  --secondary: oklch(0.32 0 0);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
+  --muted: oklch(0.32 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
+  --accent: oklch(0.32 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
@@ -166,7 +168,7 @@
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.72 0.145 149);
   --sidebar-primary-foreground: oklch(0.178 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent: oklch(0.32 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.72 0.145 149);
@@ -197,6 +199,16 @@ option {
   font-family: var(--font-sans);
 }
 
+/* Скрытый скроллбар при сохранённой прокрутке (табы, карусели) */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* Деликатный скролл: тонкий, полупрозрачный, без серого трека */
 html {
   scrollbar-width: thin;
@@ -224,6 +236,18 @@ html::-webkit-scrollbar-thumb:hover {
 
 html::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+html.dark {
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+}
+
+html.dark::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+html.dark::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.34);
 }
 
 /* Секции-магниты помечаются классом; дотягивание — в LandingSnap (JS) */

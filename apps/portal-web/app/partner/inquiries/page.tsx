@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CircleHelp, Send } from "lucide-react";
+import { IconHelpCircle, IconSend } from "@tabler/icons-react";
+import { toast } from "sonner";
 
-import { DashboardShell } from "@/components/dashboard-shell";
+import { PartnerShell } from "@/components/partner-shell";
 import { PageAlert } from "@/components/page-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/api";
-import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
 
 type Inquiry = {
   id: string;
@@ -34,7 +34,6 @@ type Inquiry = {
 export default function PartnerInquiriesPage() {
   const [items, setItems] = useState<Inquiry[]>([]);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ subject: "", message: "" });
@@ -57,30 +56,24 @@ export default function PartnerInquiriesPage() {
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
-    setNotice("");
     try {
       await apiFetch("/api/partner/inquiries", {
         method: "POST",
         body: JSON.stringify(form)
       });
       setForm({ subject: "", message: "" });
-      setNotice("Запрос отправлен на завод.");
+      toast.success("Запрос отправлен на завод");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось отправить запрос");
+      toast.error(err instanceof Error ? err.message : "Не удалось отправить запрос");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <DashboardShell
-      cabinetLabel={partnerCabinetLabel}
-      currentPath="/partner/inquiries"
-      navigation={partnerNavigation}
-    >
+    <PartnerShell currentPath="/partner/inquiries">
       <PageAlert message={error} variant="destructive" />
-      <PageAlert message={notice} />
 
       <div className="grid gap-4 md:gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card>
@@ -98,7 +91,7 @@ export default function PartnerInquiriesPage() {
               <Empty className="border">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
-                    <CircleHelp />
+                    <IconHelpCircle />
                   </EmptyMedia>
                   <EmptyTitle>Запросов пока нет</EmptyTitle>
                   <EmptyDescription>
@@ -155,7 +148,7 @@ export default function PartnerInquiriesPage() {
                 </Field>
                 <Field>
                   <Button type="submit" disabled={saving}>
-                    {saving ? <Spinner /> : <Send />}
+                    {saving ? <Spinner /> : <IconSend />}
                     {saving ? "Отправляем…" : "Отправить на завод"}
                   </Button>
                 </Field>
@@ -164,6 +157,6 @@ export default function PartnerInquiriesPage() {
           </CardContent>
         </Card>
       </div>
-    </DashboardShell>
+    </PartnerShell>
   );
 }

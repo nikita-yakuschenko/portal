@@ -63,11 +63,17 @@ export const partners = pgTable("partners", {
   id: text("id").primaryKey(),
   companyName: text("company_name").notNull(),
   legalName: text("legal_name"),
+  /** ИНН юрлица / ИП — для подвала сайта */
+  inn: text("inn"),
   status: partnerStatusEnum("status").notNull().default("active"),
   region: text("region").notNull(),
   managerName: text("manager_name"),
   email: text("email").notNull(),
   phone: text("phone").notNull(),
+  // Порядок проектов на витрине партнёра (без фильтров)
+  catalogProjectOrder: jsonb("catalog_project_order").notNull().default([]),
+  // Библиотека разделов/опций для подсказок при наполнении проектов
+  extraOptionLibrary: jsonb("extra_option_library").notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
@@ -135,8 +141,11 @@ export const catalogAssets = pgTable("catalog_assets", {
   sourceUrl: text("source_url").notNull(),
   localPath: text("local_path").notNull().default(""),
   type: text("type").notNull(),
+  // Для type=floor_plan при floors>1: номер этажа планировки
+  floorNumber: integer("floor_number"),
   sortOrder: integer("sort_order").notNull().default(0),
-  isPrimary: boolean("is_primary").notNull().default(false)
+  isPrimary: boolean("is_primary").notNull().default(false),
+  isHidden: boolean("is_hidden").notNull().default(false)
 });
 
 export const catalogSyncRuns = pgTable("catalog_sync_runs", {

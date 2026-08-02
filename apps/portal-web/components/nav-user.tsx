@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronsUpDown, LogOut } from "lucide-react";
+import { IconLogout, IconSelector } from "@tabler/icons-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -16,8 +16,7 @@ import {
 import {
   SidebarMenu,
   SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar
+  SidebarMenuItem
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
@@ -46,7 +45,6 @@ function initials(name: string) {
 
 export function NavUser() {
   const router = useRouter();
-  const { isMobile } = useSidebar();
   const [user, setUser] = useState<SessionUser | null>(null);
 
   useEffect(() => {
@@ -56,7 +54,7 @@ export function NavUser() {
         const session = await apiFetch<{ user: SessionUser }>("/api/auth/session");
         if (!cancelled) setUser(session.user);
       } catch {
-        // сессию проверяет AuthGate; здесь молча оставляем скелетон
+        // роль уже проверил AuthGate на сервере; здесь только имя в меню
       }
     })();
     return () => {
@@ -109,14 +107,15 @@ export function NavUser() {
                   {ROLE_LABEL[user.role] ?? user.role}
                 </span>
               </div>
-              <ChevronsUpDown className="ml-auto size-4" />
+              <IconSelector className="ml-auto size-4" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
             className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
-            side={isMobile ? "bottom" : "right"}
-            align="end"
-            sideOffset={4}
+            side="top"
+            align="start"
+            sideOffset={8}
+            collisionPadding={8}
           >
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
@@ -131,7 +130,7 @@ export function NavUser() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => void handleLogout()}>
-              <LogOut />
+              <IconLogout />
               Выйти
             </DropdownMenuItem>
           </DropdownMenuContent>

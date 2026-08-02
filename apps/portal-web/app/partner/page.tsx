@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { BookOpen, CircleHelp, Globe, MessagesSquare, Plug } from "lucide-react";
 
-import { DashboardShell } from "@/components/dashboard-shell";
+import { PartnerShell } from "@/components/partner-shell";
 import { PageAlert } from "@/components/page-alert";
 import { StatCard } from "@/components/stat-card";
 import { Button } from "@/components/ui/button";
@@ -17,12 +16,10 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
-import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
-
-type MeResponse = {
-  user: { fullName: string; email: string; role: string };
-  partner: { companyName: string; region: string; email: string; phone: string } | null;
-};
+import {
+  PARTNER_MODULES_CHANGED,
+  readPartnerModules
+} from "@/lib/partner-modules";
 
 type Lead = {
   id: string;
@@ -36,37 +33,40 @@ type LeadsResponse = {
   events: Lead[];
 };
 
-const QUICK_ACTIONS = [
-  { href: "/partner/catalog", label: "Каталог и цены", icon: BookOpen },
-  { href: "/partner/site", label: "Настроить сайт", icon: Globe },
-  { href: "/partner/leads", label: "Добавить лид", icon: MessagesSquare },
-  { href: "/partner/crm", label: "Настроить CRM", icon: Plug },
-  { href: "/partner/inquiries", label: "Запрос на завод", icon: CircleHelp }
-];
-
 export default function PartnerPage() {
-  const [me, setMe] = useState<MeResponse | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [counts, setCounts] = useState({ projects: 0, leads: 0, crm: 0, team: 0 });
+  const [counts, setCounts] = useState({ projects: 0, leads: 0, team: 0 });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [leadsEnabled, setLeadsEnabled] = useState(false);
+
+  useEffect(() => {
+    const sync = () => setLeadsEnabled(readPartnerModules().leadsEnabled);
+    sync();
+    window.addEventListener(PARTNER_MODULES_CHANGED, sync);
+    return () => window.removeEventListener(PARTNER_MODULES_CHANGED, sync);
+  }, []);
 
   useEffect(() => {
     void (async () => {
       try {
-        const [profile, projects, leadsPayload, crm, team] = await Promise.all([
-          apiFetch<MeResponse>("/api/partner/me"),
+        const [projects, team] = await Promise.all([
           apiFetch<unknown[]>("/api/partner/catalog/projects"),
-          apiFetch<LeadsResponse>("/api/partner/leads"),
-          apiFetch<unknown[]>("/api/partner/crm-connections"),
           apiFetch<unknown[]>("/api/partner/team")
         ]);
-        setMe(profile);
-        setLeads(leadsPayload.events.slice(0, 5));
+
+        let leadCount = 0;
+        let recent: Lead[] = [];
+        if (readPartnerModules().leadsEnabled) {
+          const leadsPayload = await apiFetch<LeadsResponse>("/api/partner/leads");
+          leadCount = leadsPayload.events.length;
+          recent = leadsPayload.events.slice(0, 5);
+        }
+
+        setLeads(recent);
         setCounts({
           projects: projects.length,
-          leads: leadsPayload.events.length,
-          crm: crm.length,
+          leads: leadCount,
           team: team.length
         });
       } catch (err) {
@@ -75,75 +75,39 @@ export default function PartnerPage() {
         setLoading(false);
       }
     })();
-  }, []);
-
-  const companyRows = me?.partner
-    ? [
-        { label: "Название", value: me.partner.companyName },
-        { label: "Регион", value: me.partner.region },
-        { label: "Контакт", value: me.user.fullName },
-        { label: "Email", value: me.user.email }
-      ]
-    : [];
+  }, [leadsEnabled]);
 
   return (
-    <DashboardShell
-      cabinetLabel={partnerCabinetLabel}
-      currentPath="/partner"
-      navigation={partnerNavigation}
-    >
+    <PartnerShell currentPath="/partner">
       <PageAlert message={error} variant="destructive" />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div
+        className={
+          leadsEnabled ? "grid gap-4 md:grid-cols-3" : "grid gap-4 md:grid-cols-2"
+        }
+      >
         <StatCard
           title="Каталог"
           value={loading ? "…" : String(counts.projects)}
           hint="Проектов с завода"
         />
-        <StatCard
-          title="Лиды"
-          value={loading ? "…" : String(counts.leads)}
-          hint="Всего в системе"
-        />
-        <StatCard
-          title="CRM"
-          value={loading ? "…" : String(counts.crm)}
-          hint={counts.crm > 0 ? "Подключения активны" : "Нужно подключить"}
-        />
-        <StatCard
-          title="Команда"
-          value={loading ? "…" : String(counts.team)}
-          hint="Сотрудников"
-        />
+        {leadsEnabled ? (
+          <StatCard
+            title="Лиды"
+            value={loading ? "…" : String(counts.leads)}
+            hint="Всего в системе"
+          />
+        ) : null}
+        <Link href="/partner/settings?tab=company" className="block transition-opacity hover:opacity-90">
+          <StatCard
+            title="Команда"
+            value={loading ? "…" : String(counts.team)}
+            hint="Сотрудников · Настройки"
+          />
+        </Link>
       </div>
 
-      <div className="grid gap-4 md:gap-6 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Компания</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-3">
-                {[0, 1, 2, 3].map((row) => (
-                  <Skeleton key={row} className="h-5 w-full" />
-                ))}
-              </div>
-            ) : companyRows.length === 0 ? (
-              <p className="text-muted-foreground text-sm">Нет данных о компании.</p>
-            ) : (
-              <dl className="divide-border divide-y text-sm">
-                {companyRows.map((row) => (
-                  <div key={row.label} className="flex justify-between gap-4 py-2 first:pt-0">
-                    <dt className="text-muted-foreground">{row.label}</dt>
-                    <dd className="text-right font-medium">{row.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            )}
-          </CardContent>
-        </Card>
-
+      {leadsEnabled ? (
         <Card>
           <CardHeader>
             <CardTitle>Последние лиды</CardTitle>
@@ -179,26 +143,7 @@ export default function PartnerPage() {
             )}
           </CardContent>
         </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Быстрые действия</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          {QUICK_ACTIONS.map((action) => {
-            const Icon = action.icon;
-            return (
-              <Button key={action.href} variant="outline" asChild>
-                <Link href={action.href}>
-                  <Icon />
-                  {action.label}
-                </Link>
-              </Button>
-            );
-          })}
-        </CardContent>
-      </Card>
-    </DashboardShell>
+      ) : null}
+    </PartnerShell>
   );
 }

@@ -1,14 +1,8 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-
-import { apiFetch } from "@/lib/api";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 type SessionUser = {
   role: "company_admin" | "company_manager" | "partner_owner" | "partner_member";
-  fullName?: string;
-  email?: string;
 };
 
 type SessionPayload = {
@@ -20,48 +14,47 @@ type AuthGateProps = {
   children: React.ReactNode;
 };
 
-export function AuthGate({ allow, children }: AuthGateProps) {
-  const router = useRouter();
-  const [ready, setReady] = useState(false);
-  const allowKey = allow.join(",");
+function apiBaseUrl(): string {
+  return process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    const allowedRoles = allowKey.split(",") as Array<SessionUser["role"]>;
+/** Серверная проверка роли: без клиентского экрана ожидания. */
+export async function AuthGate({ allow, children }: AuthGateProps) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("b2b_session")?.value;
 
-    void (async () => {
-      try {
-        const session = await apiFetch<SessionPayload>("/api/auth/session");
-        if (cancelled) return;
+  if (!token) {
+    redirect("/login");
+  }
 
-        if (!allowedRoles.includes(session.user.role)) {
-          const home =
-            session.user.role === "company_admin" || session.user.role === "company_manager"
-              ? "/company"
-              : "/partner";
-          router.replace(home);
-          return;
-        }
+  // redirect() бросает исключение — не вызывать его внутри try/catch
+  let session: SessionPayload | null = null;
+  try {
+    const response = await fetch(`${apiBaseUrl()}/api/auth/session`, {
+      headers: {
+        Cookie: `b2b_session=${token}`,
+        "Content-Type": "application/json"
+      },
+      cache: "no-store"
+    });
 
-        setReady(true);
-      } catch {
-        if (!cancelled) {
-          router.replace("/login");
-        }
-      }
-    })();
+    if (response.ok) {
+      session = (await response.json()) as SessionPayload;
+    }
+  } catch {
+    session = null;
+  }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [allowKey, router]);
+  if (!session) {
+    redirect("/login");
+  }
 
-  if (!ready) {
-    return (
-      <div className="flex min-h-svh items-center justify-center bg-slate-50 text-sm text-slate-500">
-        Проверяем доступ...
-      </div>
-    );
+  if (!allow.includes(session.user.role)) {
+    const home =
+      session.user.role === "company_admin" || session.user.role === "company_manager"
+        ? "/company"
+        : "/partner";
+    redirect(home);
   }
 
   return children;

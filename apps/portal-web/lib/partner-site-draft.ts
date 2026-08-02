@@ -1,3 +1,5 @@
+import { withDemoPartnerSocials } from "@/lib/partner-site-socials";
+
 export const PARTNER_SITE_DRAFT_KEY = "avgst.partner.site.draft";
 
 /** Публичный сайт партнёра: бренд компании для конечного покупателя, не «дилер завода». */
@@ -25,6 +27,14 @@ export type PartnerSiteDraft = {
   socialVk: string;
   socialWhatsapp: string;
   socialMax: string;
+  socialInstagram: string;
+  socialYoutube: string;
+  socialDzen: string;
+  /**
+   * Пул соцсетей после заявки (id из PARTNER_SITE_SOCIALS).
+   * Пустой = не предлагать. На каждую заявку берём следующую по кругу.
+   */
+  postLeadOfferSocials: string[];
   /** Data URL своего логотипа (вместо заводского) */
   logoDataUrl: string;
 };
@@ -54,6 +64,10 @@ export const emptyPartnerSiteDraft: PartnerSiteDraft = {
   socialVk: "",
   socialWhatsapp: "",
   socialMax: "",
+  socialInstagram: "",
+  socialYoutube: "",
+  socialDzen: "",
+  postLeadOfferSocials: ["telegram"],
   logoDataUrl: ""
 };
 
@@ -74,6 +88,27 @@ export function savePartnerSiteDraft(draft: PartnerSiteDraft): void {
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
+}
+
+/** Пул сетей после заявки; тянем из старого postLeadOfferSocial при миграции */
+function normalizePostLeadOfferSocials(
+  raw: Partial<PartnerSiteDraft> & Record<string, unknown>
+): string[] {
+  const fromArray = raw.postLeadOfferSocials;
+  if (Array.isArray(fromArray)) {
+    const ids = fromArray
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean);
+    // Явный пустой массив = «не предлагать»
+    if (fromArray.length === 0) return [];
+    return [...new Set(ids)];
+  }
+  if ("postLeadOfferSocial" in raw) {
+    const single = asString(raw.postLeadOfferSocial).trim().toLowerCase();
+    return single ? [single] : [];
+  }
+  return [...emptyPartnerSiteDraft.postLeadOfferSocials];
 }
 
 /** Старые дефолты вида «Строим дома в Нижний Новгород» — выкидываем */
@@ -124,7 +159,7 @@ export function normalizePartnerSiteDraft(
   const ctaRaw = asString(raw.ctaLabel, emptyPartnerSiteDraft.ctaLabel);
   const catalogTitleRaw = asString(raw.catalogTitle, emptyPartnerSiteDraft.catalogTitle);
 
-  return {
+  return withDemoPartnerSocials({
     ...emptyPartnerSiteDraft,
     name: raw.name,
     subdomain: asString(raw.subdomain, "partner"),
@@ -154,8 +189,14 @@ export function normalizePartnerSiteDraft(
     socialVk: asString(raw.socialVk),
     socialWhatsapp: asString(raw.socialWhatsapp),
     socialMax: asString(raw.socialMax),
+    socialInstagram: asString(raw.socialInstagram),
+    socialYoutube: asString(raw.socialYoutube),
+    socialDzen: asString(raw.socialDzen),
+    postLeadOfferSocials: normalizePostLeadOfferSocials(
+      raw as Partial<PartnerSiteDraft> & Record<string, unknown>
+    ),
     logoDataUrl: asString(raw.logoDataUrl)
-  };
+  });
 }
 
 /** Подставить тексты первого экрана/каталога как на сайте (контакты и лого не трогает) */
@@ -201,7 +242,7 @@ export function draftDefaultsFromPartner(partner: {
     .replace(/^-|-$/g, "")
     .slice(0, 32);
 
-  return {
+  return withDemoPartnerSocials({
     ...emptyPartnerSiteDraft,
     name: partner.companyName,
     subdomain: slug || "partner",
@@ -216,5 +257,5 @@ export function draftDefaultsFromPartner(partner: {
     ctaLabel: emptyPartnerSiteDraft.ctaLabel,
     inquiryEmail: partner.email,
     logoDataUrl: ""
-  };
+  });
 }

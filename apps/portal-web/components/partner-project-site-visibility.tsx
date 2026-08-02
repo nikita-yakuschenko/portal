@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, EyeOff } from "lucide-react";
+import { IconCircleCheck, IconEyeOff } from "@tabler/icons-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,11 @@ type PricingRow = {
   markupPercent: number | null;
   publicPrice: number | null;
   isPublished: boolean;
-  extras: Array<{ id?: string; name: string; price?: number; note?: string }>;
+  extras: Array<{
+    id: string;
+    title: string;
+    items: Array<{ id: string; name: string; price?: number; note?: string }>;
+  }>;
 };
 
 /** Публикация проекта на сайт компании — отдельно от ценообразования */
@@ -37,7 +42,6 @@ export function PartnerProjectSiteVisibility({
   const [row, setRow] = useState<PricingRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     void (async () => {
@@ -55,7 +59,6 @@ export function PartnerProjectSiteVisibility({
   async function toggle(nextPublished: boolean) {
     if (!canManage) return;
     setSaving(true);
-    setNotice("");
     try {
       await apiFetch("/api/partner/pricing", {
         method: "PUT",
@@ -80,8 +83,11 @@ export function PartnerProjectSiteVisibility({
               extras: []
             }
       );
+      toast.success(
+        nextPublished ? "Проект опубликован на сайте" : "Проект скрыт с сайта"
+      );
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Не удалось сохранить");
+      toast.error(err instanceof Error ? err.message : "Не удалось изменить публикацию");
     } finally {
       setSaving(false);
     }
@@ -115,11 +121,14 @@ export function PartnerProjectSiteVisibility({
         ) : null}
       </CardHeader>
       <CardContent className="flex flex-wrap items-center gap-3">
-        <Badge variant={published ? "default" : "secondary"}>
-          {published ? <CheckCircle2 /> : <EyeOff />}
+        <Badge
+          key={published ? "published" : "hidden"}
+          variant={published ? "default" : "secondary"}
+          className="animate-in fade-in zoom-in-95 duration-200"
+        >
+          {published ? <IconCircleCheck /> : <IconEyeOff />}
           {published ? "Опубликован на сайте" : "Скрыт с сайта"}
         </Badge>
-        {notice ? <span className="text-destructive text-xs">{notice}</span> : null}
       </CardContent>
     </Card>
   );

@@ -23,10 +23,32 @@ npm install
 Copy-Item .env.example .env
 docker compose up -d postgres
 npm run db:migrate -w @b2b/api
-npm run dev:api
 npm run typecheck
 npm run test
 ```
+
+## Локальный запуск (порядок)
+
+Два отдельных терминала PowerShell из корня репозитория `D:\portal`.
+
+1. **Сначала API** (порт `4000`):
+
+```powershell
+npm run dev:api
+```
+
+2. **Потом портал** (порт `3000`):
+
+```powershell
+npm run dev:portal
+```
+
+Перед первым запуском: Postgres (`docker compose up -d postgres`) и миграции (`npm run db:migrate -w @b2b/api`).
+
+- API: http://localhost:4000  
+- Портал: http://localhost:3000  
+
+Опционально сайт-рантайм: `npm run dev:site` (отдельный терминал, после API).
 
 ## Tilda sync
 
