@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { domainToASCII } from "node:url";
 
 import { and, eq, ne } from "drizzle-orm";
 import {
@@ -30,12 +31,24 @@ export type PartnerSiteRecord = {
 };
 
 function normalizeHost(host: string): string {
-  return host
+  const cleaned = host
     .trim()
     .toLowerCase()
     .replace(/^https?:\/\//, "")
     .replace(/:\d+$/, "")
-    .replace(/\/$/, "");
+    .replace(/\/$/, "")
+    .split("/")[0]
+    ?.trim() ?? "";
+
+  if (!cleaned) return "";
+
+  // Кириллица / IDN → punycode (Host от браузера и Dokploy — ASCII)
+  try {
+    const ascii = domainToASCII(cleaned);
+    return ascii || cleaned;
+  } catch {
+    return cleaned;
+  }
 }
 
 function slugifySubdomain(value: string): string {

@@ -100,6 +100,10 @@ Compose: [`docker-compose.dokploy.yml`](docker-compose.dokploy.yml).
 В Dokploy каждый → **site-runtime** + TLS.  
 В `/partner/site` поле «домен» = FQDN без `https://`.
 
+Кириллические домены (`.рф`) Dokploy часто не принимает в поле Host — укажи **punycode**, например:
+`авангардстрой36.рф` → `xn--36-6kcaakij9bxbowbnp.xn--p1ai`
+(в кабинете можно писать кириллицей: API нормализует в punycode).
+
 ## 4. Чеклист партнёра (×3)
 
 1. Approve заявки в HQ на `b2b.avgst.ru` → выдать логин/пароль.
