@@ -638,6 +638,7 @@ function PartnerSiteContent() {
                         </Button>
                       ) : (
                         <p className="text-muted-foreground text-xs">
+                          Для превью в Telegram лучше PNG/WEBP (SVG там часто не показывается).
                           ICO, PNG, SVG или WEBP, до ~300 КБ.
                         </p>
                       )}

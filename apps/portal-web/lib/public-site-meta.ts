@@ -18,7 +18,11 @@ function apiBase(): string {
 export async function fetchPublishedSiteByHost(
   host: string
 ): Promise<ResolvedPublicSite | null> {
-  const cleaned = host.trim().toLowerCase().replace(/:\d+$/, "");
+  const cleaned = host
+    .trim()
+    .toLowerCase()
+    .replace(/:\d+$/, "")
+    .replace(/^www\./, "");
   if (!cleaned) return null;
 
   try {
@@ -78,12 +82,21 @@ export function decodeDataUrl(
   }
 }
 
+function isRasterDataUrl(dataUrl: string): boolean {
+  return /^data:image\/(png|jpe?g|webp|gif)/i.test(dataUrl.trim());
+}
+
 export function pickBrandImageDataUrl(config: PartnerSiteDraft): string {
   return config.faviconDataUrl.trim() || config.logoDataUrl.trim();
 }
 
+/** Telegram не показывает SVG в превью — только растр. */
 export function pickOgImageDataUrl(config: PartnerSiteDraft): string {
-  return config.logoDataUrl.trim() || config.faviconDataUrl.trim();
+  const logo = config.logoDataUrl.trim();
+  const favicon = config.faviconDataUrl.trim();
+  if (logo && isRasterDataUrl(logo)) return logo;
+  if (favicon && isRasterDataUrl(favicon)) return favicon;
+  return "";
 }
 
 export function buildPublicSiteMetadata(input: {

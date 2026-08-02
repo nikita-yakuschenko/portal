@@ -19,6 +19,15 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  const host = request.headers.get("host") ?? "";
+  // www.example.ru → example.ru (иначе Host не резолвится в БД)
+  if (host.toLowerCase().startsWith("www.")) {
+    const url = request.nextUrl.clone();
+    url.host = host.slice(4);
+    url.protocol = "https:";
+    return NextResponse.redirect(url, 308);
+  }
+
   const { pathname } = request.nextUrl;
 
   // Favicon по Host партнёра (не общая иконка кабинета)

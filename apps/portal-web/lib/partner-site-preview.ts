@@ -4,6 +4,12 @@ import { resolvePartnerSiteSocials } from "@/lib/partner-site-socials";
 /** Публичный runtime (Dokploy site) — пути без /partner/site/preview */
 export const isPublicSiteRuntime = process.env.NEXT_PUBLIC_APP_ROLE === "site";
 
+/** Клиентский fallback: на партнёрском домене путь не из кабинета */
+export function isPublicSitePathname(pathname: string): boolean {
+  if (isPublicSiteRuntime) return true;
+  return Boolean(pathname) && !pathname.startsWith("/partner/");
+}
+
 export const PREVIEW_BASE = isPublicSiteRuntime ? "" : "/partner/site/preview";
 
 export const previewPaths = {

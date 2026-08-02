@@ -85,8 +85,11 @@ function BrandMarkFooter({ draft }: { draft: PartnerSiteDraft }) {
 
 /** Главная и карточка проекта — шапка поверх hero */
 function isHeroUnderlay(pathname: string): boolean {
-  if (pathname === previewPaths.home) return true;
-  return /^\/partner\/site\/preview\/catalog\/[^/]+$/.test(pathname);
+  if (pathname === previewPaths.home || pathname === "/") return true;
+  // Публичный runtime: /catalog/:slug ; кабинет: /partner/site/preview/catalog/:slug
+  if (/^\/catalog\/[^/]+$/.test(pathname)) return true;
+  if (/^\/partner\/site\/preview\/catalog\/[^/]+$/.test(pathname)) return true;
+  return false;
 }
 
 function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {

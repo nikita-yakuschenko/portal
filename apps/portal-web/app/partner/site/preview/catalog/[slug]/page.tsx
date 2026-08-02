@@ -32,7 +32,7 @@ import {
   previewPaths,
   primaryImage,
   groupStorefrontAssets,
-  isPublicSiteRuntime,
+  isPublicSitePathname,
   type StorefrontProject
 } from "@/lib/partner-site-preview";
 import { catalogProseDescription } from "@/lib/strip-html";
@@ -236,18 +236,25 @@ export default function PartnerSiteProjectDetailPage() {
     );
   }, [projects, params.slug]);
 
-  // Список витрины отдаёт только обложку — полные фото догружаем отдельно
+  // Список витрины отдаёт только обложку — полные фото догружаем отдельно.
+  // На публичном домене кабинетный API даёт 401 — берём /api/public/...
   useEffect(() => {
     const key = params.slug;
     if (!key) return;
-    if (isPublicSiteRuntime && !partnerId) return;
+
+    const onPublicSite =
+      typeof window !== "undefined" && isPublicSitePathname(window.location.pathname);
+
+    if (onPublicSite && !partnerId) return;
+
     let cancelled = false;
     setDetail(null);
     void (async () => {
       try {
-        const path = isPublicSiteRuntime
-          ? `/api/public/sites/${partnerId}/projects/${encodeURIComponent(key)}`
-          : `/api/partner/storefront/projects/${encodeURIComponent(key)}`;
+        const path =
+          onPublicSite && partnerId
+            ? `/api/public/sites/${partnerId}/projects/${encodeURIComponent(key)}`
+            : `/api/partner/storefront/projects/${encodeURIComponent(key)}`;
         const full = await apiFetch<StorefrontProject>(path);
         if (!cancelled) setDetail(full);
       } catch {
