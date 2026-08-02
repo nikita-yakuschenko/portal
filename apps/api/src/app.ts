@@ -147,11 +147,24 @@ export async function buildApp() {
   await app.register(cookie);
   await app.register(jwt, {
     secret: config.jwtSecret,
+    sign: {
+      // Совпадает с maxAge cookie — иначе JWT протухнет раньше cookie
+      expiresIn: "30d"
+    },
     cookie: {
       cookieName: "b2b_session",
       signed: false
     }
   });
+
+  // Persistent session: без maxAge cookie = session-only и сгорает при закрытии браузера
+  const sessionCookieOptions = {
+    httpOnly: true,
+    path: "/",
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 60 * 60 * 24 * 30
+  };
 
   await portalService.ensureCompanyAdmin({
     email: config.adminEmail,
@@ -310,17 +323,13 @@ export async function buildApp() {
       fullName: user.fullName
     } satisfies JwtPayload);
 
-    reply.setCookie("b2b_session", token, {
-      httpOnly: true,
-      path: "/",
-      sameSite: "lax"
-    });
+    reply.setCookie("b2b_session", token, sessionCookieOptions);
 
     return { user };
   });
 
   app.post("/api/auth/logout", async (_request, reply) => {
-    reply.clearCookie("b2b_session", { path: "/" });
+    reply.clearCookie("b2b_session", sessionCookieOptions);
     return { ok: true };
   });
 
