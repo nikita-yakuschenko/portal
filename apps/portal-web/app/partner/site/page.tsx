@@ -140,6 +140,23 @@ function PartnerSiteContent() {
     reader.readAsDataURL(file);
   }
 
+  function handleFaviconChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 300_000) {
+      toast.error("Favicon слишком большой", {
+        description: "Загрузите файл до ~300 КБ (ICO/PNG/SVG/WEBP)."
+      });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      setForm((prev) => ({ ...prev, faviconDataUrl: result }));
+    };
+    reader.readAsDataURL(file);
+  }
+
   async function persistSite(publish = false) {
     if (!form.name.trim() || !form.subdomain.trim()) {
       toast.error("Заполните название и поддомен", {
@@ -552,16 +569,23 @@ function PartnerSiteContent() {
               <Card>
                 <CardHeader>
                   <CardTitle>SEO</CardTitle>
+                  <CardDescription>
+                    Title и описание вкладки браузера; favicon — иконка рядом с заголовком.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-6">
                   <FieldGroup>
                     <Field>
-                      <FieldLabel htmlFor="site-seo-title">Title</FieldLabel>
+                      <FieldLabel htmlFor="site-seo-title">Title вкладки браузера</FieldLabel>
                       <Input
                         id="site-seo-title"
+                        placeholder={form.name.trim() || "Название сайта"}
                         value={form.seoTitle}
                         onChange={(e) => updateField("seoTitle", e.target.value)}
                       />
+                      <p className="text-muted-foreground text-xs">
+                        Если пусто — подставится название сайта из раздела «Основное».
+                      </p>
                     </Field>
                     <Field>
                       <FieldLabel htmlFor="site-seo-description">Description</FieldLabel>
@@ -573,6 +597,45 @@ function PartnerSiteContent() {
                       />
                     </Field>
                   </FieldGroup>
+
+                  <div className="flex flex-wrap items-center gap-4 border-t pt-6">
+                    <div className="bg-muted flex size-14 items-center justify-center overflow-hidden rounded-lg border border-dashed">
+                      {form.faviconDataUrl ? (
+                        <img
+                          src={form.faviconDataUrl}
+                          alt="Favicon"
+                          className="size-8 object-contain"
+                        />
+                      ) : (
+                        <span className="text-muted-foreground text-[10px]">Нет</span>
+                      )}
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col gap-2">
+                      <FieldLabel htmlFor="site-favicon">Favicon</FieldLabel>
+                      <Input
+                        id="site-favicon"
+                        type="file"
+                        accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/svg+xml,image/webp"
+                        onChange={handleFaviconChange}
+                        className="max-w-xs cursor-pointer"
+                      />
+                      {form.faviconDataUrl ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-fit"
+                          onClick={() => updateField("faviconDataUrl", "")}
+                        >
+                          Убрать favicon
+                        </Button>
+                      ) : (
+                        <p className="text-muted-foreground text-xs">
+                          ICO, PNG, SVG или WEBP, до ~300 КБ.
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 

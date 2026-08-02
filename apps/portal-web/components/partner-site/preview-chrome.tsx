@@ -7,6 +7,7 @@ import { IconMenu2, IconX } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
 import { ConsultationDialog } from "@/components/partner-site/consultation-dialog";
+import { SiteDocumentHead } from "@/components/partner-site/site-document-head";
 import { PartnerSiteSocialGlyph, PartnerSiteSocialIcon } from "@/components/partner-site/social-icons";
 import { usePartnerSitePreview } from "@/components/partner-site/preview-context";
 import { previewPaths } from "@/lib/partner-site-preview";
@@ -462,6 +463,7 @@ export function PartnerSitePreviewChrome({ children }: { children: React.ReactNo
 
   return (
     <div className="relative flex min-h-svh flex-col bg-[#F5F6F8] text-slate-950">
+      <SiteDocumentHead draft={draft} />
       <SiteHeader draft={draft} />
       <main className={cn("flex-1", !underlay && "pt-24")}>
         {loading ? <div className="min-h-[50vh]" aria-busy="true" /> : children}

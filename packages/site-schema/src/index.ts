@@ -29,7 +29,8 @@ export const partnerSiteDraftSchema = z.object({
   socialDzen: z.string(),
   postLeadOfferSocials: z.array(z.string()),
   popularProjectIds: z.array(z.string()).max(6),
-  logoDataUrl: z.string()
+  logoDataUrl: z.string(),
+  faviconDataUrl: z.string()
 });
 
 export type PartnerSiteDraft = z.infer<typeof partnerSiteDraftSchema>;
@@ -68,7 +69,8 @@ export const emptyPartnerSiteDraft: PartnerSiteDraft = {
   socialDzen: "",
   postLeadOfferSocials: ["telegram"],
   popularProjectIds: [],
-  logoDataUrl: ""
+  logoDataUrl: "",
+  faviconDataUrl: ""
 };
 
 function asString(value: unknown, fallback = ""): string {
@@ -140,7 +142,8 @@ export function normalizePartnerSiteDraft(
     socialDzen: asString(raw.socialDzen),
     postLeadOfferSocials: normalizePostLeadOfferSocials(raw),
     popularProjectIds: normalizePopularProjectIds(raw.popularProjectIds),
-    logoDataUrl: asString(raw.logoDataUrl)
+    logoDataUrl: asString(raw.logoDataUrl),
+    faviconDataUrl: asString(raw.faviconDataUrl)
   };
 }
 
