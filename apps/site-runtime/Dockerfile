@@ -13,7 +13,6 @@ RUN npm ci -w @b2b/portal-web --include-workspace-root=false
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/portal-web/node_modules ./apps/portal-web/node_modules
 COPY package.json package-lock.json ./
 COPY packages/domain ./packages/domain
 COPY packages/site-schema ./packages/site-schema
@@ -31,14 +30,13 @@ ENV NODE_ENV=production
 ENV APP_ROLE=site
 ENV NEXT_PUBLIC_APP_ROLE=site
 ENV NEXT_TELEMETRY_DISABLED=1
-WORKDIR /app/apps/portal-web
-COPY --from=builder /app/apps/portal-web/.next ./.next
-COPY --from=builder /app/apps/portal-web/public ./public
-COPY --from=builder /app/apps/portal-web/package.json ./package.json
-COPY --from=builder /app/apps/portal-web/next.config.mjs ./next.config.mjs
 COPY --from=builder /app/node_modules /app/node_modules
-COPY --from=builder /app/apps/portal-web/node_modules ./node_modules
 COPY --from=builder /app/packages /app/packages
+COPY --from=builder /app/apps/portal-web/.next /app/apps/portal-web/.next
+COPY --from=builder /app/apps/portal-web/public /app/apps/portal-web/public
+COPY --from=builder /app/apps/portal-web/package.json /app/apps/portal-web/package.json
+COPY --from=builder /app/apps/portal-web/next.config.mjs /app/apps/portal-web/next.config.mjs
+WORKDIR /app/apps/portal-web
 EXPOSE 3410
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3410/ || exit 1

@@ -39,7 +39,8 @@ services:
       retries: 3
       start_period: 40s
 
-  portal-web:
+  # Имя сервиса = то, что указано в Dokploy Domains (сейчас: portal)
+  portal:
     build:
       context: .
       dockerfile: apps/portal-web/Dockerfile

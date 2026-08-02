@@ -8,12 +8,12 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
 COPY packages/domain/package.json packages/domain/
 COPY packages/site-schema/package.json packages/site-schema/
+# npm workspaces кладёт зависимости в корневой node_modules
 RUN npm ci -w @b2b/api --include-workspace-root=false
 
 FROM base AS runner
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY package.json package-lock.json ./
 COPY packages/domain ./packages/domain
 COPY packages/site-schema ./packages/site-schema
