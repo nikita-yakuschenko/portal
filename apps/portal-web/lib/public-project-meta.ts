@@ -55,9 +55,11 @@ export function buildProjectShareMetadata(input: {
   const { title, description } = projectShareCopy(shareInput, company);
   const hasImage = Boolean(primaryImage(project));
   const pageUrl = `${origin}/catalog/${encodeURIComponent(slug)}`;
-  // Свой origin: Telegram часто не строит превью с картинкой с чужого CDN
-  const ogImage = `${origin}/site-branding/project-og?slug=${encodeURIComponent(slug)}`;
+  // Без ?query — Telegram часто не подтягивает og:image с параметрами
+  const ogImage = `${origin}/site-branding/project-og/${encodeURIComponent(slug)}.jpg`;
   const shortTitle = title.replace(/\.$/, "");
+  // site_name короткий, иначе Telegram ставит его вместо title
+  const brand = company || siteName;
 
   return {
     metadataBase: new URL(origin),
@@ -67,11 +69,20 @@ export function buildProjectShareMetadata(input: {
       type: "website",
       locale: "ru_RU",
       url: pageUrl,
-      siteName,
+      siteName: brand,
       title: shortTitle,
       description: description || undefined,
       images: hasImage
-        ? [{ url: ogImage, alt: project.name, width: 1200, height: 630 }]
+        ? [
+            {
+              url: ogImage,
+              secureUrl: ogImage,
+              alt: project.name,
+              type: "image/jpeg",
+              width: 1200,
+              height: 630
+            }
+          ]
         : undefined
     },
     twitter: {

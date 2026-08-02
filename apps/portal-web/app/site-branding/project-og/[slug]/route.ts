@@ -5,10 +5,21 @@ import { fetchPublishedSiteByHost } from "@/lib/public-site-meta";
 import { fetchPublicStorefrontProject } from "@/lib/public-project-meta";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-/** Прокси обложки проекта — Telegram часто не тянет картинки с чужих CDN. */
-export async function GET(request: NextRequest) {
-  const slug = request.nextUrl.searchParams.get("slug")?.trim() ?? "";
+function cleanSlug(raw: string): string {
+  return decodeURIComponent(raw)
+    .trim()
+    .replace(/\.(jpe?g|png|webp)$/i, "");
+}
+
+/** /site-branding/project-og/barnhouse-113.jpg — без query, иначе Telegram часто не тянет картинку */
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ slug: string }> }
+) {
+  const { slug: rawSlug } = await context.params;
+  const slug = cleanSlug(rawSlug ?? "");
   if (!slug) {
     return new NextResponse(null, { status: 400 });
   }
@@ -28,20 +39,26 @@ export async function GET(request: NextRequest) {
 
   try {
     const upstream = await fetch(imageUrl, {
-      headers: { Accept: "image/*,*/*" },
-      next: { revalidate: 3600 }
+      headers: {
+        Accept: "image/jpeg,image/png,image/webp,image/*,*/*",
+        "User-Agent": "AVGST-OG-Proxy/1.0"
+      },
+      cache: "force-cache"
     });
     if (!upstream.ok) {
       return new NextResponse(null, { status: 502 });
     }
 
     const contentType = upstream.headers.get("content-type") || "image/jpeg";
-    const body = await upstream.arrayBuffer();
+    const body = Buffer.from(await upstream.arrayBuffer());
+
     return new NextResponse(body, {
       status: 200,
       headers: {
-        "Content-Type": contentType,
-        "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400"
+        "Content-Type": contentType.startsWith("image/") ? contentType : "image/jpeg",
+        "Content-Length": String(body.length),
+        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+        "Content-Disposition": `inline; filename="${slug}.jpg"`
       }
     });
   } catch {
