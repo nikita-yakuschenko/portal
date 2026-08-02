@@ -24,6 +24,7 @@ import {
 } from "@/lib/partner-site-favorites";
 import {
   filterStorefrontProjects,
+  isPublicSiteRuntime,
   socialLinks,
   type StorefrontProject
 } from "@/lib/partner-site-preview";
@@ -49,17 +50,14 @@ export type PartnerLegalInfo = {
 type OpenLeadFormOptions = {
   kind: LeadFormKind;
   projectName?: string;
-  /** Состав конфигуратора для текста заявки */
   selectionSummary?: string;
-  /** Технология проекта — для оффера подборки после заявки */
   technology?: string;
-  /** Превью проекта для шага «спасибо» */
   projectImageUrl?: string;
+  projectId?: string;
 };
 
 type PreviewState = {
   draft: PartnerSiteDraft | null;
-  /** Юр. реквизиты партнёра для подвала */
   partnerLegal: PartnerLegalInfo | null;
   projects: StorefrontProject[];
   host: string;
@@ -72,15 +70,28 @@ type PreviewState = {
   consultSelectionSummary: string | undefined;
   consultTechnology: string | undefined;
   consultProjectImageUrl: string | undefined;
+  consultProjectId: string | undefined;
   openLeadForm: (options: OpenLeadFormOptions) => void;
   setConsultOpen: (open: boolean) => void;
+  submitLead: (input: {
+    customerName: string;
+    customerPhone: string;
+    message?: string;
+    projectId?: string;
+  }) => Promise<void>;
   loading: boolean;
   error: string;
 };
 
 const PreviewContext = createContext<PreviewState | null>(null);
 
-function toPartnerLegal(partner: MeResponse["partner"]): PartnerLegalInfo | null {
+function toPartnerLegal(
+  partner:
+    | MeResponse["partner"]
+    | { companyName: string; legalName?: string | null; inn?: string | null }
+    | null
+    | undefined
+): PartnerLegalInfo | null {
   if (!partner) return null;
   return {
     companyName: partner.companyName.trim(),
@@ -92,6 +103,7 @@ function toPartnerLegal(partner: MeResponse["partner"]): PartnerLegalInfo | null
 export function PartnerSitePreviewProvider({ children }: { children: ReactNode }) {
   const [draft, setDraft] = useState<PartnerSiteDraft | null>(null);
   const [partnerLegal, setPartnerLegal] = useState<PartnerLegalInfo | null>(null);
+  const [partnerId, setPartnerId] = useState<string | null>(null);
   const [projects, setProjects] = useState<StorefrontProject[]>([]);
   const [favorites, setFavorites] = useState<Set<string>>(() => new Set());
   const [consultOpen, setConsultOpen] = useState(false);
@@ -100,13 +112,14 @@ export function PartnerSitePreviewProvider({ children }: { children: ReactNode }
   const [consultSelectionSummary, setConsultSelectionSummary] = useState<string | undefined>();
   const [consultTechnology, setConsultTechnology] = useState<string | undefined>();
   const [consultProjectImageUrl, setConsultProjectImageUrl] = useState<string | undefined>();
+  const [consultProjectId, setConsultProjectId] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const host = draft ? publicSiteHost(draft) : "";
 
-  // Синхронно до paint — шапка сайта без вспышки «загрузка»
   useLayoutEffect(() => {
+    if (isPublicSiteRuntime) return;
     const stored = loadPartnerSiteDraft();
     if (stored) setDraft(stored);
   }, []);
@@ -114,15 +127,43 @@ export function PartnerSitePreviewProvider({ children }: { children: ReactNode }
   useEffect(() => {
     void (async () => {
       try {
-        const stored = loadPartnerSiteDraft();
-        const [me, storefront] = await Promise.all([
+        if (isPublicSiteRuntime) {
+          const currentHost =
+            typeof window !== "undefined" ? window.location.host : "";
+          const site = await apiFetch<{
+            partnerId: string;
+            config: PartnerSiteDraft;
+            partner?: {
+              companyName: string;
+              legalName?: string | null;
+              inn?: string | null;
+            };
+          }>(`/api/public/sites/resolve?host=${encodeURIComponent(currentHost)}`);
+
+          setPartnerId(site.partnerId);
+          setDraft(site.config);
+          setPartnerLegal(toPartnerLegal(site.partner ?? { companyName: site.config.name }));
+
+          const storefront = await apiFetch<StorefrontProject[]>(
+            `/api/public/sites/${site.partnerId}/projects`
+          );
+          setProjects(filterStorefrontProjects(storefront));
+          return;
+        }
+
+        const [me, site, storefront] = await Promise.all([
           apiFetch<MeResponse>("/api/partner/me"),
+          apiFetch<{ partnerId: string; config: PartnerSiteDraft }>("/api/partner/site"),
           apiFetch<StorefrontProject[]>("/api/partner/storefront/projects")
         ]);
 
+        setPartnerId(site.partnerId);
         setPartnerLegal(toPartnerLegal(me.partner));
 
-        if (stored) setDraft(stored);
+        const fromApi = site.config?.name?.trim() ? site.config : null;
+        const stored = loadPartnerSiteDraft();
+        if (fromApi) setDraft(fromApi);
+        else if (stored) setDraft(stored);
         else if (me.partner) setDraft(draftDefaultsFromPartner(me.partner));
         else setError("Нет данных партнёра");
 
@@ -163,12 +204,45 @@ export function PartnerSitePreviewProvider({ children }: { children: ReactNode }
     setConsultSelectionSummary(options.selectionSummary);
     setConsultTechnology(options.technology);
     setConsultProjectImageUrl(options.projectImageUrl);
+    setConsultProjectId(options.projectId);
     setConsultOpen(true);
   }, []);
 
   const handleConsultOpenChange = useCallback((open: boolean) => {
     setConsultOpen(open);
   }, []);
+
+  const submitLead = useCallback(
+    async (input: {
+      customerName: string;
+      customerPhone: string;
+      message?: string;
+      projectId?: string;
+    }) => {
+      const body: Record<string, string> = {
+        customerName: input.customerName,
+        customerPhone: input.customerPhone
+      };
+      const projectId = input.projectId ?? consultProjectId;
+      if (projectId) body.projectId = projectId;
+      if (input.message) body.message = input.message;
+
+      if (isPublicSiteRuntime) {
+        if (!partnerId) throw new Error("Сайт не загружен");
+        await apiFetch(`/api/public/sites/${partnerId}/leads`, {
+          method: "POST",
+          body: JSON.stringify(body)
+        });
+        return;
+      }
+
+      await apiFetch("/api/partner/leads", {
+        method: "POST",
+        body: JSON.stringify(body)
+      });
+    },
+    [partnerId, consultProjectId]
+  );
 
   const value = useMemo<PreviewState>(
     () => ({
@@ -185,8 +259,10 @@ export function PartnerSitePreviewProvider({ children }: { children: ReactNode }
       consultSelectionSummary,
       consultTechnology,
       consultProjectImageUrl,
+      consultProjectId,
       openLeadForm,
       setConsultOpen: handleConsultOpenChange,
+      submitLead,
       loading,
       error
     }),
@@ -203,8 +279,10 @@ export function PartnerSitePreviewProvider({ children }: { children: ReactNode }
       consultSelectionSummary,
       consultTechnology,
       consultProjectImageUrl,
+      consultProjectId,
       openLeadForm,
       handleConsultOpenChange,
+      submitLead,
       loading,
       error
     ]

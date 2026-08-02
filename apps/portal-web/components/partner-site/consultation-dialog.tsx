@@ -40,7 +40,7 @@ function technologyPhrase(technology?: string): string | null {
   return technologyBadgeCode(technology).toLowerCase();
 }
 
-function DialogCloseBtn({ onClick }: { onClick?: () => void }) {
+function DialogCloseBtn({ onClick }: { onClick?: (() => void) | undefined }) {
   const className =
     "absolute top-4 right-4 z-20 inline-flex size-9 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/8 hover:text-white focus-visible:ring-[3px] focus-visible:ring-white/30 focus-visible:outline-none";
   if (onClick) {
@@ -76,10 +76,7 @@ function BrandAside({
         }}
       />
       <div className="relative">
-        <p className="text-[0.65rem] font-semibold tracking-[0.2em] text-white/35 uppercase">
-          Партнёр
-        </p>
-        <div className="mt-5 flex items-center gap-4">
+        <div className="flex items-center gap-4">
           {logoDataUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -139,6 +136,36 @@ function ProjectAside({
   );
 }
 
+const FACTORY_TOUR_IMAGE = "/landing/factory.jpg";
+const AVGST_LOGO = "/logo.svg";
+
+/** Правая колонка формы экскурсии: фото завода + лого AVGST */
+function FactoryAside() {
+  return (
+    <div className="relative min-h-[18rem] overflow-hidden border-t border-white/10 md:min-h-full md:border-t-0 md:border-l md:border-white/10">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={FACTORY_TOUR_IMAGE}
+        alt="Завод Авангард Строй"
+        className="absolute inset-0 h-full w-full object-cover"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-black/10" />
+      <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={AVGST_LOGO}
+          alt="Авангард Строй"
+          className="h-11 w-11 object-contain drop-shadow"
+        />
+        <p className="mt-3 text-lg font-bold tracking-tight text-white">Авангард Строй</p>
+        <p className="mt-1 text-sm leading-relaxed text-white/70">
+          Нижний Новгород, ул. Зайцева, 31к1
+        </p>
+      </div>
+    </div>
+  );
+}
+
 const leftMotion = {
   initial: { opacity: 0, x: -16 },
   animate: { opacity: 1, x: 0 },
@@ -166,7 +193,8 @@ export function ConsultationDialog({
   technology,
   projectImageUrl,
   brand,
-  postLeadSocialPool
+  postLeadSocialPool,
+  onSubmitLead
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -182,8 +210,15 @@ export function ConsultationDialog({
   };
   /** Пул для ротации: на каждую заявку берём следующую сеть */
   postLeadSocialPool: PartnerSiteSocialLink[];
+  /** Отправка лида на сервер; если нет — только UI-превью */
+  onSubmitLead?: (input: {
+    customerName: string;
+    customerPhone: string;
+    message?: string;
+  }) => Promise<void>;
 }) {
   const form = LEAD_FORMS[kind];
+  const isFactoryTour = kind === "factoryTour";
   const [step, setStep] = useState<DialogStep>("form");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -191,6 +226,7 @@ export function ConsultationDialog({
   const [email, setEmail] = useState("");
   const [newsletterConsent, setNewsletterConsent] = useState(true);
   const [offeredSocial, setOfferedSocial] = useState<PartnerSiteSocialLink | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   function reset() {
     setStep("form");
@@ -206,7 +242,7 @@ export function ConsultationDialog({
     if (!open) reset();
   }, [open]);
 
-  // После галочки успеха — на шаг с e-mail
+  // После галочки успеха — на шаг с e-mail (для экскурсии — финальный thanks без апсейла)
   useEffect(() => {
     if (step !== "success") return;
     const timer = window.setTimeout(() => setStep("thanks"), 1100);
@@ -222,7 +258,7 @@ export function ConsultationDialog({
     else close();
   }
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     const trimmedName = name.trim();
     setPhoneTouched(true);
@@ -236,9 +272,31 @@ export function ConsultationDialog({
       return;
     }
 
-    // На эту заявку — следующая сеть из пула (round-robin)
-    setOfferedSocial(takeNextPostLeadSocial(postLeadSocialPool));
-    // Превью: заявка не уходит на сервер
+    const messageParts = [
+      form.title,
+      projectName ? `Проект: ${projectName}` : "",
+      selectionSummary?.trim() ?? ""
+    ].filter(Boolean);
+
+    if (onSubmitLead) {
+      setSubmitting(true);
+      try {
+        await onSubmitLead({
+          customerName: trimmedName,
+          customerPhone: phone,
+          message: messageParts.join("\n")
+        });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Не удалось отправить заявку");
+        setSubmitting(false);
+        return;
+      }
+      setSubmitting(false);
+    }
+
+    setOfferedSocial(
+      isFactoryTour ? null : takeNextPostLeadSocial(postLeadSocialPool)
+    );
     setStep("success");
   }
 
@@ -264,8 +322,9 @@ export function ConsultationDialog({
   const brandName = brand.name.trim();
   const brandAddress = brand.address.trim();
   const brandLogo = brand.logoDataUrl.trim();
-  // После формы справа — дом, если есть; иначе бренд (размер диалога не скачет)
-  const showProjectAside = Boolean(projectImageUrl) && step !== "form";
+  // После формы справа — дом, если есть; иначе бренд. Экскурсия — всегда фото завода.
+  const showProjectAside =
+    !isFactoryTour && Boolean(projectImageUrl) && step !== "form";
   const socialCopy = offeredSocial ? postLeadSocialCopy(offeredSocial.id) : null;
 
   return (
@@ -281,17 +340,17 @@ export function ConsultationDialog({
         overlayClassName="bg-black/70 backdrop-blur-[2px]"
         className={cn(
           // Высота формы фиксирована на всех шагах — телефон НЕ раздувает её
-          "h-[32rem] gap-0 overflow-hidden rounded-2xl border border-white/12 bg-[#0f1216] p-0 text-white shadow-2xl ring-0 sm:max-w-3xl",
-          step === "socials" && "!overflow-visible"
+          "h-[32rem] gap-0 overflow-hidden rounded-2xl border border-white/12 bg-[#0f1216] p-0 text-white shadow-2xl ring-0 sm:max-w-lg md:max-w-3xl",
+          step === "socials" && "md:!overflow-visible"
         )}
       >
-        <div className={cn("relative h-full", step === "socials" && "!overflow-visible")}>
+        <div className={cn("relative h-full", step === "socials" && "md:!overflow-visible")}>
           <DialogCloseBtn onClick={step === "form" ? undefined : close} />
 
           <div
             className={cn(
               "grid h-full md:grid-cols-2",
-              step === "socials" && "!overflow-visible"
+              step === "socials" && "md:!overflow-visible"
             )}
           >
             <div className="flex h-full min-h-0 flex-col overflow-hidden px-7 py-8 sm:px-9 sm:py-9">
@@ -302,7 +361,7 @@ export function ConsultationDialog({
                       <DialogTitle className="text-xl font-extrabold tracking-tight text-white uppercase sm:text-2xl">
                         {form.title}
                       </DialogTitle>
-                      <DialogDescription className="text-sm leading-relaxed text-white/55">
+                      <DialogDescription className="whitespace-pre-line text-sm leading-relaxed text-white/55">
                         {form.description(projectName)}
                       </DialogDescription>
                       {selectionSummary?.trim() ? (
@@ -353,9 +412,10 @@ export function ConsultationDialog({
                         <Button
                           type="submit"
                           size="lg"
+                          disabled={submitting}
                           className="h-12 w-full rounded-lg bg-avgst-yellow text-sm font-bold text-slate-950 hover:bg-avgst-yellow/90"
                         >
-                          Отправить
+                          {submitting ? "Отправка…" : form.submitLabel}
                         </Button>
                         <button
                           type="button"
@@ -390,7 +450,33 @@ export function ConsultationDialog({
                   </motion.div>
                 ) : null}
 
-                {step === "thanks" ? (
+                {step === "thanks" && isFactoryTour ? (
+                  <motion.div key="thanks-factory" {...leftMotion} className="flex h-full w-full flex-col">
+                    <p className="text-[0.68rem] font-semibold tracking-[0.22em] text-avgst-yellow uppercase">
+                      Заявка принята
+                    </p>
+                    <DialogTitle className="mt-3 text-[1.7rem] leading-tight font-extrabold tracking-tight text-white sm:text-[1.85rem]">
+                      Спасибо за заявку
+                    </DialogTitle>
+                    <DialogDescription className="mt-3 max-w-md text-[0.95rem] leading-relaxed text-white/55">
+                      Мы согласуем с заводом дату экскурсии в Нижнем Новгороде и
+                      свяжемся с вами.
+                    </DialogDescription>
+
+                    <div className="mt-auto pt-6">
+                      <Button
+                        type="button"
+                        size="lg"
+                        className="h-12 w-full rounded-lg bg-avgst-yellow text-sm font-bold text-slate-950 hover:bg-avgst-yellow/90"
+                        onClick={close}
+                      >
+                        Закрыть
+                      </Button>
+                    </div>
+                  </motion.div>
+                ) : null}
+
+                {step === "thanks" && !isFactoryTour ? (
                   <motion.div key="thanks" {...leftMotion} className="flex h-full w-full flex-col">
                     <p className="text-[0.68rem] font-semibold tracking-[0.22em] text-avgst-yellow uppercase">
                       Спасибо
@@ -502,19 +588,24 @@ export function ConsultationDialog({
               </AnimatePresence>
             </div>
 
-            {step === "socials" && offeredSocial ? (
-              <ConsultationSocialPhone
-                social={offeredSocial}
-                brandName={brandName}
-                brandLogo={brandLogo}
-                projectImageUrl={projectImageUrl}
-                projectName={projectName}
-              />
-            ) : showProjectAside && projectImageUrl ? (
-              <ProjectAside imageUrl={projectImageUrl} projectName={projectName} />
-            ) : (
-              <BrandAside name={brandName} address={brandAddress} logoDataUrl={brandLogo} />
-            )}
+            {/* На мобилке только форма — без правой колонки с фото/брендом */}
+            <div className="hidden h-full min-h-0 md:block">
+              {step === "socials" && offeredSocial ? (
+                <ConsultationSocialPhone
+                  social={offeredSocial}
+                  brandName={brandName}
+                  brandLogo={brandLogo}
+                  projectImageUrl={projectImageUrl}
+                  projectName={projectName}
+                />
+              ) : isFactoryTour ? (
+                <FactoryAside />
+              ) : showProjectAside && projectImageUrl ? (
+                <ProjectAside imageUrl={projectImageUrl} projectName={projectName} />
+              ) : (
+                <BrandAside name={brandName} address={brandAddress} logoDataUrl={brandLogo} />
+              )}
+            </div>
           </div>
         </div>
       </DialogContent>

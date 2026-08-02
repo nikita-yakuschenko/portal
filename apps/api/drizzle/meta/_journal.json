@@ -71,6 +71,13 @@
       "when": 1786000000000,
       "tag": "0009_partner_extra_option_library",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786100000000,
+      "tag": "0010_partner_sites",
+      "breakpoints": true
     }
   ]
 }

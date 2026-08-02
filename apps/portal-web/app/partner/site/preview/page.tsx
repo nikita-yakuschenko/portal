@@ -7,8 +7,10 @@ import { IconArrowUpRight } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { usePartnerSitePreview } from "@/components/partner-site/preview-context";
 import { PartnerSiteProjectCard } from "@/components/partner-site/project-card";
+import { HomeContactsSection } from "@/components/partner-site/home-contacts-section";
+import { HomeProductionSection } from "@/components/partner-site/home-production-section";
 import { emptyPartnerSiteDraft } from "@/lib/partner-site-draft";
-import { previewPaths, primaryImage } from "@/lib/partner-site-preview";
+import { previewPaths, primaryImage, resolvePopularProjects } from "@/lib/partner-site-preview";
 
 const MSK_GREEN =
   "Строим современные каркасные и модульные дома";
@@ -49,7 +51,7 @@ export default function PartnerSiteHomePage() {
     draft.heroHeadline?.trim() ||
     `${MSK_GREEN} ${MSK_DARK}`;
   const [greenPart, darkPart] = splitHeadline(headline);
-  const featured = projects.slice(0, 6);
+  const featured = resolvePopularProjects(projects, draft.popularProjectIds);
 
   return (
     <>
@@ -88,7 +90,7 @@ export default function PartnerSiteHomePage() {
               <Button
                 type="button"
                 size="lg"
-                className="w-fit rounded-md bg-avgst-yellow px-5 text-sm font-bold uppercase tracking-wide text-slate-950 hover:bg-avgst-yellow/90"
+                className="h-10 w-fit rounded-md bg-avgst-yellow px-5 text-sm font-bold uppercase tracking-wide text-slate-950 hover:bg-avgst-yellow/90"
                 onClick={() => openLeadForm({ kind: "consultation" })}
               >
                 Получить консультацию
@@ -97,7 +99,7 @@ export default function PartnerSiteHomePage() {
                 asChild
                 size="lg"
                 variant="outline"
-                className="w-fit border-white/40 bg-white/5 px-5 text-sm font-bold uppercase tracking-wide text-white hover:bg-white/15 hover:text-white"
+                className="h-10 w-fit border-white/40 bg-white/5 px-5 text-sm font-bold uppercase tracking-wide text-white hover:bg-white/15 hover:text-white"
               >
                 <Link href={previewPaths.catalog} className="inline-flex items-center gap-2">
                   <IconArrowUpRight size={18} stroke={2.5} className="shrink-0" />
@@ -109,37 +111,43 @@ export default function PartnerSiteHomePage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-6 py-14">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-avgst-green">
-              Популярные дома
-            </p>
-            <h2 className="mt-2 text-2xl font-extrabold uppercase tracking-tight md:text-3xl">
-              {draft.catalogTitle || "Проекты домов"}
-            </h2>
+      <section className="bg-white">
+        <div className="mx-auto max-w-6xl px-6 py-14">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-avgst-green">
+                Популярные
+              </p>
+              <h2 className="mt-2 text-2xl font-extrabold uppercase tracking-tight md:text-3xl">
+                {draft.catalogTitle || "Проекты домов"}
+              </h2>
+            </div>
+            <Button asChild size="lg" variant="outline" className="h-10 border-slate-300">
+              <Link href={previewPaths.catalog}>Весь каталог</Link>
+            </Button>
           </div>
-          <Button asChild variant="outline" className="border-slate-300">
-            <Link href={previewPaths.catalog}>Весь каталог</Link>
-          </Button>
-        </div>
 
-        {featured.length === 0 ? (
-          <p className="mt-10 text-sm text-slate-500">Проекты скоро появятся.</p>
-        ) : (
-          <div className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {featured.map((project) => (
-              <PartnerSiteProjectCard
-                key={project.id}
-                project={project}
-                ctaLabel="Посмотреть проект"
-                favorite={favorites.has(project.id)}
-                onToggleFavorite={() => toggleFavorite(project.id)}
-              />
-            ))}
-          </div>
-        )}
+          {featured.length === 0 ? (
+            <p className="mt-10 text-sm text-slate-500">Проекты скоро появятся.</p>
+          ) : (
+            <div className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+              {featured.map((project) => (
+                <PartnerSiteProjectCard
+                  key={project.id}
+                  project={project}
+                  ctaLabel="Посмотреть проект"
+                  favorite={favorites.has(project.id)}
+                  onToggleFavorite={() => toggleFavorite(project.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </section>
+
+      <HomeProductionSection />
+
+      <HomeContactsSection />
     </>
   );
 }

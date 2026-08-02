@@ -7,7 +7,9 @@ import { z } from "zod";
 import { config } from "./config.js";
 import { StoreTildaClient, verifyOfficialTildaKeys } from "./modules/catalog/tilda-client.js";
 import { hashResetToken } from "./modules/auth/passwords.js";
+import { partnerSiteService } from "./modules/partners/partner-site-service.js";
 import { PortalService } from "./modules/portal/portal-service.js";
+import { partnerSiteDraftSchema } from "@b2b/site-schema";
 
 const applicationSchema = z.object({
   inn: z.string().regex(/^\d{10}(\d{2})?$/, "ИНН должен содержать 10 или 12 цифр"),
@@ -79,6 +81,15 @@ const createLeadSchema = z.object({
   customerPhone: z.string().min(5),
   customerEmail: z.email().optional(),
   message: z.string().optional()
+});
+
+const updatePartnerSiteSchema = z.object({
+  config: partnerSiteDraftSchema,
+  publish: z.boolean().optional()
+});
+
+const resolveSiteSchema = z.object({
+  host: z.string().min(1)
 });
 
 const passwordResetRequestSchema = z.object({
@@ -216,6 +227,68 @@ export async function buildApp() {
     } catch (error) {
       return reply.status(400).send({ message: error instanceof Error ? error.message : "Application failed" });
     }
+  });
+
+  app.get("/api/public/sites/resolve", async (request, reply) => {
+    const parsed = resolveSiteSchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const site = await partnerSiteService.resolveByHost(parsed.data.host);
+    if (!site) {
+      return reply.status(404).send({ message: "Сайт не найден" });
+    }
+    return site;
+  });
+
+  app.get("/api/public/sites/:partnerId/projects", async (request, reply) => {
+    const { partnerId } = request.params as { partnerId: string };
+    const published = await partnerSiteService.resolvePublishedByPartnerId(partnerId);
+    if (!published) {
+      return reply.status(404).send({ message: "Сайт не опубликован" });
+    }
+    return portalService.listPartnerStorefrontProjects(partnerId);
+  });
+
+  app.get("/api/public/sites/:partnerId/projects/:key", async (request, reply) => {
+    const { partnerId, key } = request.params as { partnerId: string; key: string };
+    const published = await partnerSiteService.resolvePublishedByPartnerId(partnerId);
+    if (!published) {
+      return reply.status(404).send({ message: "Сайт не опубликован" });
+    }
+    const project = await portalService.getPartnerStorefrontProject(partnerId, key);
+    if (!project) {
+      return reply.status(404).send({ message: "Проект не найден" });
+    }
+    return project;
+  });
+
+  app.post("/api/public/sites/:partnerId/leads", async (request, reply) => {
+    const { partnerId } = request.params as { partnerId: string };
+    const published = await partnerSiteService.resolvePublishedByPartnerId(partnerId);
+    if (!published) {
+      return reply.status(404).send({ message: "Сайт не опубликован" });
+    }
+    const parsed = createLeadSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const leadInput = {
+      partnerId,
+      customerName: parsed.data.customerName,
+      customerPhone: parsed.data.customerPhone
+    } as {
+      partnerId: string;
+      projectId?: string;
+      customerName: string;
+      customerPhone: string;
+      customerEmail?: string;
+      message?: string;
+    };
+    if (parsed.data.projectId !== undefined) leadInput.projectId = parsed.data.projectId;
+    if (parsed.data.customerEmail !== undefined) leadInput.customerEmail = parsed.data.customerEmail;
+    if (parsed.data.message !== undefined) leadInput.message = parsed.data.message;
+    return portalService.createLead(leadInput);
   });
 
   app.post("/api/auth/login", async (request, reply) => {
@@ -616,6 +689,52 @@ export async function buildApp() {
       return roleCheck;
     }
     return portalService.listPartnerStorefrontProjects(getAuthUser(request)!.partnerId!);
+  });
+
+  app.get("/api/partner/site", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    return partnerSiteService.getByPartnerId(getAuthUser(request)!.partnerId!);
+  });
+
+  app.put("/api/partner/site", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const parsed = updatePartnerSiteSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    try {
+      const payload: { config: typeof parsed.data.config; publish?: boolean } = {
+        config: parsed.data.config
+      };
+      if (parsed.data.publish === true) {
+        payload.publish = true;
+      }
+      return await partnerSiteService.updateSite(getAuthUser(request)!.partnerId!, payload);
+    } catch (error) {
+      return reply
+        .status(400)
+        .send({ message: error instanceof Error ? error.message : "Не удалось сохранить сайт" });
+    }
+  });
+
+  app.post("/api/partner/site/publish", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    try {
+      return await partnerSiteService.publish(getAuthUser(request)!.partnerId!);
+    } catch (error) {
+      return reply
+        .status(400)
+        .send({ message: error instanceof Error ? error.message : "Не удалось опубликовать сайт" });
+    }
   });
 
   app.get("/api/partner/storefront/projects/:key", async (request, reply) => {

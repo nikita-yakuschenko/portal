@@ -7,8 +7,10 @@ import {
   IconBed,
   IconHeart,
   IconRulerMeasure,
+  IconShare3,
   IconStairs
 } from "@tabler/icons-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,13 +44,40 @@ export function PartnerSiteProjectCard({
     setImageLoaded(false);
   }, [image]);
 
-  function handleImageLoad(event: React.SyntheticEvent<HTMLImageElement>) {
+  function handleImageLoad(_event: React.SyntheticEvent<HTMLImageElement>) {
     setImageLoaded(true);
   }
 
   function bindImage(el: HTMLImageElement | null) {
     // Кеш: onLoad мог уже не прийти
     if (el?.complete && el.naturalWidth > 0) setImageLoaded(true);
+  }
+
+  async function shareProject() {
+    const url =
+      typeof window !== "undefined" ? new URL(href, window.location.origin).href : href;
+    const shareData = {
+      title: project.name,
+      text: `Проект «${project.name}»`,
+      url
+    };
+
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        await navigator.share(shareData);
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      toast.success("Ссылка скопирована");
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("Ссылка скопирована");
+      } catch {
+        toast.error("Не удалось поделиться");
+      }
+    }
   }
 
   const specs: Array<{ icon: typeof IconRulerMeasure; label: string }> = [];
@@ -96,24 +125,39 @@ export function PartnerSiteProjectCard({
             </Badge>
           </div>
         </Link>
-        <button
-          type="button"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onToggleFavorite();
-          }}
-          className="absolute top-3 right-3 z-10 inline-flex size-9 items-center justify-center rounded-md bg-white/95 text-slate-500 shadow-sm backdrop-blur-sm transition hover:text-avgst-green focus-visible:ring-[3px] focus-visible:ring-avgst-green/40 focus-visible:outline-none"
-          aria-label={favorite ? "Убрать из избранного" : "В избранное"}
-          aria-pressed={favorite}
-        >
-          <IconHeart
-            className={cn(
-              "size-4 transition-transform duration-200 motion-reduce:transition-none",
-              favorite && "scale-110 fill-avgst-green text-avgst-green"
-            )}
-          />
-        </button>
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void shareProject();
+            }}
+            className="inline-flex size-9 items-center justify-center rounded-md bg-white/95 text-slate-500 shadow-sm backdrop-blur-sm transition hover:text-avgst-green focus-visible:ring-[3px] focus-visible:ring-avgst-green/40 focus-visible:outline-none"
+            aria-label="Поделиться"
+            title="Поделиться"
+          >
+            <IconShare3 className="size-4" stroke={1.75} />
+          </button>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onToggleFavorite();
+            }}
+            className="inline-flex size-9 items-center justify-center rounded-md bg-white/95 text-slate-500 shadow-sm backdrop-blur-sm transition hover:text-avgst-green focus-visible:ring-[3px] focus-visible:ring-avgst-green/40 focus-visible:outline-none"
+            aria-label={favorite ? "Убрать из избранного" : "В избранное"}
+            aria-pressed={favorite}
+          >
+            <IconHeart
+              className={cn(
+                "size-4 transition-transform duration-200 motion-reduce:transition-none",
+                favorite && "scale-110 fill-avgst-green text-avgst-green"
+              )}
+            />
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 p-4">
@@ -145,8 +189,8 @@ export function PartnerSiteProjectCard({
 
         <Button
           asChild
-          size="sm"
-          className="w-fit rounded-md bg-avgst-yellow px-4 font-semibold text-slate-950 hover:bg-avgst-yellow/90"
+          size="lg"
+          className="h-10 w-fit rounded-md bg-avgst-yellow px-4 font-semibold text-slate-950 hover:bg-avgst-yellow/90"
         >
           <Link href={href}>{ctaLabel || "Посмотреть проект"}</Link>
         </Button>

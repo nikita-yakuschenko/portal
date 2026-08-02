@@ -35,6 +35,7 @@ export const leadTypeEnum = pgEnum("lead_type", [
 export const leadDeliveryStatusEnum = pgEnum("lead_delivery_status", ["pending", "sent", "failed"]);
 export const inquiryStatusEnum = pgEnum("inquiry_status", ["new", "answered"]);
 export const syncStatusEnum = pgEnum("sync_status", ["running", "completed", "failed"]);
+export const partnerSiteStatusEnum = pgEnum("partner_site_status", ["draft", "published"]);
 
 export const partnerApplications = pgTable(
   "partner_applications",
@@ -247,3 +248,26 @@ export const auditLogs = pgTable("audit_logs", {
   payload: jsonb("payload").notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
+
+/** Публичный сайт партнёра: домен + JSON-конфиг витрины */
+export const partnerSites = pgTable(
+  "partner_sites",
+  {
+    id: text("id").primaryKey(),
+    partnerId: text("partner_id")
+      .notNull()
+      .references(() => partners.id, { onDelete: "cascade" }),
+    subdomain: text("subdomain").notNull(),
+    domain: text("domain"),
+    status: partnerSiteStatusEnum("status").notNull().default("draft"),
+    config: jsonb("config").notNull().default({}),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    partnerIdx: uniqueIndex("partner_sites_partner_id_idx").on(table.partnerId),
+    subdomainIdx: uniqueIndex("partner_sites_subdomain_idx").on(table.subdomain),
+    domainIdx: uniqueIndex("partner_sites_domain_idx").on(table.domain)
+  })
+);

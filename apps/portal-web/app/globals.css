@@ -209,8 +209,10 @@ option {
   display: none;
 }
 
-/* Деликатный скролл: тонкий, полупрозрачный, без серого трека */
+/* Деликатный скролл: тонкий, полупрозрачный, без серого трека.
+   scrollbar-gutter: stable — ширина страницы не прыгает при lock скролла модалками. */
 html {
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(17, 17, 17, 0.22) transparent;
   scroll-behavior: smooth;

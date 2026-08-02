@@ -7,7 +7,7 @@ import { IconMenu2, IconX } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
 import { ConsultationDialog } from "@/components/partner-site/consultation-dialog";
-import { PartnerSiteSocialIcon } from "@/components/partner-site/social-icons";
+import { PartnerSiteSocialGlyph, PartnerSiteSocialIcon } from "@/components/partner-site/social-icons";
 import { usePartnerSitePreview } from "@/components/partner-site/preview-context";
 import { previewPaths } from "@/lib/partner-site-preview";
 import { resolvePartnerSiteSocials, resolvePostLeadSocialPool } from "@/lib/partner-site-socials";
@@ -26,14 +26,9 @@ const NAV = [
     match: (path: string) => path.startsWith(previewPaths.catalog)
   },
   {
-    href: previewPaths.about,
-    label: "О нас",
-    match: (path: string) => path === previewPaths.about
-  },
-  {
     href: previewPaths.contacts,
     label: "Контакты",
-    match: (path: string) => path === previewPaths.contacts
+    match: (_path: string) => false
   }
 ] as const;
 
@@ -81,7 +76,7 @@ function BrandMarkFooter({ draft }: { draft: PartnerSiteDraft }) {
   }
 
   return (
-    <span className="text-lg font-bold uppercase tracking-wide text-slate-900">
+    <span className="text-lg font-bold uppercase tracking-wide text-white">
       {draft.name || "Логотип"}
     </span>
   );
@@ -134,8 +129,8 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
           <div className="flex shrink-0 items-center gap-1.5">
             <Button
               type="button"
-              size="sm"
-              className="h-9 rounded-lg bg-avgst-yellow px-2.5 text-xs font-semibold text-slate-950 hover:bg-avgst-yellow/90 sm:px-3 sm:text-sm"
+              size="lg"
+              className="h-10 rounded-md bg-avgst-yellow px-2.5 text-xs font-semibold text-slate-950 hover:bg-avgst-yellow/90 sm:px-3 sm:text-sm"
               onClick={() => openLeadForm({ kind: "question" })}
             >
               Задать вопрос
@@ -188,8 +183,8 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
             ) : null}
             <Button
               type="button"
-              size="sm"
-              className="rounded-lg bg-avgst-yellow px-3.5 font-semibold text-slate-950 hover:bg-avgst-yellow/90"
+              size="lg"
+              className="h-10 w-44 rounded-md bg-avgst-yellow font-semibold text-slate-950 hover:bg-avgst-yellow/90"
               onClick={() => openLeadForm({ kind: "question" })}
             >
               Задать вопрос
@@ -267,8 +262,9 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
             ) : null}
             <Button
               type="button"
+              size="lg"
               tabIndex={menuOpen ? 0 : -1}
-              className="h-10 w-fit rounded-lg bg-avgst-yellow px-4 font-bold text-slate-950 hover:bg-avgst-yellow/90"
+              className="h-10 w-44 rounded-md bg-avgst-yellow font-semibold text-slate-950 hover:bg-avgst-yellow/90"
               onClick={() => {
                 setMenuOpen(false);
                 openLeadForm({ kind: "question" });
@@ -296,7 +292,7 @@ function SiteFooter({ draft }: { draft: PartnerSiteDraft }) {
   const footerSocials = resolvePartnerSiteSocials(draft);
 
   return (
-    <footer className="mt-auto border-t border-slate-200 bg-white">
+    <footer className="mt-auto bg-[#0f1216] text-white">
       <div className="mx-auto max-w-6xl px-6 py-12 md:py-14">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.35fr)_repeat(3,auto)] lg:gap-12 xl:gap-16">
           <div className="min-w-0 sm:col-span-2 lg:col-span-1">
@@ -304,14 +300,17 @@ function SiteFooter({ draft }: { draft: PartnerSiteDraft }) {
               <BrandMarkFooter draft={draft} />
             </Link>
             {aboutBlurb ? (
-              <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-600 line-clamp-5 whitespace-pre-line">
+              <p className="mt-4 max-w-md text-sm leading-relaxed text-white/55 line-clamp-5 whitespace-pre-line">
                 {aboutBlurb}
               </p>
             ) : null}
 
-            <div className="mt-6 max-w-md space-y-3 text-xs leading-relaxed text-slate-500">
+            <div className="mt-6 max-w-md space-y-3 text-xs leading-relaxed text-white/40">
               <p>
-                <Link href={previewPaths.policy} className="hover:text-avgst-green hover:underline">
+                <Link
+                  href={previewPaths.policy}
+                  className="text-white/55 transition hover:text-avgst-green hover:underline"
+                >
                   Политика конфиденциальности
                 </Link>
               </p>
@@ -336,12 +335,12 @@ function SiteFooter({ draft }: { draft: PartnerSiteDraft }) {
           </div>
 
           <nav aria-label="Каталог" className="text-sm">
-            <p className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Каталог</p>
-            <ul className="mt-3 space-y-2.5 text-slate-700">
+            <p className="text-xs font-semibold tracking-wide text-white/40 uppercase">Каталог</p>
+            <ul className="mt-3 space-y-2.5 text-white/75">
               <li>
                 <Link
                   href={previewPaths.catalogByTechnology("modular")}
-                  className="hover:text-avgst-green"
+                  className="transition hover:text-avgst-green"
                 >
                   Модульные дома
                 </Link>
@@ -349,7 +348,7 @@ function SiteFooter({ draft }: { draft: PartnerSiteDraft }) {
               <li>
                 <Link
                   href={previewPaths.catalogByTechnology("panel_frame")}
-                  className="hover:text-avgst-green"
+                  className="transition hover:text-avgst-green"
                 >
                   Панельно-каркасные дома
                 </Link>
@@ -358,25 +357,20 @@ function SiteFooter({ draft }: { draft: PartnerSiteDraft }) {
           </nav>
 
           <nav aria-label="Разделы сайта" className="text-sm">
-            <p className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Меню</p>
-            <ul className="mt-3 space-y-2.5 text-slate-700">
+            <p className="text-xs font-semibold tracking-wide text-white/40 uppercase">Меню</p>
+            <ul className="mt-3 space-y-2.5 text-white/75">
               <li>
-                <Link href={previewPaths.home} className="hover:text-avgst-green">
+                <Link href={previewPaths.home} className="transition hover:text-avgst-green">
                   Главная
                 </Link>
               </li>
               <li>
-                <Link href={previewPaths.catalog} className="hover:text-avgst-green">
+                <Link href={previewPaths.catalog} className="transition hover:text-avgst-green">
                   Каталог проектов
                 </Link>
               </li>
               <li>
-                <Link href={previewPaths.about} className="hover:text-avgst-green">
-                  О нас
-                </Link>
-              </li>
-              <li>
-                <Link href={previewPaths.contacts} className="hover:text-avgst-green">
+                <Link href={previewPaths.contacts} className="transition hover:text-avgst-green">
                   Контакты
                 </Link>
               </li>
@@ -384,14 +378,14 @@ function SiteFooter({ draft }: { draft: PartnerSiteDraft }) {
           </nav>
 
           <div className="text-sm">
-            <p className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Контакты</p>
-            <ul className="mt-3 space-y-2.5 text-slate-700">
+            <p className="text-xs font-semibold tracking-wide text-white/40 uppercase">Контакты</p>
+            <ul className="mt-3 space-y-2.5 text-white/75">
               {draft.address ? <li className="leading-relaxed">{draft.address}</li> : null}
               {draft.contactPhone ? (
                 <li>
                   <a
                     href={`tel:${draft.contactPhone}`}
-                    className="font-medium tabular-nums hover:text-avgst-green"
+                    className="font-medium tabular-nums transition hover:text-avgst-green"
                   >
                     {draft.contactPhone}
                   </a>
@@ -401,7 +395,7 @@ function SiteFooter({ draft }: { draft: PartnerSiteDraft }) {
                 <li>
                   <a
                     href={`mailto:${draft.contactEmail}`}
-                    className="hover:text-avgst-green"
+                    className="transition hover:text-avgst-green"
                   >
                     {draft.contactEmail}
                   </a>
@@ -419,9 +413,13 @@ function SiteFooter({ draft }: { draft: PartnerSiteDraft }) {
                     title={item.label}
                     target="_blank"
                     rel="noreferrer"
-                    className="group inline-flex overflow-visible"
+                    className="group inline-flex overflow-visible text-white/80 transition hover:text-white"
                   >
-                    <PartnerSiteSocialIcon id={item.id} />
+                    {item.id === "dzen" ? (
+                      <PartnerSiteSocialGlyph id={item.id} className="size-5" />
+                    ) : (
+                      <PartnerSiteSocialIcon id={item.id} tone="onDark" />
+                    )}
                   </a>
                 ))}
               </div>
@@ -444,7 +442,8 @@ export function PartnerSitePreviewChrome({ children }: { children: React.ReactNo
     consultProjectName,
     consultSelectionSummary,
     consultTechnology,
-    consultProjectImageUrl
+    consultProjectImageUrl,
+    submitLead
   } = usePartnerSitePreview();
   const pathname = usePathname();
   const underlay = draft ? isHeroUnderlay(pathname) : false;
@@ -482,6 +481,7 @@ export function PartnerSitePreviewChrome({ children }: { children: React.ReactNo
           logoDataUrl: draft.logoDataUrl
         }}
         postLeadSocialPool={resolvePostLeadSocialPool(draft)}
+        onSubmitLead={submitLead}
       />
     </div>
   );

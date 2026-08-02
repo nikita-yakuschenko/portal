@@ -1,17 +1,19 @@
 import type { PartnerSiteDraft } from "@/lib/partner-site-draft";
 import { resolvePartnerSiteSocials } from "@/lib/partner-site-socials";
 
-export const PREVIEW_BASE = "/partner/site/preview";
+/** Публичный runtime (Dokploy site) — пути без /partner/site/preview */
+export const isPublicSiteRuntime = process.env.NEXT_PUBLIC_APP_ROLE === "site";
+
+export const PREVIEW_BASE = isPublicSiteRuntime ? "" : "/partner/site/preview";
 
 export const previewPaths = {
-  home: PREVIEW_BASE,
+  home: PREVIEW_BASE || "/",
   catalog: `${PREVIEW_BASE}/catalog`,
-  /** Каталог с фильтром по технологии */
   catalogByTechnology: (technology: "modular" | "panel_frame") =>
     `${PREVIEW_BASE}/catalog?technology=${technology}`,
   project: (slug: string) => `${PREVIEW_BASE}/catalog/${slug}`,
   about: `${PREVIEW_BASE}/about`,
-  contacts: `${PREVIEW_BASE}/contacts`,
+  contacts: PREVIEW_BASE ? `${PREVIEW_BASE}#contacts` : "/#contacts",
   policy: `${PREVIEW_BASE}/policy`
 } as const;
 
@@ -112,6 +114,32 @@ export function socialLinks(draft: PartnerSiteDraft): Array<{ label: string; hre
 export function filterStorefrontProjects(projects: StorefrontProject[]): StorefrontProject[] {
   const published = projects.filter((p) => p.dealerPricing?.isPublished);
   return published.length > 0 ? published : projects;
+}
+
+export const POPULAR_PROJECTS_MAX = 6;
+
+/**
+ * Блок «Популярные» на главной: выбранный порядок из draft.
+ * Пустой список — первые N из каталога (как раньше).
+ */
+export function resolvePopularProjects(
+  projects: StorefrontProject[],
+  popularProjectIds: string[] | undefined,
+  limit = POPULAR_PROJECTS_MAX
+): StorefrontProject[] {
+  const catalog = filterStorefrontProjects(projects);
+  const ids = (popularProjectIds ?? []).filter(Boolean);
+  if (ids.length === 0) return catalog.slice(0, limit);
+
+  const byId = new Map(catalog.map((project) => [project.id, project]));
+  const ordered: StorefrontProject[] = [];
+  for (const id of ids) {
+    const project = byId.get(id);
+    if (!project) continue;
+    ordered.push(project);
+    if (ordered.length >= limit) break;
+  }
+  return ordered;
 }
 
 /** Сегмент URL проекта: slug из API, иначе id */

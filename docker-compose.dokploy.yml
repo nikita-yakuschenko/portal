@@ -1,0 +1,72 @@
+# Production stack for Dokploy.
+# Postgres — ОТДЕЛЬНЫЙ сервис в Dokploy (не в этом compose), чтобы к БД
+# можно было ходить независимо от приложения.
+#
+# DATABASE_URL должен указывать на этот внешний Postgres, например:
+# postgresql://b2b:PASSWORD@HOST:5432/b2b_portal
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      PORT: 4000
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@avgst.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD required}
+      ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-AVGST Admin}
+      PARTNER_EMAIL: ${PARTNER_EMAIL:-}
+      PARTNER_PASSWORD: ${PARTNER_PASSWORD:-}
+      PARTNER_FULL_NAME: ${PARTNER_FULL_NAME:-}
+      PARTNER_COMPANY_NAME: ${PARTNER_COMPANY_NAME:-}
+      PARTNER_REGION: ${PARTNER_REGION:-}
+      TILDA_PUBLIC_KEY: ${TILDA_PUBLIC_KEY:-}
+      TILDA_SECRET_KEY: ${TILDA_SECRET_KEY:-}
+      TILDA_API_BASE: ${TILDA_API_BASE:-https://store.tildaapi.com/api/getproductslist/}
+      TILDA_MODULAR_STOREPARTUID: ${TILDA_MODULAR_STOREPARTUID:-}
+      TILDA_MODULAR_RECID: ${TILDA_MODULAR_RECID:-}
+      TILDA_PANEL_STOREPARTUID: ${TILDA_PANEL_STOREPARTUID:-}
+      TILDA_PANEL_RECID: ${TILDA_PANEL_RECID:-}
+      TILDA_SITE_BASE_URL: ${TILDA_SITE_BASE_URL:-https://avgst.ru}
+    expose:
+      - "4000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  portal-web:
+    build:
+      context: .
+      dockerfile: apps/portal-web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://b2b.avgst.ru}
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      API_BASE_URL: ${API_BASE_URL:-http://api:4000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://b2b.avgst.ru}
+    expose:
+      - "3000"
+
+  site-runtime:
+    build:
+      context: .
+      dockerfile: apps/site-runtime/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://b2b.avgst.ru}
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      APP_ROLE: site
+      NEXT_PUBLIC_APP_ROLE: site
+      API_BASE_URL: ${API_BASE_URL:-http://api:4000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://b2b.avgst.ru}
+    expose:
+      - "3000"

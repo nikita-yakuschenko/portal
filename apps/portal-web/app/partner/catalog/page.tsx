@@ -30,6 +30,7 @@ import {
 import { toast } from "sonner";
 
 import { CatalogProjectCard } from "@/components/catalog-project-card";
+import { FilterControlShell, FilterTrailingSlot } from "@/components/filter-clear";
 import {
   CatalogViewToggle,
   type CatalogViewMode
@@ -151,41 +152,6 @@ function rangeStep(min: number, max: number): number {
   if (span <= 5_000) return 50;
   if (span <= 500_000) return 10_000;
   return 50_000;
-}
-
-function FilterClearButton({
-  visible,
-  onClear,
-  label,
-  className
-}: {
-  visible: boolean;
-  onClear: () => void;
-  label: string;
-  className?: string;
-}) {
-  if (!visible) return null;
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      className={cn(
-        "absolute z-10 flex size-5 items-center justify-center rounded text-red-500 transition hover:bg-red-50 hover:text-red-600",
-        className ?? "top-1/2 right-2 -translate-y-1/2"
-      )}
-      onPointerDown={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-      }}
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onClear();
-      }}
-    >
-      <IconX className="size-3.5 stroke-[2.25]" />
-    </button>
-  );
 }
 
 function SortableCard({
@@ -831,29 +797,37 @@ export default function PartnerCatalogPage() {
             Сбросить фильтры
           </button>
 
-          <div className="relative">
-            <IconSearch className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Поиск по названию"
-              aria-label="Поиск по названию"
-              className={cn("pl-9", query.trim() && "pr-9")}
-            />
-            <FilterClearButton
-              visible={Boolean(query.trim())}
+          <FilterControlShell
+            active={Boolean(query.trim())}
+            className="h-9 w-full min-w-0"
+          >
+            <div className="relative min-w-0 flex-1">
+              <IconSearch className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Поиск по названию"
+                aria-label="Поиск по названию"
+                className="h-9 w-full rounded-none border-0 bg-transparent pl-9 shadow-none focus-visible:ring-0"
+              />
+            </div>
+            <FilterTrailingSlot
+              mode={query.trim() ? "clear" : "empty"}
               onClear={() => setQuery("")}
               label="Очистить поиск"
             />
-          </div>
+          </FilterControlShell>
 
-          <div className="relative">
+          <FilterControlShell active={technology !== "all"} className="relative h-9 w-full min-w-0">
             <Select
               value={technology}
               onValueChange={(value) => setTechnology(value as TechnologyFilter)}
             >
               <SelectTrigger
-                className={cn("w-full", technology !== "all" && "pr-9 [&>svg:last-child]:hidden")}
+                className={cn(
+                  "h-9 w-full rounded-none border-0 bg-transparent shadow-none focus:ring-0 focus-visible:ring-0",
+                  technology !== "all" && "[&>svg:last-child]:invisible"
+                )}
                 aria-label="Технология"
               >
                 <SelectValue />
@@ -864,17 +838,23 @@ export default function PartnerCatalogPage() {
                 <SelectItem value="panel_frame">{TECHNOLOGY_LABELS.panel_frame}</SelectItem>
               </SelectContent>
             </Select>
-            <FilterClearButton
-              visible={technology !== "all"}
-              onClear={() => setTechnology("all")}
-              label="Сбросить фильтр технологии"
-            />
-          </div>
+            {technology !== "all" ? (
+              <FilterTrailingSlot
+                mode="clear"
+                onClear={() => setTechnology("all")}
+                label="Сбросить фильтр технологии"
+                className="absolute inset-y-0 right-0 z-10"
+              />
+            ) : null}
+          </FilterControlShell>
 
-          <div className="relative">
+          <FilterControlShell active={floors !== "all"} className="relative h-9 w-full min-w-0">
             <Select value={floors} onValueChange={(value) => setFloors(value as FloorsFilter)}>
               <SelectTrigger
-                className={cn("w-full", floors !== "all" && "pr-9 [&>svg:last-child]:hidden")}
+                className={cn(
+                  "h-9 w-full rounded-none border-0 bg-transparent shadow-none focus:ring-0 focus-visible:ring-0",
+                  floors !== "all" && "[&>svg:last-child]:invisible"
+                )}
                 aria-label="Этажность"
               >
                 <SelectValue />
@@ -885,87 +865,103 @@ export default function PartnerCatalogPage() {
                 <SelectItem value="2">2 этажа</SelectItem>
               </SelectContent>
             </Select>
-            <FilterClearButton
-              visible={floors !== "all"}
-              onClear={() => setFloors("all")}
-              label="Сбросить фильтр этажности"
-            />
-          </div>
+            {floors !== "all" ? (
+              <FilterTrailingSlot
+                mode="clear"
+                onClear={() => setFloors("all")}
+                label="Сбросить фильтр этажности"
+                className="absolute inset-y-0 right-0 z-10"
+              />
+            ) : null}
+          </FilterControlShell>
 
-          <div className="relative">
-            <Button
+          <FilterControlShell active={favoritesOnly} className="h-9 w-full min-w-0">
+            <button
               type="button"
-              variant={favoritesOnly ? "secondary" : "outline"}
-              className={cn("w-full justify-start", favoritesOnly && "pr-9")}
+              className={cn(
+                "inline-flex h-full min-w-0 flex-1 items-center justify-start gap-2 px-3 text-sm font-medium transition hover:bg-muted/50",
+                favoritesOnly && "hover:bg-transparent"
+              )}
               aria-pressed={favoritesOnly}
               onClick={() => setFavoritesOnly((value) => !value)}
             >
-              <IconHeart className={favoritesOnly ? "fill-primary text-primary" : undefined} />
+              <IconHeart
+                className={cn(
+                  "size-4 shrink-0",
+                  favoritesOnly && "fill-primary text-primary"
+                )}
+              />
               Избранное
               {favorites.size > 0 ? (
                 <span className="text-muted-foreground tabular-nums">{favorites.size}</span>
               ) : null}
-            </Button>
-            <FilterClearButton
-              visible={favoritesOnly}
+            </button>
+            <FilterTrailingSlot
+              mode={favoritesOnly ? "clear" : "empty"}
               onClear={() => setFavoritesOnly(false)}
               label="Сбросить фильтр избранного"
             />
-          </div>
+          </FilterControlShell>
 
           {priceBounds && priceRange ? (
-            <div className="relative rounded-xl border px-3 py-3">
-              <div className="pr-6">
-                <p className="text-sm font-medium">Цена</p>
-                <p className="text-muted-foreground mt-0.5 text-xs tabular-nums">
-                  {formatPriceRange(priceRange[0])} — {formatPriceRange(priceRange[1])}
-                </p>
+            <div className="overflow-hidden rounded-xl border">
+              <div className="flex items-stretch">
+                <div className="min-w-0 flex-1 px-3 py-3">
+                  <p className="text-sm font-medium">Цена</p>
+                  <p className="text-muted-foreground mt-0.5 text-xs tabular-nums">
+                    {formatPriceRange(priceRange[0])} — {formatPriceRange(priceRange[1])}
+                  </p>
+                </div>
+                <FilterTrailingSlot
+                  mode={priceActive ? "clear" : "empty"}
+                  onClear={() => setPriceRange([priceBounds.min, priceBounds.max])}
+                  label="Сбросить фильтр цены"
+                  className="self-stretch"
+                />
               </div>
-              <FilterClearButton
-                visible={priceActive}
-                onClear={() => setPriceRange([priceBounds.min, priceBounds.max])}
-                label="Сбросить фильтр цены"
-                className="top-3 right-2"
-              />
-              <Slider
-                className="mt-4"
-                min={priceBounds.min}
-                max={priceBounds.max}
-                step={rangeStep(priceBounds.min, priceBounds.max)}
-                value={priceRange}
-                onValueChange={(value) => {
-                  if (value.length >= 2) setPriceRange([value[0]!, value[1]!]);
-                }}
-                aria-label="Диапазон цены"
-              />
+              <div className="px-3 pb-3">
+                <Slider
+                  min={priceBounds.min}
+                  max={priceBounds.max}
+                  step={rangeStep(priceBounds.min, priceBounds.max)}
+                  value={priceRange}
+                  onValueChange={(value) => {
+                    if (value.length >= 2) setPriceRange([value[0]!, value[1]!]);
+                  }}
+                  aria-label="Диапазон цены"
+                />
+              </div>
             </div>
           ) : null}
 
           {areaBounds && areaRange ? (
-            <div className="relative rounded-xl border px-3 py-3">
-              <div className="pr-6">
-                <p className="text-sm font-medium">Площадь</p>
-                <p className="text-muted-foreground mt-0.5 text-xs tabular-nums">
-                  {areaRange[0]} — {areaRange[1]} м²
-                </p>
+            <div className="overflow-hidden rounded-xl border">
+              <div className="flex items-stretch">
+                <div className="min-w-0 flex-1 px-3 py-3">
+                  <p className="text-sm font-medium">Площадь</p>
+                  <p className="text-muted-foreground mt-0.5 text-xs tabular-nums">
+                    {areaRange[0]} — {areaRange[1]} м²
+                  </p>
+                </div>
+                <FilterTrailingSlot
+                  mode={areaActive ? "clear" : "empty"}
+                  onClear={() => setAreaRange([areaBounds.min, areaBounds.max])}
+                  label="Сбросить фильтр площади"
+                  className="self-stretch"
+                />
               </div>
-              <FilterClearButton
-                visible={areaActive}
-                onClear={() => setAreaRange([areaBounds.min, areaBounds.max])}
-                label="Сбросить фильтр площади"
-                className="top-3 right-2"
-              />
-              <Slider
-                className="mt-4"
-                min={areaBounds.min}
-                max={areaBounds.max}
-                step={rangeStep(areaBounds.min, areaBounds.max)}
-                value={areaRange}
-                onValueChange={(value) => {
-                  if (value.length >= 2) setAreaRange([value[0]!, value[1]!]);
-                }}
-                aria-label="Диапазон площади"
-              />
+              <div className="px-3 pb-3">
+                <Slider
+                  min={areaBounds.min}
+                  max={areaBounds.max}
+                  step={rangeStep(areaBounds.min, areaBounds.max)}
+                  value={areaRange}
+                  onValueChange={(value) => {
+                    if (value.length >= 2) setAreaRange([value[0]!, value[1]!]);
+                  }}
+                  aria-label="Диапазон площади"
+                />
+              </div>
             </div>
           ) : null}
         </aside>

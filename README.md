@@ -48,7 +48,11 @@ npm run dev:portal
 - API: http://localhost:4000  
 - Портал: http://localhost:3000  
 
-Опционально сайт-рантайм: `npm run dev:site` (отдельный терминал, после API).
+Опционально сайт-рантайм: `npm run dev:site` (отдельный терминал, после API) — публичная витрина на порту `3001`.
+
+## Production (Dokploy)
+
+См. [DEPLOY.md](./DEPLOY.md): compose [`docker-compose.dokploy.yml`](./docker-compose.dokploy.yml), DNS и чеклист трёх партнёров.
 
 ## Tilda sync
 

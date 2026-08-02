@@ -208,10 +208,13 @@ export function PartnerSiteSocialGlyph({
 /** Монохром по умолчанию; при hover родителя `.group` — проявление фирменных цветов */
 export function PartnerSiteSocialIcon({
   id,
-  className
+  className,
+  tone = "onLight"
 }: {
   id: PartnerSiteSocialId;
   className?: string;
+  /** onDark — светлый глиф для тёмного фона (футер) */
+  tone?: "onLight" | "onDark";
 }) {
   const { Mono, Color } = SOCIAL_ICON_PAIR[id];
   return (
@@ -222,7 +225,12 @@ export function PartnerSiteSocialIcon({
         className
       )}
     >
-      <Mono className="size-5 text-avgst-ink transition-opacity duration-300 group-hover:opacity-0" />
+      <Mono
+        className={cn(
+          "size-5 transition-opacity duration-300 group-hover:opacity-0",
+          tone === "onDark" ? "text-white/80" : "text-avgst-ink"
+        )}
+      />
       <Color className="pointer-events-none absolute size-5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
     </span>
   );

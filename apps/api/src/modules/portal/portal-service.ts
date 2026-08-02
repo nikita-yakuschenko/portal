@@ -37,6 +37,7 @@ import {
   normalizePricingMode,
   resolvePartnerDisplayPrice
 } from "../partners/partner-pricing.js";
+import { partnerSiteService } from "../partners/partner-site-service.js";
 
 type SessionUser = {
   id: string;
@@ -94,6 +95,9 @@ export class PortalService {
     });
 
     if (existing) {
+      if (existing.partnerId) {
+        await partnerSiteService.ensurePartnerSite(existing.partnerId);
+      }
       return;
     }
 
@@ -115,6 +119,8 @@ export class PortalService {
       role: "partner_owner",
       passwordHash: await hashPassword(input.password)
     });
+
+    await partnerSiteService.ensurePartnerSite(partnerId);
   }
 
   async submitPartnerApplication(input: {
@@ -230,6 +236,8 @@ export class PortalService {
     await this.writeAuditLog(input.actorUserId, "application.approved", "partner_application", input.applicationId, {
       partnerId
     });
+
+    await partnerSiteService.ensurePartnerSite(partnerId);
 
     return {
       status: "approved" as const,
