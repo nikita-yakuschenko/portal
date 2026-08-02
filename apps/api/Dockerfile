@@ -15,6 +15,7 @@ FROM base AS runner
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json package-lock.json ./
+COPY tsconfig.base.json ./
 COPY packages/domain ./packages/domain
 COPY packages/site-schema ./packages/site-schema
 COPY apps/api ./apps/api

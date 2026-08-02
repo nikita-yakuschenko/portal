@@ -14,6 +14,7 @@ RUN npm ci -w @b2b/portal-web --include-workspace-root=false
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json package-lock.json ./
+COPY tsconfig.base.json ./
 COPY packages/domain ./packages/domain
 COPY packages/site-schema ./packages/site-schema
 COPY apps/portal-web ./apps/portal-web
