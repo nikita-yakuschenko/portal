@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { IconUser } from "@tabler/icons-react";
 
 import type { SessionUser } from "./auth-gate";
 import { cabinetHomeForRole } from "./auth-gate";
@@ -39,9 +40,10 @@ export function LandingHeader({ user = null }: LandingHeaderProps) {
             {user ? (
               <Link
                 href={cabinetHref}
-                className="rounded-lg bg-avgst-green px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-avgst-green-hover"
+                className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white/90 transition hover:bg-white/10 hover:text-white"
               >
-                {user.fullName || user.email}
+                <IconUser className="size-4 shrink-0" aria-hidden />
+                <span>{user.fullName || user.email}</span>
               </Link>
             ) : (
               <>
