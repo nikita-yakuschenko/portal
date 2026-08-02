@@ -85,7 +85,7 @@ export function projectShareDescription(project: ProjectShareInput): string {
   if (area) chunks.push(area);
 
   const bedrooms = formatBedrooms(project.bedrooms);
-  if (bedrooms) chunks.push(`количество спален ${bedrooms}`);
+  if (bedrooms) chunks.push(bedrooms);
 
   const bathrooms = formatBathrooms(project.bathrooms);
   if (bathrooms) chunks.push(bathrooms);
