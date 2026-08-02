@@ -13,43 +13,61 @@
 
 1. VPS с Dokploy (`155.212.147.165`).
 2. **Отдельная БД PostgreSQL в Dokploy** (не в compose приложения) — см. §1a.
-3. Секреты в Environment приложения.
-4. Сменить: `JWT_SECRET`, `ADMIN_PASSWORD`, `DATABASE_URL` (на внешнюю БД).
-5. `PARTNER_*` — опционально (seed демо-партнёра при старте). Пустые значения в Dokploy игнорируются, подставятся дефолты из compose/config.
-6. Env для сервиса portal:
-   - `API_BASE_URL=http://api:4000` — внутри Docker
-   - `NEXT_PUBLIC_API_URL=https://b2b.avgst.ru`
+3. Секреты в Environment приложения (чеклист ниже).
+4. Сменить: `JWT_SECRET`, `ADMIN_PASSWORD`, `DATABASE_URL` (Internal URL из Databases).
+
+### Обязательные env (Compose app → Environment)
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@b2b-portal-hblrpr:5432/DBNAME
+JWT_SECRET=длинный-случайный-секрет
+ADMIN_PASSWORD=свой-сложный-пароль
+ADMIN_EMAIL=admin@avgst.local
+API_BASE_URL=http://api:4000
+NEXT_PUBLIC_API_URL=https://b2b.avgst.ru
+```
+
+Опционально (`PARTNER_*` — seed демо-партнёра). Пустые значения в Dokploy игнорируются.
+
+**Не ставь** `API_BASE_URL=http://localhost:4000` — внутри контейнера portal это не api.
 
 ### 1a. Создать Postgres отдельно (Dokploy → Databases)
 
 | Поле | Значение |
 |------|----------|
 | Engine | PostgreSQL **16** или **17** |
-| Database name | `b2b_portal` |
-| User | `b2b` |
-| Password | свой сложный |
+| Database name | как удобно (`portal` / `b2b_portal`) |
+| User / Password | свои |
 | Port | `5432` (как выдаст Dokploy) |
 
-После создания скопируй **Internal connection URL** (хост вида сервиса Dokploy) в:
-
-```env
-DATABASE_URL=postgresql://b2b:PASSWORD@HOST:5432/b2b_portal
-```
+Скопируй **Internal Connection URL** из карточки БД в `DATABASE_URL`.  
+Хост вида `b2b-portal-hblrpr` работает **только** если сервисы в `dokploy-network` (уже в `docker-compose.dokploy.yml`).
 
 Таблицы не создавай руками — миграции накатит `api` при старте.
 
-Локальный `docker compose up -d postgres` (порт `5436`) — только для разработки на машине; к прод-БД он не относится.
+Локальный `docker compose up -d postgres` (порт `5436`) — только для разработки.
 
 ## 2. Деплой в Dokploy
 
 Compose: [`docker-compose.dokploy.yml`](docker-compose.dokploy.yml).
 
-1. Deploy → дождаться healthy у `api` (миграции на старте).
-2. Домены в Dokploy:
-   - **`b2b.avgst.ru` → `portal:3410`** (единственный публичный хост кабинета)
+Важно: в compose подключена внешняя сеть `dokploy-network` — без неё будет  
+`getaddrinfo ENOTFOUND b2b-portal-hblrpr`.
+
+1. Deploy → **Rebuild** образов (не только restart) — иначе portal останется с rewrite на localhost.
+2. Дождаться `api` = running/healthy (миграции на старте).
+3. Домены:
+   - **`b2b.avgst.ru` → `portal:3410`**
    - партнёрские домены → `site-runtime:3410`
-3. `api:4000` наружу через отдельный домен **не нужен** (остаётся во внутренней сети compose).
-   Порт **3410** у Next — чтобы не пересекаться с Dokploy UI и прочим на VPS (хост `:3000`).
+4. `api:4000` наружу не публикуем.
+
+### Если api в restart loop
+
+| Лог | Что сделать |
+|-----|-------------|
+| `ENOTFOUND b2b-portal-…` | Проверь, что compose с `dokploy-network` задеплоен; `DATABASE_URL` = Internal URL из Databases |
+| ZodError `PARTNER_*` / `ADMIN_*` | Убери пустые ключи или задай валидные значения |
+| portal: `proxy http://localhost:4000` | Rebuild portal с `API_BASE_URL=http://api:4000` (build arg) |
 
 ## 3. DNS (A → 155.212.147.165)
 
@@ -63,14 +81,12 @@ Compose: [`docker-compose.dokploy.yml`](docker-compose.dokploy.yml).
 
 Замысел UX:
 
-1. Открыл `https://b2b.avgst.ru` — стартовая страница (о заводе / дилерстве).
+1. Открыл `https://b2b.avgst.ru` — стартовая страница.
 2. «Войти» / «Регистрация» — там же.
-3. Партнёр после логина → `/partner` (свой кабинет).
+3. Партнёр после логина → `/partner`.
 4. HQ → `/company`.
 
 ### Партнёрские сайты → `site-runtime`
-
-Это **другие** домены (витрины для клиентов), не кабинет:
 
 | Хост на каждом домене | Тип | Значение |
 |-----------------------|-----|----------|

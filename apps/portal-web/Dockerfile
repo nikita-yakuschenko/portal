@@ -19,8 +19,11 @@ COPY packages/site-schema ./packages/site-schema
 COPY apps/portal-web ./apps/portal-web
 ARG NEXT_PUBLIC_APP_ROLE=
 ARG NEXT_PUBLIC_API_URL=
+# Нужен на билде: next.config.mjs запекает rewrites /api → API_BASE_URL
+ARG API_BASE_URL=http://api:4000
 ENV NEXT_PUBLIC_APP_ROLE=$NEXT_PUBLIC_APP_ROLE
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV API_BASE_URL=$API_BASE_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app/apps/portal-web
 RUN npm run build
@@ -28,6 +31,7 @@ RUN npm run build
 FROM base AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV API_BASE_URL=http://api:4000
 # Монорепо: модули в /app/node_modules, приложение в /app/apps/portal-web
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/packages /app/packages

@@ -19,8 +19,10 @@ COPY packages/domain ./packages/domain
 COPY packages/site-schema ./packages/site-schema
 COPY apps/portal-web ./apps/portal-web
 ARG NEXT_PUBLIC_API_URL=
+ARG API_BASE_URL=http://api:4000
 ENV NEXT_PUBLIC_APP_ROLE=site
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV API_BASE_URL=$API_BASE_URL
 ENV APP_ROLE=site
 ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app/apps/portal-web
@@ -30,6 +32,7 @@ FROM base AS runner
 ENV NODE_ENV=production
 ENV APP_ROLE=site
 ENV NEXT_PUBLIC_APP_ROLE=site
+ENV API_BASE_URL=http://api:4000
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/packages /app/packages

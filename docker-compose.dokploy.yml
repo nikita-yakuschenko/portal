@@ -2,14 +2,21 @@
 # Postgres — ОТДЕЛЬНЫЙ сервис в Dokploy (не в этом compose), чтобы к БД
 # можно было ходить независимо от приложения.
 #
-# DATABASE_URL должен указывать на этот внешний Postgres, например:
-# postgresql://b2b:PASSWORD@HOST:5432/b2b_portal
+# DATABASE_URL — Internal Connection URL из Dokploy Databases, например:
+# postgresql://portal-admin:PASSWORD@b2b-portal-hblrpr:5432/portal
+#
+# Чтобы хост БД резолвился, все сервисы должны быть в dokploy-network
+# (там же живут Databases Dokploy).
+
 services:
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
+    networks:
+      - default
+      - dokploy-network
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL required}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
@@ -17,7 +24,7 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@avgst.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD required}
       ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-AVGST Admin}
-      # Опциональный seed-партнёр при первом старте (можно переопределить в Environment)
+      # Опциональный seed-партнёр при первом старте
       PARTNER_EMAIL: ${PARTNER_EMAIL:-partner@avgst.local}
       PARTNER_PASSWORD: ${PARTNER_PASSWORD:-ChangeMe123!}
       PARTNER_FULL_NAME: ${PARTNER_FULL_NAME:-Демо Партнёр}
@@ -46,10 +53,15 @@ services:
       context: .
       dockerfile: apps/portal-web/Dockerfile
       args:
+        # Rewrites в next.config запекаются на билде — не localhost
+        API_BASE_URL: ${API_BASE_URL:-http://api:4000}
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://b2b.avgst.ru}
     restart: unless-stopped
     depends_on:
       - api
+    networks:
+      - default
+      - dokploy-network
     environment:
       API_BASE_URL: ${API_BASE_URL:-http://api:4000}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://b2b.avgst.ru}
@@ -62,10 +74,14 @@ services:
       context: .
       dockerfile: apps/site-runtime/Dockerfile
       args:
+        API_BASE_URL: ${API_BASE_URL:-http://api:4000}
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://b2b.avgst.ru}
     restart: unless-stopped
     depends_on:
       - api
+    networks:
+      - default
+      - dokploy-network
     environment:
       APP_ROLE: site
       NEXT_PUBLIC_APP_ROLE: site
@@ -74,3 +90,8 @@ services:
       PORT: "3410"
     expose:
       - "3410"
+
+networks:
+  # Общая сеть Dokploy: сюда подключены Databases → резолвится b2b-portal-hblrpr
+  dokploy-network:
+    external: true
