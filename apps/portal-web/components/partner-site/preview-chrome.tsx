@@ -40,14 +40,24 @@ function BrandMark({
   draft: PartnerSiteDraft;
   compact?: boolean;
 }) {
-  if (draft.logoDataUrl) {
+  // Мобилка: отдельный компактный логотип, иначе обычный
+  const src = compact
+    ? draft.logoMobileDataUrl.trim() || draft.logoDataUrl.trim()
+    : draft.logoDataUrl.trim();
+  const isMobileIcon = compact && Boolean(draft.logoMobileDataUrl.trim());
+
+  if (src) {
     return (
       <img
-        src={draft.logoDataUrl}
+        src={src}
         alt={draft.name}
         className={cn(
           "w-auto object-contain drop-shadow-sm",
-          compact ? "h-8 max-w-[120px]" : "h-9 max-w-[160px]"
+          compact
+            ? isMobileIcon
+              ? "size-9 max-w-9"
+              : "h-8 max-w-[5.5rem]"
+            : "h-9 max-w-[160px]"
         )}
       />
     );
@@ -57,7 +67,7 @@ function BrandMark({
     <span
       className={cn(
         "font-bold uppercase tracking-wide text-white",
-        compact ? "line-clamp-2 max-w-[7.5rem] text-xs leading-tight" : "text-base md:text-lg"
+        compact ? "line-clamp-2 max-w-[5.5rem] text-xs leading-tight" : "text-base md:text-lg"
       )}
     >
       {draft.name || "Логотип"}
@@ -137,7 +147,8 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
               className="h-10 rounded-md bg-avgst-yellow px-2.5 text-xs font-semibold text-slate-950 hover:bg-avgst-yellow/90 sm:px-3 sm:text-sm"
               onClick={() => openLeadForm({ kind: "question" })}
             >
-              Задать вопрос
+              <span className="sm:hidden">Вопрос</span>
+              <span className="hidden sm:inline">Задать вопрос</span>
             </Button>
             <button
               type="button"

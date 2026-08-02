@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { usePartnerSitePreview } from "@/components/partner-site/preview-context";
+import { ZoomableImage } from "@/components/partner-site/zoomable-image";
 import {
   ProjectOptionsConfigurator,
   type ConfiguratorSelection
@@ -653,11 +654,11 @@ export default function PartnerSiteProjectDetailPage() {
           showCloseButton={false}
           overlayClassName="bg-black/92"
           aria-describedby={undefined}
-          className="fixed inset-0 top-0 left-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-transparent p-0 shadow-none sm:max-w-none"
+          className="fixed inset-0 top-0 left-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 touch-none flex-col gap-0 overflow-hidden rounded-none border-0 bg-transparent p-0 shadow-none overscroll-none sm:max-w-none"
         >
           <DialogTitle className="sr-only">Просмотр фото — {project.name}</DialogTitle>
 
-          <div className="relative flex h-full min-h-0 flex-col">
+          <div className="relative flex h-full min-h-0 touch-none flex-col overscroll-none">
             {/* Верх: название раздела / ассета */}
             <div className="relative z-20 flex shrink-0 items-center justify-center px-14 py-4 sm:px-16">
               {lightboxLabel ? (
@@ -677,14 +678,13 @@ export default function PartnerSiteProjectDetailPage() {
               </button>
             </div>
 
-            {/* Центр: фото целиком в оставшемся окне */}
-            <div className="relative flex min-h-0 flex-1 items-center justify-center px-12 sm:px-16">
+            {/* Центр: pinch-zoom только на фото */}
+            <div className="relative flex min-h-0 flex-1 items-center justify-center px-2 sm:px-16">
               {lightboxImage ? (
-                <img
+                <ZoomableImage
                   src={lightboxImage}
                   alt={lightboxLabel ?? project.name}
-                  decoding="async"
-                  className="max-h-full max-w-full object-contain select-none"
+                  className="absolute inset-0"
                 />
               ) : null}
 
@@ -696,7 +696,7 @@ export default function PartnerSiteProjectDetailPage() {
                     disabled={!canStepPrev}
                     aria-label="Предыдущее фото"
                     className={cn(
-                      "absolute top-1/2 left-2 z-20 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition sm:left-4",
+                      "absolute top-1/2 left-2 z-20 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition sm:left-4 sm:size-11",
                       canStepPrev ? "hover:bg-white/25" : "pointer-events-none opacity-30"
                     )}
                   >
@@ -708,7 +708,7 @@ export default function PartnerSiteProjectDetailPage() {
                     disabled={!canStepNext}
                     aria-label="Следующее фото"
                     className={cn(
-                      "absolute top-1/2 right-2 z-20 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition sm:right-4",
+                      "absolute top-1/2 right-2 z-20 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition sm:right-4 sm:size-11",
                       canStepNext ? "hover:bg-white/25" : "pointer-events-none opacity-30"
                     )}
                   >

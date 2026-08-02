@@ -123,21 +123,40 @@ function PartnerSiteContent() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleLogoChange(event: React.ChangeEvent<HTMLInputElement>) {
+  function readImageFile(
+    event: React.ChangeEvent<HTMLInputElement>,
+    opts: { maxBytes: number; field: "logoDataUrl" | "logoMobileDataUrl"; label: string }
+  ) {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (file.size > 800_000) {
-      toast.error("Логотип слишком большой", {
-        description: "Загрузите файл до ~800 КБ (PNG/SVG/JPG)."
+    if (file.size > opts.maxBytes) {
+      toast.error(`${opts.label} слишком большой`, {
+        description: `Загрузите файл до ~${Math.round(opts.maxBytes / 1000)} КБ (PNG/SVG/JPG).`
       });
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : "";
-      setForm((prev) => ({ ...prev, logoDataUrl: result }));
+      setForm((prev) => ({ ...prev, [opts.field]: result }));
     };
     reader.readAsDataURL(file);
+  }
+
+  function handleLogoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    readImageFile(event, {
+      maxBytes: 800_000,
+      field: "logoDataUrl",
+      label: "Логотип"
+    });
+  }
+
+  function handleMobileLogoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    readImageFile(event, {
+      maxBytes: 300_000,
+      field: "logoMobileDataUrl",
+      label: "Мобильный логотип"
+    });
   }
 
   function handleFaviconChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -301,45 +320,89 @@ function PartnerSiteContent() {
                 <CardHeader>
                   <CardTitle>Логотип</CardTitle>
                   <CardDescription>
-                    Вместо заводского лого — ваш. PNG, JPG или SVG, до ~800 КБ.
+                    Обычный — для десктопа. Мобильный — компактная иконка в шапке, чтобы телефон не
+                    обрезался.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="flex flex-wrap items-center gap-4">
-                  <div className="bg-muted flex h-16 min-w-[120px] items-center justify-center rounded-lg border border-dashed px-4">
-                    {form.logoDataUrl ? (
-                      <img
-                        src={form.logoDataUrl}
-                        alt="Логотип"
-                        className="max-h-12 max-w-[160px] object-contain"
+                <CardContent className="space-y-6">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="bg-muted flex h-16 min-w-[120px] items-center justify-center rounded-lg border border-dashed px-4">
+                      {form.logoDataUrl ? (
+                        <img
+                          src={form.logoDataUrl}
+                          alt="Логотип"
+                          className="max-h-12 max-w-[160px] object-contain"
+                        />
+                      ) : (
+                        <span className="text-muted-foreground text-xs">Нет логотипа</span>
+                      )}
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col gap-2">
+                      <FieldLabel htmlFor="site-logo">Десктоп / подвал</FieldLabel>
+                      <Input
+                        id="site-logo"
+                        type="file"
+                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                        onChange={handleLogoChange}
+                        className="max-w-xs cursor-pointer"
                       />
-                    ) : (
-                      <span className="text-muted-foreground text-xs">Нет логотипа</span>
-                    )}
+                      {form.logoDataUrl ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-fit"
+                          onClick={() => updateField("logoDataUrl", "")}
+                        >
+                          Убрать
+                        </Button>
+                      ) : (
+                        <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                          <IconUpload className="size-3.5" />
+                          PNG, JPG или SVG, до ~800 КБ
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-2">
-                    <Input
-                      id="site-logo"
-                      type="file"
-                      accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                      onChange={handleLogoChange}
-                      className="max-w-xs cursor-pointer"
-                    />
-                    {form.logoDataUrl ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="w-fit"
-                        onClick={() => updateField("logoDataUrl", "")}
-                      >
-                        Убрать логотип
-                      </Button>
-                    ) : (
-                      <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                        <IconUpload className="size-3.5" />
-                        Загрузите файл, чтобы заменить заводской знак
-                      </p>
-                    )}
+
+                  <div className="flex flex-wrap items-center gap-4 border-t pt-6">
+                    <div className="bg-muted flex size-16 items-center justify-center rounded-lg border border-dashed">
+                      {form.logoMobileDataUrl ? (
+                        <img
+                          src={form.logoMobileDataUrl}
+                          alt="Мобильный логотип"
+                          className="size-10 object-contain"
+                        />
+                      ) : (
+                        <span className="text-muted-foreground text-[10px]">Нет</span>
+                      )}
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col gap-2">
+                      <FieldLabel htmlFor="site-logo-mobile">Мобильная шапка</FieldLabel>
+                      <Input
+                        id="site-logo-mobile"
+                        type="file"
+                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                        onChange={handleMobileLogoChange}
+                        className="max-w-xs cursor-pointer"
+                      />
+                      {form.logoMobileDataUrl ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-fit"
+                          onClick={() => updateField("logoMobileDataUrl", "")}
+                        >
+                          Убрать
+                        </Button>
+                      ) : (
+                        <p className="text-muted-foreground text-xs">
+                          Квадратная иконка ~64–128 px, до ~300 КБ. Если пусто — берётся обычный
+                          логотип.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>

@@ -53,27 +53,32 @@ export function buildProjectShareMetadata(input: {
     bathrooms: project.bathrooms
   };
   const { title, description } = projectShareCopy(shareInput, company);
-  const image = primaryImage(project);
+  const hasImage = Boolean(primaryImage(project));
   const pageUrl = `${origin}/catalog/${encodeURIComponent(slug)}`;
+  // Свой origin: Telegram часто не строит превью с картинкой с чужого CDN
+  const ogImage = `${origin}/site-branding/project-og?slug=${encodeURIComponent(slug)}`;
+  const shortTitle = title.replace(/\.$/, "");
 
   return {
     metadataBase: new URL(origin),
-    title: { absolute: title.replace(/\.$/, "") },
+    title: { absolute: shortTitle },
     description: description || undefined,
     openGraph: {
       type: "website",
       locale: "ru_RU",
       url: pageUrl,
       siteName,
-      title: title.replace(/\.$/, ""),
+      title: shortTitle,
       description: description || undefined,
-      images: image ? [{ url: image, alt: project.name }] : undefined
+      images: hasImage
+        ? [{ url: ogImage, alt: project.name, width: 1200, height: 630 }]
+        : undefined
     },
     twitter: {
-      card: image ? "summary_large_image" : "summary",
-      title: title.replace(/\.$/, ""),
+      card: hasImage ? "summary_large_image" : "summary",
+      title: shortTitle,
       description: description || undefined,
-      images: image ? [image] : undefined
+      images: hasImage ? [ogImage] : undefined
     }
   };
 }

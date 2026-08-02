@@ -30,6 +30,8 @@ export const partnerSiteDraftSchema = z.object({
   postLeadOfferSocials: z.array(z.string()),
   popularProjectIds: z.array(z.string()).max(6),
   logoDataUrl: z.string(),
+  /** Компактный логотип для мобильной шапки (иконка / квадрат) */
+  logoMobileDataUrl: z.string(),
   faviconDataUrl: z.string()
 });
 
@@ -70,6 +72,7 @@ export const emptyPartnerSiteDraft: PartnerSiteDraft = {
   postLeadOfferSocials: ["telegram"],
   popularProjectIds: [],
   logoDataUrl: "",
+  logoMobileDataUrl: "",
   faviconDataUrl: ""
 };
 
@@ -143,6 +146,7 @@ export function normalizePartnerSiteDraft(
     postLeadOfferSocials: normalizePostLeadOfferSocials(raw),
     popularProjectIds: normalizePopularProjectIds(raw.popularProjectIds),
     logoDataUrl: asString(raw.logoDataUrl),
+    logoMobileDataUrl: asString(raw.logoMobileDataUrl),
     faviconDataUrl: asString(raw.faviconDataUrl)
   };
 }
