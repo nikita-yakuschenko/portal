@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { IconEye, IconEyeOff } from "@tabler/icons-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -28,8 +29,9 @@ function cabinetPathForRole(role: LoginUser["role"]) {
 
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@avgst.local");
-  const [password, setPassword] = useState("ChangeMe123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [resultMessage, setResultMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -77,15 +79,29 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               </Field>
               <Field className="min-w-0">
                 <FieldLabel htmlFor="password">Пароль</FieldLabel>
-                <Input
-                  id="password"
-                  className="max-w-full"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    className="max-w-full pr-10"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md"
+                    aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+                    onClick={() => setShowPassword((prev) => !prev)}
+                  >
+                    {showPassword ? (
+                      <IconEyeOff className="size-4" />
+                    ) : (
+                      <IconEye className="size-4" />
+                    )}
+                  </button>
+                </div>
               </Field>
               <Field>
                 <Button type="submit" className="w-full" disabled={loading}>
