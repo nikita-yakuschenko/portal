@@ -123,6 +123,93 @@ export class PortalService {
     await partnerSiteService.ensurePartnerSite(partnerId);
   }
 
+  /**
+   * Прямое создание партнёра для входа (без заявки).
+   * Минимум: email + password; остальное — заглушки, донастроишь в кабинете.
+   */
+  async createPartnerAccount(input: {
+    email: string;
+    password: string;
+    fullName?: string;
+    companyName?: string;
+    region?: string;
+    phone?: string;
+    resetPassword?: boolean;
+  }): Promise<{
+    partnerId: string;
+    userId: string;
+    email: string;
+    created: boolean;
+    passwordReset: boolean;
+  }> {
+    const email = input.email.trim().toLowerCase();
+    const localPart = email.split("@")[0] || "partner";
+    const fullName = (input.fullName?.trim() || localPart || "Партнёр").slice(0, 120);
+    const companyName = (input.companyName?.trim() || `Дилер ${localPart}`).slice(0, 200);
+    const region = (input.region?.trim() || "не указан").slice(0, 120);
+    const phone = (input.phone?.trim() || "+7 (000) 000-00-00").slice(0, 64);
+
+    const existing = await db.query.users.findFirst({
+      where: eq(users.email, email)
+    });
+
+    if (existing) {
+      if (!input.resetPassword) {
+        throw new Error(`Пользователь с email ${email} уже существует. Используй --reset-password чтобы сменить пароль.`);
+      }
+
+      if (!existing.partnerId) {
+        throw new Error(`Email ${email} занят пользователем без партнёра (роль: ${existing.role}).`);
+      }
+
+      await db
+        .update(users)
+        .set({ passwordHash: await hashPassword(input.password), isActive: true })
+        .where(eq(users.id, existing.id));
+
+      await partnerSiteService.ensurePartnerSite(existing.partnerId);
+
+      return {
+        partnerId: existing.partnerId,
+        userId: existing.id,
+        email,
+        created: false,
+        passwordReset: true
+      };
+    }
+
+    const partnerId = randomUUID();
+    const userId = randomUUID();
+
+    await db.insert(partners).values({
+      id: partnerId,
+      companyName,
+      status: "active",
+      region,
+      email,
+      phone
+    });
+
+    await db.insert(users).values({
+      id: userId,
+      partnerId,
+      email,
+      fullName,
+      role: "partner_owner",
+      passwordHash: await hashPassword(input.password)
+    });
+
+    await partnerSiteService.ensurePartnerSite(partnerId);
+
+    return {
+      partnerId,
+      userId,
+      email,
+      created: true,
+      passwordReset: false
+    };
+  }
+
   async submitPartnerApplication(input: {
     inn: string;
     companyName: string;

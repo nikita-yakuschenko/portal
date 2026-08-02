@@ -117,6 +117,25 @@ npm run dev:portal
 npm run dev:site
 ```
 
+### Создать партнёра напрямую (без заявки)
+
+Нужны только **email** (логин) и **пароль** ≥8. Остальное — заглушки, донастроишь в кабинете.
+
+`DATABASE_URL` — из корневого `.env` или явно (для прода: External/доступный с твоей машины URL Postgres, не `b2b-portal-hblrpr` из внутренней Docker-сети).
+
+```powershell
+cd d:\portal
+# при необходимости:
+# $env:DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DBNAME"
+
+npm run create-partner -w @b2b/api -- --email=domaizi@avgst.local --password=Secret123!
+
+# уже есть такой email — только сменить пароль:
+npm run create-partner -w @b2b/api -- --email=domaizi@avgst.local --password=NewSecret1! --reset-password
+```
+
+Опционально: `--name` `--company` `--region` `--phone`.
+
 ## 6. Rollback
 
 - Откат образа в Dokploy.
