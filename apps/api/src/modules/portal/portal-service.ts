@@ -1072,6 +1072,70 @@ export class PortalService {
     };
   }
 
+  /** Коммерческие поля — правит партнёр (не юр. название и не ИНН). */
+  async updatePartnerProfile(input: {
+    actorUserId: string;
+    partnerId: string;
+    companyName: string;
+    region: string;
+    phone: string;
+    email: string;
+  }) {
+    const companyName = input.companyName.trim();
+    if (companyName.length < 2) {
+      throw new Error("Укажите коммерческое название (минимум 2 символа).");
+    }
+
+    await db
+      .update(partners)
+      .set({
+        companyName,
+        region: input.region.trim() || "не указан",
+        phone: input.phone.trim() || "+7 (000) 000-00-00",
+        email: input.email.trim().toLowerCase()
+      })
+      .where(eq(partners.id, input.partnerId));
+
+    await this.writeAuditLog(input.actorUserId, "partner.profile.updated", "partner", input.partnerId, {
+      companyName
+    });
+
+    return db.query.partners.findFirst({ where: eq(partners.id, input.partnerId) });
+  }
+
+  /** Юр. реквизиты — только HQ (по документам о смене юрлица). */
+  async updatePartnerLegal(input: {
+    actorUserId: string;
+    partnerId: string;
+    legalName: string | null;
+    inn: string | null;
+  }) {
+    const existing = await db.query.partners.findFirst({
+      where: eq(partners.id, input.partnerId)
+    });
+    if (!existing) {
+      throw new Error("Партнёр не найден.");
+    }
+
+    const legalName = input.legalName?.trim() || null;
+    const innRaw = input.inn?.trim() || null;
+    if (innRaw && !/^\d{10}(\d{2})?$/.test(innRaw)) {
+      throw new Error("ИНН должен содержать 10 или 12 цифр.");
+    }
+
+    await db
+      .update(partners)
+      .set({ legalName, inn: innRaw })
+      .where(eq(partners.id, input.partnerId));
+
+    await this.writeAuditLog(input.actorUserId, "partner.legal.updated", "partner", input.partnerId, {
+      legalName,
+      inn: innRaw
+    });
+
+    return db.query.partners.findFirst({ where: eq(partners.id, input.partnerId) });
+  }
+
   async listPartnerTeam(partnerId: string) {
     return db.select().from(users).where(eq(users.partnerId, partnerId)).orderBy(users.fullName);
   }

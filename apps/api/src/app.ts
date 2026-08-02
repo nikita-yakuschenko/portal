@@ -580,6 +580,72 @@ export async function buildApp() {
     return portalService.getMe(getAuthUser(request)!.sub);
   });
 
+  app.patch("/api/partner/profile", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const parsed = z
+      .object({
+        companyName: z.string().min(2),
+        region: z.string().min(1),
+        phone: z.string().min(1),
+        email: z.email()
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    const auth = getAuthUser(request)!;
+    try {
+      return await portalService.updatePartnerProfile({
+        actorUserId: auth.sub,
+        partnerId: auth.partnerId!,
+        companyName: parsed.data.companyName,
+        region: parsed.data.region,
+        phone: parsed.data.phone,
+        email: parsed.data.email
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось сохранить профиль"
+      });
+    }
+  });
+
+  app.patch("/api/company/partners/:partnerId/legal", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const partnerId = (request.params as { partnerId: string }).partnerId;
+    const parsed = z
+      .object({
+        legalName: z.string().nullable(),
+        inn: z.string().nullable()
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    try {
+      return await portalService.updatePartnerLegal({
+        actorUserId: getAuthUser(request)!.sub,
+        partnerId,
+        legalName: parsed.data.legalName,
+        inn: parsed.data.inn
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось обновить реквизиты"
+      });
+    }
+  });
+
   app.get("/api/partner/catalog/projects", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
     if (roleCheck) {

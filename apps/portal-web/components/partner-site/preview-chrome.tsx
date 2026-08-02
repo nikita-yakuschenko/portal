@@ -284,11 +284,10 @@ function SiteFooter({ draft }: { draft: PartnerSiteDraft }) {
   const { partnerLegal } = usePartnerSitePreview();
   const aboutBlurb = draft.aboutText.trim();
   const year = new Date().getFullYear();
+  // Коммерческое имя в копирайте; юр. название и ИНН — отдельными строками
   const copyrightName =
-    partnerLegal?.legalName ||
-    partnerLegal?.companyName ||
-    draft.name.trim() ||
-    "";
+    partnerLegal?.companyName?.trim() || draft.name.trim() || "";
+  const legalName = partnerLegal?.legalName?.trim() || "";
   const inn = partnerLegal?.inn || "";
   const footerSocials = resolvePartnerSiteSocials(draft);
 
@@ -322,16 +321,17 @@ function SiteFooter({ draft }: { draft: PartnerSiteDraft }) {
               {copyrightName ? (
                 <p>
                   © {year} {copyrightName}
-                  {inn ? (
-                    <>
-                      <br />
-                      ИНН {inn}
-                    </>
-                  ) : null}
                 </p>
               ) : (
                 <p>© {year}</p>
               )}
+              {legalName || inn ? (
+                <p>
+                  {legalName || null}
+                  {legalName && inn ? <br /> : null}
+                  {inn ? <>ИНН {inn}</> : null}
+                </p>
+              ) : null}
             </div>
           </div>
 
