@@ -24,8 +24,8 @@ export const metadata: Metadata = {
   description:
     "Авангард Строй — завод модульных и каркасных домокомплектов. Станьте дилером: маржа до 15%, каталог проектов, производство 8000 м² и поддержка завода.",
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/icon.svg", type: "image/svg+xml" }]
+    icon: [{ url: "/logo_social_l.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/logo_social_l.svg", type: "image/svg+xml" }]
   }
 };
 
