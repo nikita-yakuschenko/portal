@@ -41,8 +41,8 @@ import { companyCabinetLabel, companyNavigation } from "@/lib/company-nav";
 type Partner = {
   id: string;
   companyName: string;
-  legalName?: string | null;
-  inn?: string | null;
+  legalName: string | null;
+  inn: string | null;
   email: string;
   phone: string;
   region: string;
@@ -69,7 +69,14 @@ export default function CompanyPartnersPage() {
   useEffect(() => {
     void (async () => {
       try {
-        setPartners(await apiFetch<Partner[]>("/api/company/partners"));
+      const rows = await apiFetch<Partner[]>("/api/company/partners");
+      setPartners(
+        rows.map((row) => ({
+          ...row,
+          legalName: row.legalName ?? null,
+          inn: row.inn ?? null
+        }))
+      );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Не удалось загрузить партнёров");
       } finally {
@@ -101,7 +108,11 @@ export default function CompanyPartnersPage() {
       setPartners((prev) =>
         prev.map((row) =>
           row.id === editing.id
-            ? { ...row, legalName: updated.legalName, inn: updated.inn }
+            ? {
+                ...row,
+                legalName: updated.legalName ?? null,
+                inn: updated.inn ?? null
+              }
             : row
         )
       );
