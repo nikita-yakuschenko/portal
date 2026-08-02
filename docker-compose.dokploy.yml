@@ -17,11 +17,12 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@avgst.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD required}
       ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-AVGST Admin}
-      PARTNER_EMAIL: ${PARTNER_EMAIL:-}
-      PARTNER_PASSWORD: ${PARTNER_PASSWORD:-}
-      PARTNER_FULL_NAME: ${PARTNER_FULL_NAME:-}
-      PARTNER_COMPANY_NAME: ${PARTNER_COMPANY_NAME:-}
-      PARTNER_REGION: ${PARTNER_REGION:-}
+      # Опциональный seed-партнёр при первом старте (можно переопределить в Environment)
+      PARTNER_EMAIL: ${PARTNER_EMAIL:-partner@avgst.local}
+      PARTNER_PASSWORD: ${PARTNER_PASSWORD:-ChangeMe123!}
+      PARTNER_FULL_NAME: ${PARTNER_FULL_NAME:-Демо Партнёр}
+      PARTNER_COMPANY_NAME: ${PARTNER_COMPANY_NAME:-Демо Дилер}
+      PARTNER_REGION: ${PARTNER_REGION:-Нижний Новгород}
       TILDA_PUBLIC_KEY: ${TILDA_PUBLIC_KEY:-}
       TILDA_SECRET_KEY: ${TILDA_SECRET_KEY:-}
       TILDA_API_BASE: ${TILDA_API_BASE:-https://store.tildaapi.com/api/getproductslist/}

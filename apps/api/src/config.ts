@@ -33,7 +33,12 @@ const configSchema = z.object({
   TILDA_SITE_BASE_URL: z.string().url().default("https://avgst.ru")
 });
 
-const parsedConfig = configSchema.parse(process.env);
+// Dokploy часто прокидывает пустые строки вместо отсутствия ключа —
+// Zod .default() тогда не срабатывает. Пустое → undefined.
+const envForParse = Object.fromEntries(
+  Object.entries(process.env).map(([key, value]) => [key, value === "" ? undefined : value])
+);
+const parsedConfig = configSchema.parse(envForParse);
 
 export const config = {
   port: parsedConfig.PORT,

@@ -3,7 +3,7 @@
 # VPS: 155.212.147.165
 #
 # Публичная точка входа платформы — один хост:
-#   https://b2b.avgst.ru  → portal-web (лендинг, вход, регистрация, кабинеты)
+#   https://b2b.avgst.ru  → portal (лендинг, вход, регистрация, кабинеты)
 # API снаружи отдельно НЕ публикуем: браузер ходит на b2b.avgst.ru/api/*,
 # а Next проксирует на внутренний сервис api:4000.
 #
@@ -15,7 +15,8 @@
 2. **Отдельная БД PostgreSQL в Dokploy** (не в compose приложения) — см. §1a.
 3. Секреты в Environment приложения.
 4. Сменить: `JWT_SECRET`, `ADMIN_PASSWORD`, `DATABASE_URL` (на внешнюю БД).
-5. Env для portal-web:
+5. `PARTNER_*` — опционально (seed демо-партнёра при старте). Пустые значения в Dokploy игнорируются, подставятся дефолты из compose/config.
+6. Env для сервиса portal:
    - `API_BASE_URL=http://api:4000` — внутри Docker
    - `NEXT_PUBLIC_API_URL=https://b2b.avgst.ru`
 
@@ -45,7 +46,7 @@ Compose: [`docker-compose.dokploy.yml`](docker-compose.dokploy.yml).
 
 1. Deploy → дождаться healthy у `api` (миграции на старте).
 2. Домены в Dokploy:
-   - **`b2b.avgst.ru` → `portal-web:3410`** (единственный публичный хост кабинета)
+   - **`b2b.avgst.ru` → `portal:3410`** (единственный публичный хост кабинета)
    - партнёрские домены → `site-runtime:3410`
 3. `api:4000` наружу через отдельный домен **не нужен** (остаётся во внутренней сети compose).
    Порт **3410** у Next — чтобы не пересекаться с Dokploy UI и прочим на VPS (хост `:3000`).
@@ -56,7 +57,7 @@ Compose: [`docker-compose.dokploy.yml`](docker-compose.dokploy.yml).
 
 | Хост | Тип | Значение | Куда в Dokploy |
 |------|-----|----------|----------------|
-| `b2b.avgst.ru` | A | `155.212.147.165` | **portal-web** + TLS |
+| `b2b.avgst.ru` | A | `155.212.147.165` | **portal** + TLS |
 
 Отдельные `api.avgst.ru` / `portal.avgst.ru` **не регистрируем**.
 
