@@ -165,7 +165,7 @@ function SortableCard({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
-    disabled
+    ...(disabled !== undefined ? { disabled } : {})
   });
 
   const dragHandle =
@@ -208,7 +208,7 @@ function SortableTableRow({
 } & React.ComponentProps<typeof TableRow>) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
-    disabled
+    ...(disabled !== undefined ? { disabled } : {})
   });
 
   return (

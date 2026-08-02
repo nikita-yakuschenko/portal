@@ -3,7 +3,11 @@ const apiOrigin = process.env.API_BASE_URL ?? "http://localhost:4000";
 
 const nextConfig = {
   transpilePackages: ["@b2b/domain", "@b2b/site-schema"],
-  // Браузер ходит на тот же origin (:3000) — без CORS и без cookie на :4000
+  eslint: {
+    // ESLint в root workspace; в Docker-образе portal его нет — типы проверяет tsc в build
+    ignoreDuringBuilds: true
+  },
+  // Браузер ходит на тот же origin — без CORS и без cookie на :4000
   async redirects() {
     return [
       {

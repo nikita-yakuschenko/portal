@@ -45,7 +45,7 @@ type Stage = {
 };
 
 function toStages(groups: ConfiguratorGroup[]): Stage[] {
-  const named = groups
+  const named: Stage[] = groups
     .filter((g) => g.title && g.items.length > 0)
     .map((g) => ({
       id: g.id,
@@ -58,7 +58,7 @@ function toStages(groups: ConfiguratorGroup[]): Stage[] {
     named.push({
       id: loose.id,
       title: "Дополнительно",
-      mode: "multi",
+      mode: "multi" as const,
       items: loose.items
     });
   }
