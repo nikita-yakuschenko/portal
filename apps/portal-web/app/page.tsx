@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { cabinetHomeForRole, getSessionUser } from "../components/auth-gate";
 import { FactoryVideo } from "../components/factory-video";
 import { LandingHeader } from "../components/landing-header";
 import { LandingSnap } from "../components/landing-snap";
@@ -59,11 +60,14 @@ const regions = [
   "Ростов-на-Дону"
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const user = await getSessionUser();
+  const cabinetHref = user ? cabinetHomeForRole(user.role) : null;
+
   return (
     <main className="bg-background text-foreground">
       <LandingSnap />
-      <LandingHeader />
+      <LandingHeader user={user} />
 
       <section className="landing-snap-section relative min-h-svh overflow-hidden text-white">
         {/* Full-bleed: низ кадра к низу hero + лёгкий zoom снизу — дом выше в экране */}
@@ -91,18 +95,29 @@ export default function HomePage() {
             комплектации, материалы для продаж и сопровождение заказов.
           </p>
           <div className="landing-rise landing-rise-delay-2 mt-7 flex flex-wrap items-center gap-3">
-            <Link
-              href="/signup"
-              className="inline-flex h-11 items-center rounded-lg bg-avgst-green px-5 text-sm font-semibold text-white transition hover:bg-avgst-green-hover"
-            >
-              Стать дилером
-            </Link>
-            <Link
-              href="/login"
-              className="inline-flex h-11 items-center rounded-lg border border-white/30 bg-white/5 px-5 text-sm font-semibold text-white backdrop-blur-sm transition hover:border-white/50 hover:bg-white/10"
-            >
-              Войти в кабинет
-            </Link>
+            {cabinetHref ? (
+              <Link
+                href={cabinetHref}
+                className="inline-flex h-11 items-center rounded-lg bg-avgst-green px-5 text-sm font-semibold text-white transition hover:bg-avgst-green-hover"
+              >
+                Перейти в кабинет
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/signup"
+                  className="inline-flex h-11 items-center rounded-lg bg-avgst-green px-5 text-sm font-semibold text-white transition hover:bg-avgst-green-hover"
+                >
+                  Стать дилером
+                </Link>
+                <Link
+                  href="/login"
+                  className="inline-flex h-11 items-center rounded-lg border border-white/30 bg-white/5 px-5 text-sm font-semibold text-white backdrop-blur-sm transition hover:border-white/50 hover:bg-white/10"
+                >
+                  Войти в кабинет
+                </Link>
+              </>
+            )}
           </div>
           </div>
         </div>
@@ -207,10 +222,10 @@ export default function HomePage() {
               </h2>
             </div>
             <Link
-              href="/login"
+              href={cabinetHref ?? "/login"}
               className="inline-flex h-10 items-center rounded-lg border border-border bg-white px-4 text-sm font-medium shadow-sm transition hover:bg-secondary"
             >
-              Войти в кабинет
+              {user ? "Перейти в кабинет" : "Войти в кабинет"}
             </Link>
           </div>
 
@@ -265,10 +280,10 @@ export default function HomePage() {
             </p>
           </div>
           <Link
-            href="/signup"
+            href={cabinetHref ?? "/signup"}
             className="inline-flex h-11 shrink-0 items-center rounded-lg bg-avgst-green px-7 text-sm font-semibold text-white transition hover:bg-avgst-green-hover"
           >
-            Стать дилером
+            {user ? "Перейти в кабинет" : "Стать дилером"}
           </Link>
         </div>
       </section>
@@ -283,8 +298,11 @@ export default function HomePage() {
             <a href="https://avgst.ru" className="transition hover:text-foreground">
               avgst.ru
             </a>
-            <Link href="/login" className="transition hover:text-foreground">
-              Войти в кабинет
+            <Link
+              href={cabinetHref ?? "/login"}
+              className="transition hover:text-foreground"
+            >
+              {user ? user.fullName || "Кабинет" : "Войти в кабинет"}
             </Link>
           </div>
         </div>

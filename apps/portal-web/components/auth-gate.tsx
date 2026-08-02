@@ -1,8 +1,10 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-type SessionUser = {
+export type SessionUser = {
   role: "company_admin" | "company_manager" | "partner_owner" | "partner_member";
+  fullName: string;
+  email: string;
 };
 
 type SessionPayload = {
@@ -18,17 +20,18 @@ function apiBaseUrl(): string {
   return process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 }
 
-/** Серверная проверка роли: без клиентского экрана ожидания. */
-export async function AuthGate({ allow, children }: AuthGateProps) {
+export function cabinetHomeForRole(role: SessionUser["role"]): "/company" | "/partner" {
+  return role === "company_admin" || role === "company_manager" ? "/company" : "/partner";
+}
+
+/** Текущий пользователь из cookie-сессии или null (для публичных страниц). */
+export async function getSessionUser(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get("b2b_session")?.value;
-
   if (!token) {
-    redirect("/login");
+    return null;
   }
 
-  // redirect() бросает исключение — не вызывать его внутри try/catch
-  let session: SessionPayload | null = null;
   try {
     const response = await fetch(`${apiBaseUrl()}/api/auth/session`, {
       headers: {
@@ -38,23 +41,28 @@ export async function AuthGate({ allow, children }: AuthGateProps) {
       cache: "no-store"
     });
 
-    if (response.ok) {
-      session = (await response.json()) as SessionPayload;
+    if (!response.ok) {
+      return null;
     }
-  } catch {
-    session = null;
-  }
 
-  if (!session) {
+    const session = (await response.json()) as SessionPayload;
+    return session.user ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Серверная проверка роли: без клиентского экрана ожидания. */
+export async function AuthGate({ allow, children }: AuthGateProps) {
+  // redirect() бросает исключение — не вызывать его внутри try/catch
+  const user = await getSessionUser();
+
+  if (!user) {
     redirect("/login");
   }
 
-  if (!allow.includes(session.user.role)) {
-    const home =
-      session.user.role === "company_admin" || session.user.role === "company_manager"
-        ? "/company"
-        : "/partner";
-    redirect(home);
+  if (!allow.includes(user.role)) {
+    redirect(cabinetHomeForRole(user.role));
   }
 
   return children;
