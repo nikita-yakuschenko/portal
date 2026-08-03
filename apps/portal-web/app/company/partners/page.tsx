@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { IconUsers } from "@tabler/icons-react";
+import {
+  IconFileDescription,
+  IconKey,
+  IconPlayerPause,
+  IconPlayerPlay,
+  IconUsers
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { DashboardShell } from "@/components/dashboard-shell";
@@ -315,43 +321,52 @@ export default function CompanyPartnersPage() {
                         {new Date(partner.createdAt).toLocaleDateString("ru-RU")}
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-wrap justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             type="button"
-                            variant="outline"
-                            size="sm"
+                            variant="ghost"
+                            size="icon-sm"
+                            title="Реквизиты"
+                            aria-label="Реквизиты"
                             onClick={() => openLegal(partner)}
                           >
-                            Реквизиты
+                            <IconFileDescription />
                           </Button>
                           {partner.status === "suspended" ? (
                             <Button
                               type="button"
-                              size="sm"
+                              variant="ghost"
+                              size="icon-sm"
                               disabled={busyId === partner.id}
+                              title="Активировать"
+                              aria-label="Активировать"
                               onClick={() => void handleStatus(partner, "active")}
                             >
-                              Активировать
+                              <IconPlayerPlay />
                             </Button>
                           ) : (
                             <Button
                               type="button"
-                              variant="outline"
-                              size="sm"
+                              variant="ghost"
+                              size="icon-sm"
                               disabled={busyId === partner.id}
+                              title="Приостановить"
+                              aria-label="Приостановить"
                               onClick={() => void handleStatus(partner, "suspended")}
                             >
-                              Приостановить
+                              <IconPlayerPause />
                             </Button>
                           )}
                           <Button
                             type="button"
-                            variant="outline"
-                            size="sm"
+                            variant="ghost"
+                            size="icon-sm"
                             disabled={busyId === partner.id}
+                            title="Сбросить пароль"
+                            aria-label="Сбросить пароль"
                             onClick={() => void handleResetPassword(partner)}
                           >
-                            Пароль
+                            <IconKey />
                           </Button>
                         </div>
                       </TableCell>
