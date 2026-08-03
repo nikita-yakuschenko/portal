@@ -112,7 +112,6 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
   const { openLeadForm } = usePartnerSitePreview();
   const [menuOpen, setMenuOpen] = useState(false);
   const onHero = isHeroUnderlay(pathname);
-  const tone = onHero ? "onDark" : "onLight";
 
   useEffect(() => {
     setMenuOpen(false);
@@ -127,9 +126,10 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
     };
   }, [menuOpen]);
 
+  // На светлых страницах — плотная тёмная плашка (не полупрозрачная и не белая)
   const plaqueClass = onHero
     ? "bg-black/25 shadow-sm backdrop-blur-md"
-    : "border border-slate-200/90 bg-white/95 shadow-sm backdrop-blur-md";
+    : "bg-[#0f1216] shadow-md";
 
   return (
     <header className="pointer-events-none absolute inset-x-0 top-0 z-20">
@@ -142,17 +142,14 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
           )}
         >
           <Link href={previewPaths.home} className="min-w-0 shrink-0">
-            <BrandMark draft={draft} compact tone={tone} />
+            <BrandMark draft={draft} compact tone="onDark" />
           </Link>
 
           <div className="flex min-w-0 flex-1 justify-center px-1">
             {draft.contactPhone ? (
               <a
                 href={`tel:${draft.contactPhone}`}
-                className={cn(
-                  "truncate text-sm font-semibold tabular-nums",
-                  onHero ? "text-white/95" : "text-slate-900"
-                )}
+                className="truncate text-sm font-semibold tabular-nums text-white/95"
               >
                 {draft.contactPhone}
               </a>
@@ -171,12 +168,7 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
             </Button>
             <button
               type="button"
-              className={cn(
-                "inline-flex size-9 items-center justify-center rounded-lg border transition focus-visible:ring-[3px] focus-visible:outline-none",
-                onHero
-                  ? "border-white/25 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-white/40"
-                  : "border-slate-200 bg-slate-50 text-slate-900 hover:bg-slate-100 focus-visible:ring-slate-300"
-              )}
+              className="inline-flex size-9 items-center justify-center rounded-lg border border-white/25 bg-white/10 text-white transition hover:bg-white/20 focus-visible:ring-[3px] focus-visible:ring-white/40 focus-visible:outline-none"
               aria-label={menuOpen ? "Закрыть меню" : "Открыть меню"}
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((open) => !open)}
@@ -198,30 +190,17 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
           )}
         >
           <Link href={previewPaths.home} className="shrink-0">
-            <BrandMark draft={draft} tone={tone} />
+            <BrandMark draft={draft} tone="onDark" />
           </Link>
 
-          <nav
-            className={cn(
-              "flex items-center gap-1 text-sm",
-              onHero ? "text-white/80" : "text-slate-600"
-            )}
-          >
+          <nav className="flex items-center gap-1 text-sm text-white/80">
             {NAV.filter((item) => item.href !== previewPaths.home).map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "rounded-lg px-3 py-2 transition",
-                  onHero
-                    ? cn(
-                        "hover:bg-white/10 hover:text-white",
-                        item.match(pathname) && "bg-white/10 text-white"
-                      )
-                    : cn(
-                        "hover:bg-slate-100 hover:text-slate-950",
-                        item.match(pathname) && "bg-slate-100 font-medium text-slate-950"
-                      )
+                  "rounded-lg px-3 py-2 transition hover:bg-white/10 hover:text-white",
+                  item.match(pathname) && "bg-white/15 font-medium text-white"
                 )}
               >
                 {item.label}
@@ -233,12 +212,7 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
             {draft.contactPhone ? (
               <a
                 href={`tel:${draft.contactPhone}`}
-                className={cn(
-                  "text-sm font-semibold tabular-nums transition",
-                  onHero
-                    ? "text-white/90 hover:text-white"
-                    : "text-slate-900 hover:text-slate-700"
-                )}
+                className="text-sm font-semibold tabular-nums text-white/90 transition hover:text-white"
               >
                 {draft.contactPhone}
               </a>
