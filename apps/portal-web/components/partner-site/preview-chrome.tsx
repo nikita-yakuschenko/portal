@@ -35,10 +35,13 @@ const NAV = [
 
 function BrandMark({
   draft,
-  compact = false
+  compact = false,
+  tone = "onDark"
 }: {
   draft: PartnerSiteDraft;
   compact?: boolean;
+  /** onDark — поверх hero; onLight — светлые страницы каталога/контактов */
+  tone?: "onDark" | "onLight";
 }) {
   // Мобилка: отдельный компактный логотип, иначе обычный
   const src = compact
@@ -52,7 +55,8 @@ function BrandMark({
         src={src}
         alt={draft.name}
         className={cn(
-          "w-auto object-contain drop-shadow-sm",
+          "w-auto object-contain",
+          tone === "onDark" && "drop-shadow-sm",
           compact
             ? isMobileIcon
               ? "size-9 max-w-9"
@@ -66,7 +70,8 @@ function BrandMark({
   return (
     <span
       className={cn(
-        "font-bold uppercase tracking-wide text-white",
+        "font-bold uppercase tracking-wide",
+        tone === "onLight" ? "text-slate-900" : "text-white",
         compact ? "line-clamp-2 max-w-[5.5rem] text-xs leading-tight" : "text-base md:text-lg"
       )}
     >
@@ -106,6 +111,8 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
   const pathname = usePathname();
   const { openLeadForm } = usePartnerSitePreview();
   const [menuOpen, setMenuOpen] = useState(false);
+  const onHero = isHeroUnderlay(pathname);
+  const tone = onHero ? "onDark" : "onLight";
 
   useEffect(() => {
     setMenuOpen(false);
@@ -120,20 +127,32 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
     };
   }, [menuOpen]);
 
+  const plaqueClass = onHero
+    ? "bg-black/25 shadow-sm backdrop-blur-md"
+    : "border border-slate-200/90 bg-white/95 shadow-sm backdrop-blur-md";
+
   return (
     <header className="pointer-events-none absolute inset-x-0 top-0 z-20">
       <div className="mx-auto max-w-6xl px-4 pt-4 md:px-6">
         {/* Мобилка: лого | телефон по центру | вопрос + бургер */}
-        <div className="pointer-events-auto flex items-center gap-2 rounded-xl bg-black/25 px-2.5 py-2 shadow-sm backdrop-blur-md sm:px-3 lg:hidden">
+        <div
+          className={cn(
+            "pointer-events-auto flex items-center gap-2 rounded-xl px-2.5 py-2 sm:px-3 lg:hidden",
+            plaqueClass
+          )}
+        >
           <Link href={previewPaths.home} className="min-w-0 shrink-0">
-            <BrandMark draft={draft} compact />
+            <BrandMark draft={draft} compact tone={tone} />
           </Link>
 
           <div className="flex min-w-0 flex-1 justify-center px-1">
             {draft.contactPhone ? (
               <a
                 href={`tel:${draft.contactPhone}`}
-                className="truncate text-sm font-semibold tabular-nums text-white/95"
+                className={cn(
+                  "truncate text-sm font-semibold tabular-nums",
+                  onHero ? "text-white/95" : "text-slate-900"
+                )}
               >
                 {draft.contactPhone}
               </a>
@@ -152,7 +171,12 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
             </Button>
             <button
               type="button"
-              className="inline-flex size-9 items-center justify-center rounded-lg border border-white/25 bg-white/10 text-white transition hover:bg-white/20 focus-visible:ring-[3px] focus-visible:ring-white/40 focus-visible:outline-none"
+              className={cn(
+                "inline-flex size-9 items-center justify-center rounded-lg border transition focus-visible:ring-[3px] focus-visible:outline-none",
+                onHero
+                  ? "border-white/25 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-white/40"
+                  : "border-slate-200 bg-slate-50 text-slate-900 hover:bg-slate-100 focus-visible:ring-slate-300"
+              )}
               aria-label={menuOpen ? "Закрыть меню" : "Открыть меню"}
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((open) => !open)}
@@ -167,19 +191,37 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
         </div>
 
         {/* Десктоп: лого + нав + телефон + вопрос */}
-        <div className="pointer-events-auto hidden items-center justify-between gap-4 rounded-xl bg-black/25 px-4 py-2.5 shadow-sm backdrop-blur-md lg:flex">
+        <div
+          className={cn(
+            "pointer-events-auto hidden items-center justify-between gap-4 rounded-xl px-4 py-2.5 lg:flex",
+            plaqueClass
+          )}
+        >
           <Link href={previewPaths.home} className="shrink-0">
-            <BrandMark draft={draft} />
+            <BrandMark draft={draft} tone={tone} />
           </Link>
 
-          <nav className="flex items-center gap-1 text-sm text-white/80">
+          <nav
+            className={cn(
+              "flex items-center gap-1 text-sm",
+              onHero ? "text-white/80" : "text-slate-600"
+            )}
+          >
             {NAV.filter((item) => item.href !== previewPaths.home).map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "rounded-lg px-3 py-2 transition hover:bg-white/10 hover:text-white",
-                  item.match(pathname) && "bg-white/10 text-white"
+                  "rounded-lg px-3 py-2 transition",
+                  onHero
+                    ? cn(
+                        "hover:bg-white/10 hover:text-white",
+                        item.match(pathname) && "bg-white/10 text-white"
+                      )
+                    : cn(
+                        "hover:bg-slate-100 hover:text-slate-950",
+                        item.match(pathname) && "bg-slate-100 font-medium text-slate-950"
+                      )
                 )}
               >
                 {item.label}
@@ -191,7 +233,12 @@ function SiteHeader({ draft }: { draft: PartnerSiteDraft }) {
             {draft.contactPhone ? (
               <a
                 href={`tel:${draft.contactPhone}`}
-                className="text-sm font-semibold tabular-nums text-white/90 transition hover:text-white"
+                className={cn(
+                  "text-sm font-semibold tabular-nums transition",
+                  onHero
+                    ? "text-white/90 hover:text-white"
+                    : "text-slate-900 hover:text-slate-700"
+                )}
               >
                 {draft.contactPhone}
               </a>
