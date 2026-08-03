@@ -78,16 +78,19 @@ export function ProjectQuoteSummary({
           </h3>
 
           {rows.length > 0 ? (
-            <ul className="mt-5 flex divide-x divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
+            <ul className="mt-5 flex flex-col divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 sm:flex-row sm:divide-x sm:divide-y-0">
               {rows.map((row) => {
                 const Icon = row.icon;
                 return (
-                  <li key={row.label} className="min-w-0 flex-1 px-2.5 py-3 sm:px-4">
-                    <div className="flex items-center gap-1 text-[0.65rem] font-medium tracking-wide text-slate-500 uppercase sm:gap-1.5 sm:text-xs">
+                  <li
+                    key={row.label}
+                    className="flex items-center justify-between gap-3 px-4 py-3 sm:min-w-0 sm:flex-1 sm:flex-col sm:items-stretch sm:justify-start sm:px-4"
+                  >
+                    <div className="flex items-center gap-1.5 text-xs font-medium tracking-wide text-slate-500 uppercase">
                       <Icon className="size-3.5 shrink-0 text-avgst-green" stroke={1.75} />
-                      <span className="truncate">{row.label}</span>
+                      <span>{row.label}</span>
                     </div>
-                    <p className="mt-1 text-base font-extrabold tabular-nums text-slate-900 sm:text-lg">
+                    <p className="text-base font-extrabold tabular-nums text-slate-900 sm:mt-1 sm:text-lg">
                       {row.value}
                     </p>
                   </li>
