@@ -57,7 +57,6 @@ function rangeStep(min: number, max: number): number {
 /** Карточка диапазона: сброс — крестик в правом верхнем углу */
 function RangeFilterCard({
   title,
-  valueLabel,
   active,
   disabled = false,
   onClear,
@@ -65,7 +64,6 @@ function RangeFilterCard({
   children
 }: {
   title: string;
-  valueLabel: string;
   active: boolean;
   disabled?: boolean;
   onClear?: () => void;
@@ -91,9 +89,77 @@ function RangeFilterCard({
       ) : null}
       <div className={cn("px-4 pt-3 pb-1", active && !disabled && "pr-10")}>
         <p className="text-sm font-medium text-slate-900">{title}</p>
-        <p className="mt-0.5 text-xs tabular-nums text-slate-500">{valueLabel}</p>
       </div>
       <div className="px-4 pt-2 pb-3">{children}</div>
+    </div>
+  );
+}
+
+function thumbPercent(value: number, min: number, max: number): number {
+  if (max <= min) return 0;
+  return ((value - min) / (max - min)) * 100;
+}
+
+/** Значения под каждым ползунком; при disabled — нули по краям */
+function LabeledRangeSlider({
+  min,
+  max,
+  value,
+  onValueChange,
+  formatValue,
+  disabled = false,
+  className,
+  "aria-label": ariaLabel
+}: {
+  min: number;
+  max: number;
+  value: [number, number];
+  onValueChange?: (value: [number, number]) => void;
+  formatValue: (value: number) => string;
+  disabled?: boolean;
+  className?: string;
+  "aria-label"?: string;
+}) {
+  const lo = disabled ? 0 : value[0];
+  const hi = disabled ? 0 : value[1];
+  const loPct = disabled ? 0 : thumbPercent(value[0], min, max);
+  const hiPct = disabled ? 100 : thumbPercent(value[1], min, max);
+
+  return (
+    <div>
+      <Slider
+        className={className}
+        min={disabled ? 0 : min}
+        max={disabled ? 100 : max}
+        step={disabled ? 1 : rangeStep(min, max)}
+        value={disabled ? [0, 0] : value}
+        disabled={disabled}
+        onValueChange={(next) => {
+          if (disabled || !onValueChange || next.length < 2) return;
+          onValueChange([next[0]!, next[1]!]);
+        }}
+        aria-label={ariaLabel}
+      />
+      <div className="relative mt-2.5 h-4">
+        <span
+          className="absolute top-0 max-w-[50%] truncate text-xs tabular-nums text-slate-500"
+          style={{
+            left: `${loPct}%`,
+            transform: loPct < 8 ? "none" : loPct > 92 ? "translateX(-100%)" : "translateX(-50%)"
+          }}
+        >
+          {formatValue(lo)}
+        </span>
+        <span
+          className="absolute top-0 max-w-[50%] truncate text-xs tabular-nums text-slate-500"
+          style={{
+            left: `${hiPct}%`,
+            transform: hiPct < 8 ? "none" : hiPct > 92 ? "translateX(-100%)" : "translateX(-50%)"
+          }}
+        >
+          {formatValue(hi)}
+        </span>
+      </div>
     </div>
   );
 }
@@ -394,43 +460,35 @@ function PartnerSiteProjectsContent() {
           </FilterControlShell>
         </div>
 
-        {/* Нижний ряд: цена всегда; без цен — неактивна. Сброс — крестик в углу */}
+        {/* Нижний ряд: цена всегда; без цен — неактивна с нулями. Значения у ползунков */}
         <div className="grid w-full gap-3 md:grid-cols-2">
           {priceBounds && priceRange ? (
             <RangeFilterCard
               title="Цена"
-              valueLabel={`${formatPriceRange(priceRange[0])} — ${formatPriceRange(priceRange[1])}`}
               active={priceActive}
               onClear={() => setPriceRange([priceBounds.min, priceBounds.max])}
               clearLabel="Сбросить фильтр цены"
             >
-              <Slider
+              <LabeledRangeSlider
                 className={cn(sliderClassName)}
                 min={priceBounds.min}
                 max={priceBounds.max}
-                step={rangeStep(priceBounds.min, priceBounds.max)}
                 value={priceRange}
-                onValueChange={(value) => {
-                  if (value.length >= 2) setPriceRange([value[0]!, value[1]!]);
-                }}
+                formatValue={formatPriceRange}
+                onValueChange={setPriceRange}
                 aria-label="Диапазон цены"
               />
             </RangeFilterCard>
           ) : (
-            <RangeFilterCard
-              title="Цена"
-              valueLabel="Цены не опубликованы"
-              active={false}
-              disabled
-            >
-              <Slider
+            <RangeFilterCard title="Цена" active={false} disabled>
+              <LabeledRangeSlider
                 className={cn(sliderClassName)}
                 min={0}
                 max={100}
-                step={1}
-                value={[0, 100]}
+                value={[0, 0]}
+                formatValue={(v) => `${v.toLocaleString("ru-RU")} ₽`}
                 disabled
-                aria-label="Диапазон цены недоступен"
+                aria-label="Диапазон цены"
               />
             </RangeFilterCard>
           )}
@@ -438,20 +496,17 @@ function PartnerSiteProjectsContent() {
           {areaBounds && areaRange ? (
             <RangeFilterCard
               title="Площадь"
-              valueLabel={`${areaRange[0]} — ${areaRange[1]} м²`}
               active={areaActive}
               onClear={() => setAreaRange([areaBounds.min, areaBounds.max])}
               clearLabel="Сбросить фильтр площади"
             >
-              <Slider
+              <LabeledRangeSlider
                 className={cn(sliderClassName)}
                 min={areaBounds.min}
                 max={areaBounds.max}
-                step={rangeStep(areaBounds.min, areaBounds.max)}
                 value={areaRange}
-                onValueChange={(value) => {
-                  if (value.length >= 2) setAreaRange([value[0]!, value[1]!]);
-                }}
+                formatValue={(v) => `${v} м²`}
+                onValueChange={setAreaRange}
                 aria-label="Диапазон площади"
               />
             </RangeFilterCard>
