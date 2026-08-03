@@ -63,11 +63,7 @@ export function ProjectQuoteSummary({
 
       <div className="mt-5 overflow-hidden rounded-2xl bg-white ring-1 ring-black/5">
         <div className="px-4 py-5 sm:px-6 sm:py-6">
-          <p className="text-sm text-slate-500">
-            Базовый состав проекта — можно запросить точный расчёт у менеджера.
-          </p>
-
-          <h3 className="mt-4 text-2xl font-extrabold uppercase leading-[0.95] tracking-tight text-slate-900 sm:text-3xl">
+          <h3 className="text-2xl font-extrabold uppercase leading-[0.95] tracking-tight text-slate-900 sm:text-3xl">
             {title}
             {mark ? (
               <>
