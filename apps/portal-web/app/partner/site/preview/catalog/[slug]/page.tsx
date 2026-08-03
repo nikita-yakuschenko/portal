@@ -19,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { usePartnerSitePreview } from "@/components/partner-site/preview-context";
-import { ZoomableImage } from "@/components/partner-site/zoomable-image";
+import { MediaLightboxCarousel } from "@/components/partner-site/zoomable-image";
 import {
   ProjectOptionsConfigurator,
   type ConfiguratorSelection
@@ -376,7 +376,6 @@ export default function PartnerSiteProjectDetailPage() {
   }
 
   const lightboxItem = lightbox.items[lightbox.index] ?? null;
-  const lightboxImage = lightboxItem?.sourceUrl ?? null;
   const lightboxLabel = lightboxItem?.label?.trim() || null;
   const canStepPrev = lightbox.index > 0;
   const canStepNext = lightbox.index < lightbox.items.length - 1;
@@ -706,11 +705,11 @@ export default function PartnerSiteProjectDetailPage() {
           showCloseButton={false}
           overlayClassName="bg-black/92"
           aria-describedby={undefined}
-          className="fixed inset-0 top-0 left-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 touch-none flex-col gap-0 overflow-hidden rounded-none border-0 bg-transparent p-0 shadow-none overscroll-none sm:max-w-none"
+          className="fixed inset-0 top-0 left-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-transparent p-0 shadow-none overscroll-none sm:max-w-none"
         >
           <DialogTitle className="sr-only">Просмотр фото — {project.name}</DialogTitle>
 
-          <div className="relative flex h-full min-h-0 touch-none flex-col overscroll-none">
+          <div className="relative flex h-full min-h-0 flex-col overscroll-none">
             {/* Верх: название раздела / ассета */}
             <div className="relative z-20 flex shrink-0 items-center justify-center px-14 py-4 sm:px-16">
               {lightboxLabel ? (
@@ -730,21 +729,19 @@ export default function PartnerSiteProjectDetailPage() {
               </button>
             </div>
 
-            {/* Центр: pinch-zoom только на фото */}
-            <div className="relative flex min-h-0 flex-1 items-center justify-center px-2 sm:px-16">
-              {lightboxImage ? (
-                <ZoomableImage
-                  src={lightboxImage}
-                  alt={lightboxLabel ?? project.name}
-                  className="absolute inset-0"
-                  onSwipeLeft={() => {
-                    if (canStepNext) step(1);
-                  }}
-                  onSwipeRight={() => {
-                    if (canStepPrev) step(-1);
-                  }}
-                />
-              ) : null}
+            {/* Центр: карусель со соседними кадрами + pinch-zoom на активном */}
+            <div className="relative min-h-0 flex-1">
+              <MediaLightboxCarousel
+                items={lightbox.items}
+                index={lightbox.index}
+                onIndexChange={(next) =>
+                  setLightbox((prev) => ({
+                    ...prev,
+                    index: Math.min(Math.max(next, 0), prev.items.length - 1)
+                  }))
+                }
+                className="absolute inset-0"
+              />
 
               {lightbox.items.length > 1 ? (
                 <>

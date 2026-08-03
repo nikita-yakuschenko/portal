@@ -14,28 +14,23 @@ function midpoint(a: Point, b: Point): Point {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
-/** Pinch / double-tap zoom; при scale=1 свайп следует за пальцем */
+/** Pinch / double-tap zoom на одном кадре (листание — снаружи, каруселью) */
 export function ZoomableImage({
   src,
   alt,
   className,
-  onSwipeLeft,
-  onSwipeRight
+  onZoomChange
 }: {
   src: string;
   alt: string;
   className?: string;
-  onSwipeLeft?: () => void;
-  onSwipeRight?: () => void;
+  onZoomChange?: (zoomed: boolean) => void;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState<Point>({ x: 0, y: 0 });
-  const [swipeX, setSwipeX] = useState(0);
-  const [swipeDragging, setSwipeDragging] = useState(false);
   const scaleRef = useRef(1);
   const offsetRef = useRef<Point>({ x: 0, y: 0 });
-  const swipeXRef = useRef(0);
 
   const pinchRef = useRef<{
     startDist: number;
@@ -44,12 +39,9 @@ export function ZoomableImage({
     startMid: Point;
   } | null>(null);
   const panRef = useRef<{ start: Point; origin: Point } | null>(null);
-  const swipeRef = useRef<Point | null>(null);
   const lastTapRef = useRef(0);
   const movingRef = useRef(false);
-  const swipeAxisLockedRef = useRef(false);
-  const swipeLeftRef = useRef(onSwipeLeft);
-  const swipeRightRef = useRef(onSwipeRight);
+  const onZoomChangeRef = useRef(onZoomChange);
 
   useEffect(() => {
     scaleRef.current = scale;
@@ -58,27 +50,17 @@ export function ZoomableImage({
     offsetRef.current = offset;
   }, [offset]);
   useEffect(() => {
-    swipeXRef.current = swipeX;
-  }, [swipeX]);
-  useEffect(() => {
-    swipeLeftRef.current = onSwipeLeft;
-  }, [onSwipeLeft]);
-  useEffect(() => {
-    swipeRightRef.current = onSwipeRight;
-  }, [onSwipeRight]);
+    onZoomChangeRef.current = onZoomChange;
+  }, [onZoomChange]);
 
   useEffect(() => {
     setScale(1);
     setOffset({ x: 0, y: 0 });
-    setSwipeX(0);
-    setSwipeDragging(false);
     scaleRef.current = 1;
     offsetRef.current = { x: 0, y: 0 };
-    swipeXRef.current = 0;
     pinchRef.current = null;
     panRef.current = null;
-    swipeRef.current = null;
-    swipeAxisLockedRef.current = false;
+    onZoomChangeRef.current?.(false);
   }, [src]);
 
   useEffect(() => {
@@ -95,6 +77,14 @@ export function ZoomableImage({
       };
     }
 
+    function applyScale(nextScale: number, nextOffset: Point) {
+      scaleRef.current = nextScale;
+      offsetRef.current = nextOffset;
+      setScale(nextScale);
+      setOffset(nextOffset);
+      onZoomChangeRef.current?.(nextScale > 1.05);
+    }
+
     function onTouchStart(event: TouchEvent) {
       if (event.touches.length === 2) {
         const a = { x: event.touches[0]!.clientX, y: event.touches[0]!.clientY };
@@ -106,27 +96,16 @@ export function ZoomableImage({
           startMid: midpoint(a, b)
         };
         panRef.current = null;
-        swipeRef.current = null;
-        swipeAxisLockedRef.current = false;
-        setSwipeDragging(false);
-        setSwipeX(0);
-        swipeXRef.current = 0;
         movingRef.current = true;
         return;
       }
 
-      if (event.touches.length === 1) {
-        const point = { x: event.touches[0]!.clientX, y: event.touches[0]!.clientY };
-        if (scaleRef.current > 1) {
-          panRef.current = { start: point, origin: offsetRef.current };
-          swipeRef.current = null;
-          movingRef.current = true;
-        } else {
-          swipeRef.current = point;
-          swipeAxisLockedRef.current = false;
-          movingRef.current = false;
-          setSwipeDragging(true);
-        }
+      if (event.touches.length === 1 && scaleRef.current > 1) {
+        panRef.current = {
+          start: { x: event.touches[0]!.clientX, y: event.touches[0]!.clientY },
+          origin: offsetRef.current
+        };
+        movingRef.current = true;
       }
     }
 
@@ -145,10 +124,7 @@ export function ZoomableImage({
           },
           nextScale
         );
-        scaleRef.current = nextScale;
-        offsetRef.current = nextOffset;
-        setScale(nextScale);
-        setOffset(nextOffset);
+        applyScale(nextScale, nextOffset);
         return;
       }
 
@@ -163,74 +139,24 @@ export function ZoomableImage({
         );
         offsetRef.current = nextOffset;
         setOffset(nextOffset);
-        return;
-      }
-
-      // Свайп следует за пальцем
-      if (event.touches.length === 1 && swipeRef.current && scaleRef.current <= 1) {
-        const dx = event.touches[0]!.clientX - swipeRef.current.x;
-        const dy = event.touches[0]!.clientY - swipeRef.current.y;
-        if (!swipeAxisLockedRef.current) {
-          if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-          swipeAxisLockedRef.current = Math.abs(dx) >= Math.abs(dy);
-          if (!swipeAxisLockedRef.current) {
-            swipeRef.current = null;
-            setSwipeDragging(false);
-            setSwipeX(0);
-            swipeXRef.current = 0;
-            return;
-          }
-        }
-        event.preventDefault();
-        movingRef.current = true;
-        swipeXRef.current = dx;
-        setSwipeX(dx);
       }
     }
 
     function onTouchEnd(event: TouchEvent) {
       if (event.touches.length < 2) pinchRef.current = null;
       if (event.touches.length === 0) {
-        const width = el?.clientWidth || 1;
-        const dx = swipeXRef.current;
-        const didSwipe =
-          Boolean(swipeRef.current) &&
-          scaleRef.current <= 1 &&
-          swipeAxisLockedRef.current &&
-          Math.abs(dx) >= Math.min(72, width * 0.18);
-
-        if (didSwipe) {
-          if (dx < 0) swipeLeftRef.current?.();
-          else swipeRightRef.current?.();
-          movingRef.current = true;
-        }
-
         panRef.current = null;
-        swipeRef.current = null;
-        swipeAxisLockedRef.current = false;
-        setSwipeDragging(false);
-        setSwipeX(0);
-        swipeXRef.current = 0;
-
         if (scaleRef.current <= 1.05) {
-          scaleRef.current = 1;
-          offsetRef.current = { x: 0, y: 0 };
-          setScale(1);
-          setOffset({ x: 0, y: 0 });
+          applyScale(1, { x: 0, y: 0 });
         }
 
-        // Double-tap zoom — не после горизонтального свайпа
         if (!movingRef.current) {
           const now = Date.now();
           if (now - lastTapRef.current < 280) {
             if (scaleRef.current > 1) {
-              scaleRef.current = 1;
-              offsetRef.current = { x: 0, y: 0 };
-              setScale(1);
-              setOffset({ x: 0, y: 0 });
+              applyScale(1, { x: 0, y: 0 });
             } else {
-              scaleRef.current = 2.4;
-              setScale(2.4);
+              applyScale(2.4, { x: 0, y: 0 });
             }
             lastTapRef.current = 0;
           } else {
@@ -257,7 +183,8 @@ export function ZoomableImage({
     <div
       ref={viewportRef}
       className={cn(
-        "flex h-full w-full touch-none items-center justify-center overflow-hidden",
+        "flex h-full w-full items-center justify-center overflow-hidden",
+        scale > 1 ? "touch-none" : "touch-pan-x",
         className
       )}
     >
@@ -268,14 +195,95 @@ export function ZoomableImage({
         decoding="async"
         className="max-h-full max-w-full origin-center object-contain select-none"
         style={{
-          transform: `translate3d(${offset.x + swipeX}px, ${offset.y}px, 0) scale(${scale})`,
-          transition:
-            pinchRef.current || panRef.current || swipeDragging
-              ? "none"
-              : "transform 220ms ease-out",
-          opacity: swipeDragging ? Math.max(0.55, 1 - Math.abs(swipeX) / 480) : 1
+          transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`,
+          transition: pinchRef.current || panRef.current ? "none" : "transform 160ms ease-out"
         }}
       />
+    </div>
+  );
+}
+
+export type LightboxCarouselItem = {
+  sourceUrl: string;
+  label?: string | null;
+};
+
+/** Полноэкранная карусель: соседние кадры едут за пальцем (scroll-snap) */
+export function MediaLightboxCarousel({
+  items,
+  index,
+  onIndexChange,
+  className
+}: {
+  items: LightboxCarouselItem[];
+  index: number;
+  onIndexChange: (index: number) => void;
+  className?: string;
+}) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const lockRef = useRef(false);
+  const [zoomed, setZoomed] = useState(false);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || zoomed) return;
+    const target = index * el.clientWidth;
+    if (Math.abs(el.scrollLeft - target) < 2) return;
+    lockRef.current = true;
+    el.scrollTo({ left: target, behavior: "smooth" });
+    const timer = window.setTimeout(() => {
+      lockRef.current = false;
+    }, 420);
+    return () => window.clearTimeout(timer);
+  }, [index, zoomed, items.length]);
+
+  // При открытии / смене набора — без анимации встать на нужный кадр
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    lockRef.current = true;
+    el.scrollTo({ left: index * el.clientWidth, behavior: "auto" });
+    window.setTimeout(() => {
+      lockRef.current = false;
+    }, 50);
+    // только при первом маунте / смене длины ленты
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
+
+  function onScroll() {
+    const el = scrollerRef.current;
+    if (!el || lockRef.current || zoomed || el.clientWidth <= 0) return;
+    const next = Math.round(el.scrollLeft / el.clientWidth);
+    const clamped = Math.min(Math.max(next, 0), items.length - 1);
+    if (clamped !== index) onIndexChange(clamped);
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <div
+      ref={scrollerRef}
+      onScroll={onScroll}
+      className={cn(
+        "flex h-full w-full snap-x snap-mandatory overscroll-x-contain",
+        "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        zoomed ? "overflow-hidden" : "touch-pan-x overflow-x-auto overflow-y-hidden",
+        className
+      )}
+    >
+      {items.map((item, itemIndex) => (
+        <div
+          key={`${item.sourceUrl}-${itemIndex}`}
+          className="relative h-full w-full min-w-full shrink-0 snap-center snap-always"
+        >
+          <ZoomableImage
+            src={item.sourceUrl}
+            alt={item.label?.trim() || `Фото ${itemIndex + 1}`}
+            className="absolute inset-0"
+            {...(itemIndex === index ? { onZoomChange: setZoomed } : {})}
+          />
+        </div>
+      ))}
     </div>
   );
 }
