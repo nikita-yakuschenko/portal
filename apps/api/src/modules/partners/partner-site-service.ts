@@ -331,7 +331,7 @@ export class PartnerSiteService {
       partnerId: input.partnerId,
       entityType: "partner_site",
       entityId: site.id,
-      actionUrl: "/company/sites",
+      actionUrl: `/company/partners/${input.partnerId}?tab=site`,
       excludeUserId: input.actorUserId,
       payload: { companyName, comment: input.comment?.trim() || null }
     });

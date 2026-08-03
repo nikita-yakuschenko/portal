@@ -632,6 +632,19 @@ export async function buildApp() {
     return portalService.listPartners();
   });
 
+  app.get("/api/company/partners/:partnerId", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const partnerId = (request.params as { partnerId: string }).partnerId;
+    const partner = await portalService.getCompanyPartner(partnerId);
+    if (!partner) {
+      return reply.status(404).send({ message: "Партнёр не найден" });
+    }
+    return partner;
+  });
+
   app.post("/api/company/partners", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
     if (roleCheck) {

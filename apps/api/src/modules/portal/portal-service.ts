@@ -1115,6 +1115,23 @@ export class PortalService {
     return db.select().from(partners).orderBy(desc(partners.createdAt));
   }
 
+  /** Карточка партнёра для HQ: профиль + снимок сайта */
+  async getCompanyPartner(partnerId: string) {
+    const partner = await db.query.partners.findFirst({
+      where: eq(partners.id, partnerId)
+    });
+    if (!partner) return null;
+
+    const sites = await this.listCompanySites();
+    const site = sites.find((row) => row.partnerId === partnerId) ?? null;
+
+    return {
+      ...partner,
+      createdAt: partner.createdAt.toISOString(),
+      site
+    };
+  }
+
   async getCompanyDashboard() {
     const [applications, partnerRows, syncRuns] = await Promise.all([
       this.listPartnerApplications(),

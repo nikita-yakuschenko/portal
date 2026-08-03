@@ -1,13 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import {
-  IconFileDescription,
-  IconKey,
-  IconPlayerPause,
-  IconPlayerPlay,
-  IconUsers
-} from "@tabler/icons-react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { IconChevronRight, IconUsers } from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { DashboardShell } from "@/components/dashboard-shell";
@@ -56,22 +51,25 @@ type Partner = {
   createdAt: string;
 };
 
+type SiteRow = {
+  partnerId: string;
+  status: "draft" | "published";
+  publishLocked: boolean;
+  republishRequestStatus: "pending" | null;
+};
+
 const partnerStatusLabels: Record<string, string> = {
   active: "Активен",
   pending: "Ожидает",
   suspended: "Приостановлен"
 };
 
-type DialogMode = "legal" | "create" | "password" | null;
-
 export default function CompanyPartnersPage() {
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [sites, setSites] = useState<SiteRow[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [dialog, setDialog] = useState<DialogMode>(null);
-  const [selected, setSelected] = useState<Partner | null>(null);
-  const [legalName, setLegalName] = useState("");
-  const [inn, setInn] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
     companyName: "",
     fullName: "",
@@ -82,21 +80,29 @@ export default function CompanyPartnersPage() {
     legalName: "",
     inn: ""
   });
-  const [tempPassword, setTempPassword] = useState("");
   const [saving, setSaving] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const siteByPartner = useMemo(() => {
+    const map = new Map<string, SiteRow>();
+    for (const site of sites) map.set(site.partnerId, site);
+    return map;
+  }, [sites]);
 
   const load = useCallback(async () => {
     try {
       setError("");
-      const rows = await apiFetch<Partner[]>("/api/company/partners");
+      const [partnerRows, siteRows] = await Promise.all([
+        apiFetch<Partner[]>("/api/company/partners"),
+        apiFetch<SiteRow[]>("/api/company/sites").catch(() => [] as SiteRow[])
+      ]);
       setPartners(
-        rows.map((row) => ({
+        partnerRows.map((row) => ({
           ...row,
           legalName: row.legalName ?? null,
           inn: row.inn ?? null
         }))
       );
+      setSites(siteRows);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить партнёров");
     } finally {
@@ -107,83 +113,6 @@ export default function CompanyPartnersPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  function openLegal(partner: Partner) {
-    setSelected(partner);
-    setLegalName(partner.legalName ?? "");
-    setInn(partner.inn ?? "");
-    setDialog("legal");
-  }
-
-  function closeDialog() {
-    if (saving) return;
-    setDialog(null);
-    setSelected(null);
-    setTempPassword("");
-  }
-
-  async function handleSaveLegal() {
-    if (!selected) return;
-    setSaving(true);
-    try {
-      const updated = await apiFetch<Partner>(`/api/company/partners/${selected.id}/legal`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          legalName: legalName.trim() || null,
-          inn: inn.trim() || null
-        })
-      });
-      setPartners((prev) =>
-        prev.map((row) =>
-          row.id === selected.id
-            ? { ...row, legalName: updated.legalName ?? null, inn: updated.inn ?? null }
-            : row
-        )
-      );
-      toast.success("Юр. реквизиты обновлены");
-      closeDialog();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Не удалось сохранить");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleStatus(partner: Partner, status: "active" | "suspended") {
-    setBusyId(partner.id);
-    try {
-      const updated = await apiFetch<Partner>(`/api/company/partners/${partner.id}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({ status })
-      });
-      setPartners((prev) =>
-        prev.map((row) => (row.id === partner.id ? { ...row, status: updated.status } : row))
-      );
-      toast.success(status === "active" ? "Партнёр активирован" : "Партнёр приостановлен");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Не удалось обновить статус");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleResetPassword(partner: Partner) {
-    setBusyId(partner.id);
-    try {
-      const result = await apiFetch<{ temporaryPassword: string; email: string }>(
-        `/api/company/partners/${partner.id}/reset-password`,
-        { method: "POST", body: "{}" }
-      );
-      setSelected(partner);
-      setTempPassword(result.temporaryPassword);
-      setDialog("password");
-      toast.success(`Пароль сброшен для ${result.email}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Не удалось сбросить пароль");
-    } finally {
-      setBusyId(null);
-    }
-  }
 
   async function handleCreate() {
     if (!createForm.email.trim() || !createForm.companyName.trim()) {
@@ -233,7 +162,7 @@ export default function CompanyPartnersPage() {
         legalName: "",
         inn: ""
       });
-      setDialog(null);
+      setCreateOpen(false);
       setLoading(true);
       await load();
     } catch (err) {
@@ -254,7 +183,7 @@ export default function CompanyPartnersPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
           <CardTitle>Список партнёров</CardTitle>
-          <Button type="button" onClick={() => setDialog("create")}>
+          <Button type="button" onClick={() => setCreateOpen(true)}>
             Создать партнёра
           </Button>
         </CardHeader>
@@ -283,95 +212,63 @@ export default function CompanyPartnersPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Компания</TableHead>
-                    <TableHead>Юр. реквизиты</TableHead>
                     <TableHead>Регион</TableHead>
-                    <TableHead>Контакты</TableHead>
                     <TableHead>Статус</TableHead>
+                    <TableHead>Сайт</TableHead>
                     <TableHead>Подключён</TableHead>
                     <TableHead className="w-[1%]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {partners.map((partner) => (
-                    <TableRow key={partner.id}>
-                      <TableCell className="font-medium">{partner.companyName}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col text-sm">
-                          <span>{partner.legalName?.trim() || "—"}</span>
-                          <span className="text-muted-foreground text-xs">
-                            ИНН {partner.inn?.trim() || "—"}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{partner.region}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span>{partner.email}</span>
-                          <span className="text-muted-foreground text-xs">
-                            {partner.phone || "—"}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={partner.status === "active" ? "default" : "secondary"}>
-                          {partnerStatusLabels[partner.status] ?? partner.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground whitespace-nowrap">
-                        {new Date(partner.createdAt).toLocaleDateString("ru-RU")}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            title="Реквизиты"
-                            aria-label="Реквизиты"
-                            onClick={() => openLegal(partner)}
+                  {partners.map((partner) => {
+                    const site = siteByPartner.get(partner.id);
+                    return (
+                      <TableRow key={partner.id} className="group">
+                        <TableCell>
+                          <Link
+                            href={`/company/partners/${partner.id}`}
+                            className="font-medium underline-offset-4 hover:underline"
                           >
-                            <IconFileDescription />
-                          </Button>
-                          {partner.status === "suspended" ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              disabled={busyId === partner.id}
-                              title="Активировать"
-                              aria-label="Активировать"
-                              onClick={() => void handleStatus(partner, "active")}
-                            >
-                              <IconPlayerPlay />
-                            </Button>
+                            {partner.companyName}
+                          </Link>
+                          <div className="text-muted-foreground text-xs">{partner.email}</div>
+                        </TableCell>
+                        <TableCell>{partner.region}</TableCell>
+                        <TableCell>
+                          <Badge variant={partner.status === "active" ? "default" : "secondary"}>
+                            {partnerStatusLabels[partner.status] ?? partner.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {!site ? (
+                            <span className="text-muted-foreground text-sm">—</span>
                           ) : (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              disabled={busyId === partner.id}
-                              title="Приостановить"
-                              aria-label="Приостановить"
-                              onClick={() => void handleStatus(partner, "suspended")}
-                            >
-                              <IconPlayerPause />
-                            </Button>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge variant={site.status === "published" ? "default" : "secondary"}>
+                                {site.status === "published" ? "Опубликован" : "Черновик"}
+                              </Badge>
+                              {site.publishLocked ? (
+                                <Badge variant="destructive">Заблок.</Badge>
+                              ) : null}
+                              {site.republishRequestStatus === "pending" ? (
+                                <Badge variant="outline">Запрос</Badge>
+                              ) : null}
+                            </div>
                           )}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            disabled={busyId === partner.id}
-                            title="Сбросить пароль"
-                            aria-label="Сбросить пароль"
-                            onClick={() => void handleResetPassword(partner)}
-                          >
-                            <IconKey />
+                        </TableCell>
+                        <TableCell className="text-muted-foreground whitespace-nowrap">
+                          {new Date(partner.createdAt).toLocaleDateString("ru-RU")}
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="icon-sm" asChild title="Открыть карточку">
+                            <Link href={`/company/partners/${partner.id}`}>
+                              <IconChevronRight />
+                            </Link>
                           </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -379,49 +276,7 @@ export default function CompanyPartnersPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialog === "legal"} onOpenChange={(open) => !open && closeDialog()}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Юр. реквизиты</DialogTitle>
-            <DialogDescription>
-              {selected
-                ? `Партнёр «${selected.companyName}». Меняйте юр. название только по запросу и при документах.`
-                : null}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="legal-name">Юр. название</Label>
-              <Input
-                id="legal-name"
-                value={legalName}
-                disabled={saving}
-                onChange={(e) => setLegalName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="legal-inn">ИНН</Label>
-              <Input
-                id="legal-inn"
-                value={inn}
-                disabled={saving}
-                inputMode="numeric"
-                onChange={(e) => setInn(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={saving} onClick={closeDialog}>
-              Отмена
-            </Button>
-            <Button type="button" disabled={saving} onClick={() => void handleSaveLegal()}>
-              {saving ? "Сохранение…" : "Сохранить"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={dialog === "create"} onOpenChange={(open) => !open && closeDialog()}>
+      <Dialog open={createOpen} onOpenChange={(open) => !saving && setCreateOpen(open)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Создать партнёра</DialogTitle>
@@ -507,39 +362,16 @@ export default function CompanyPartnersPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={saving} onClick={closeDialog}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving}
+              onClick={() => setCreateOpen(false)}
+            >
               Отмена
             </Button>
             <Button type="button" disabled={saving} onClick={() => void handleCreate()}>
               {saving ? "Создание…" : "Создать"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={dialog === "password"} onOpenChange={(open) => !open && closeDialog()}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Новый пароль</DialogTitle>
-            <DialogDescription>
-              {selected
-                ? `Владелец «${selected.companyName}». Пароль показывается один раз.`
-                : null}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-lg border bg-muted/40 px-3 py-2 font-mono text-sm break-all">
-            {tempPassword}
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void navigator.clipboard.writeText(tempPassword)}
-            >
-              Скопировать
-            </Button>
-            <Button type="button" onClick={closeDialog}>
-              Закрыть
             </Button>
           </DialogFooter>
         </DialogContent>
