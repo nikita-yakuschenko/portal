@@ -534,21 +534,30 @@ export default function PartnerSiteProjectDetailPage() {
                   "lg:mt-0 lg:ml-auto lg:shrink-0 lg:gap-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-4"
                 )}
               >
-                <div className="min-w-0 lg:w-[17ch] lg:shrink-0">
+                <div className="shrink-0">
                   <p className="text-[0.65rem] font-medium tracking-wide text-white/65 uppercase sm:text-xs">
                     Стоимость
                   </p>
-                  <p className="mt-0.5 truncate text-lg font-extrabold tracking-tight text-white tabular-nums sm:text-xl lg:text-xl xl:text-2xl">
-                    {priceAmount == null ? (
-                      "Цена по запросу"
-                    ) : (
-                      <>
-                        от {priceAmount}
-                        {/* ₽ только на десктопе — на мобилке знак уезжал на отдельную строку */}
-                        <span className="hidden lg:inline">&nbsp;₽</span>
-                      </>
-                    )}
-                  </p>
+                  {/* Ширина = max(факт, «Цена по запросу») — без truncate и без прыжков */}
+                  <div className="mt-0.5 inline-grid justify-items-start">
+                    <span
+                      aria-hidden
+                      className="invisible col-start-1 row-start-1 whitespace-nowrap text-lg font-extrabold tracking-tight tabular-nums sm:text-xl lg:text-xl xl:text-2xl"
+                    >
+                      Цена по запросу
+                    </span>
+                    <p className="col-start-1 row-start-1 whitespace-nowrap text-lg font-extrabold tracking-tight text-white tabular-nums sm:text-xl lg:text-xl xl:text-2xl">
+                      {priceAmount == null ? (
+                        "Цена по запросу"
+                      ) : (
+                        <>
+                          от {priceAmount}
+                          {/* ₽ только на десктопе — на мобилке знак уезжал на отдельную строку */}
+                          <span className="hidden lg:inline">&nbsp;₽</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex h-10 shrink-0 items-stretch gap-2">
                   <Button
