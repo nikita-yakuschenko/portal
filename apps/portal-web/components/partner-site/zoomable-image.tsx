@@ -14,7 +14,7 @@ function midpoint(a: Point, b: Point): Point {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
-/** Pinch / double-tap zoom только на картинке; свайп влево/вправо при scale=1 */
+/** Pinch / double-tap zoom; при scale=1 свайп следует за пальцем */
 export function ZoomableImage({
   src,
   alt,
@@ -31,8 +31,11 @@ export function ZoomableImage({
   const viewportRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState<Point>({ x: 0, y: 0 });
+  const [swipeX, setSwipeX] = useState(0);
+  const [swipeDragging, setSwipeDragging] = useState(false);
   const scaleRef = useRef(1);
   const offsetRef = useRef<Point>({ x: 0, y: 0 });
+  const swipeXRef = useRef(0);
 
   const pinchRef = useRef<{
     startDist: number;
@@ -44,6 +47,7 @@ export function ZoomableImage({
   const swipeRef = useRef<Point | null>(null);
   const lastTapRef = useRef(0);
   const movingRef = useRef(false);
+  const swipeAxisLockedRef = useRef(false);
   const swipeLeftRef = useRef(onSwipeLeft);
   const swipeRightRef = useRef(onSwipeRight);
 
@@ -54,6 +58,9 @@ export function ZoomableImage({
     offsetRef.current = offset;
   }, [offset]);
   useEffect(() => {
+    swipeXRef.current = swipeX;
+  }, [swipeX]);
+  useEffect(() => {
     swipeLeftRef.current = onSwipeLeft;
   }, [onSwipeLeft]);
   useEffect(() => {
@@ -63,11 +70,15 @@ export function ZoomableImage({
   useEffect(() => {
     setScale(1);
     setOffset({ x: 0, y: 0 });
+    setSwipeX(0);
+    setSwipeDragging(false);
     scaleRef.current = 1;
     offsetRef.current = { x: 0, y: 0 };
+    swipeXRef.current = 0;
     pinchRef.current = null;
     panRef.current = null;
     swipeRef.current = null;
+    swipeAxisLockedRef.current = false;
   }, [src]);
 
   useEffect(() => {
@@ -96,6 +107,10 @@ export function ZoomableImage({
         };
         panRef.current = null;
         swipeRef.current = null;
+        swipeAxisLockedRef.current = false;
+        setSwipeDragging(false);
+        setSwipeX(0);
+        swipeXRef.current = 0;
         movingRef.current = true;
         return;
       }
@@ -108,7 +123,9 @@ export function ZoomableImage({
           movingRef.current = true;
         } else {
           swipeRef.current = point;
+          swipeAxisLockedRef.current = false;
           movingRef.current = false;
+          setSwipeDragging(true);
         }
       }
     }
@@ -146,25 +163,55 @@ export function ZoomableImage({
         );
         offsetRef.current = nextOffset;
         setOffset(nextOffset);
+        return;
+      }
+
+      // Свайп следует за пальцем
+      if (event.touches.length === 1 && swipeRef.current && scaleRef.current <= 1) {
+        const dx = event.touches[0]!.clientX - swipeRef.current.x;
+        const dy = event.touches[0]!.clientY - swipeRef.current.y;
+        if (!swipeAxisLockedRef.current) {
+          if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+          swipeAxisLockedRef.current = Math.abs(dx) >= Math.abs(dy);
+          if (!swipeAxisLockedRef.current) {
+            swipeRef.current = null;
+            setSwipeDragging(false);
+            setSwipeX(0);
+            swipeXRef.current = 0;
+            return;
+          }
+        }
+        event.preventDefault();
+        movingRef.current = true;
+        swipeXRef.current = dx;
+        setSwipeX(dx);
       }
     }
 
     function onTouchEnd(event: TouchEvent) {
       if (event.touches.length < 2) pinchRef.current = null;
       if (event.touches.length === 0) {
-        // Свайп между фото только без зума
-        if (swipeRef.current && scaleRef.current <= 1 && event.changedTouches[0]) {
-          const dx = event.changedTouches[0].clientX - swipeRef.current.x;
-          const dy = event.changedTouches[0].clientY - swipeRef.current.y;
-          if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy)) {
-            if (dx < 0) swipeLeftRef.current?.();
-            else swipeRightRef.current?.();
-            movingRef.current = true;
-          }
+        const width = el?.clientWidth || 1;
+        const dx = swipeXRef.current;
+        const didSwipe =
+          Boolean(swipeRef.current) &&
+          scaleRef.current <= 1 &&
+          swipeAxisLockedRef.current &&
+          Math.abs(dx) >= Math.min(72, width * 0.18);
+
+        if (didSwipe) {
+          if (dx < 0) swipeLeftRef.current?.();
+          else swipeRightRef.current?.();
+          movingRef.current = true;
         }
 
         panRef.current = null;
         swipeRef.current = null;
+        swipeAxisLockedRef.current = false;
+        setSwipeDragging(false);
+        setSwipeX(0);
+        swipeXRef.current = 0;
+
         if (scaleRef.current <= 1.05) {
           scaleRef.current = 1;
           offsetRef.current = { x: 0, y: 0 };
@@ -172,8 +219,8 @@ export function ZoomableImage({
           setOffset({ x: 0, y: 0 });
         }
 
-        // Double-tap zoom
-        if (!movingRef.current || scaleRef.current === 1) {
+        // Double-tap zoom — не после горизонтального свайпа
+        if (!movingRef.current) {
           const now = Date.now();
           if (now - lastTapRef.current < 280) {
             if (scaleRef.current > 1) {
@@ -221,8 +268,12 @@ export function ZoomableImage({
         decoding="async"
         className="max-h-full max-w-full origin-center object-contain select-none"
         style={{
-          transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`,
-          transition: pinchRef.current || panRef.current ? "none" : "transform 160ms ease-out"
+          transform: `translate3d(${offset.x + swipeX}px, ${offset.y}px, 0) scale(${scale})`,
+          transition:
+            pinchRef.current || panRef.current || swipeDragging
+              ? "none"
+              : "transform 220ms ease-out",
+          opacity: swipeDragging ? Math.max(0.55, 1 - Math.abs(swipeX) / 480) : 1
         }}
       />
     </div>

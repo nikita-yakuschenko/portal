@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   IconBath,
   IconBed,
@@ -49,7 +49,7 @@ function splitProjectMark(name: string): { title: string; mark: string } {
   return { title: match[1].trimEnd(), mark: match[2]! };
 }
 
-/** Главное фото + миниатюры под ним; на мобилке — свайп влево/вправо */
+/** Главное фото + миниатюры под ним; свайп следует за пальцем (scroll-snap) */
 function ProjectMediaGallery({
   title,
   assets,
@@ -64,71 +64,71 @@ function ProjectMediaGallery({
   onOpen: (sourceUrl: string) => void;
 }) {
   const [active, setActive] = useState(0);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const scrollLockRef = useRef(false);
+
   const current = assets[Math.min(active, assets.length - 1)];
-  const touchRef = useRef<{ x: number; y: number } | null>(null);
-  const swipedRef = useRef(false);
-
-  function onTouchStart(event: TouchEvent<HTMLButtonElement>) {
-    const touch = event.touches[0];
-    if (!touch) return;
-    touchRef.current = { x: touch.clientX, y: touch.clientY };
-    swipedRef.current = false;
-  }
-
-  function onTouchEnd(event: TouchEvent<HTMLButtonElement>) {
-    const start = touchRef.current;
-    touchRef.current = null;
-    if (!start || assets.length < 2) return;
-    const touch = event.changedTouches[0];
-    if (!touch) return;
-    const dx = touch.clientX - start.x;
-    const dy = touch.clientY - start.y;
-    if (Math.abs(dx) < 40 || Math.abs(dx) <= Math.abs(dy)) return;
-    swipedRef.current = true;
-    if (dx < 0) setActive((index) => Math.min(index + 1, assets.length - 1));
-    else setActive((index) => Math.max(index - 1, 0));
-  }
-
-  function openCurrent() {
-    if (swipedRef.current) {
-      swipedRef.current = false;
-      return;
-    }
-    if (!current) return;
-    onOpen(current.sourceUrl);
-  }
-
   if (!current) return null;
+
+  function syncActiveFromScroll() {
+    const el = scrollerRef.current;
+    if (!el || scrollLockRef.current || el.clientWidth <= 0) return;
+    const next = Math.round(el.scrollLeft / el.clientWidth);
+    const clamped = Math.min(Math.max(next, 0), assets.length - 1);
+    setActive((prev) => (prev === clamped ? prev : clamped));
+  }
+
+  function goTo(index: number) {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const clamped = Math.min(Math.max(index, 0), assets.length - 1);
+    setActive(clamped);
+    scrollLockRef.current = true;
+    el.scrollTo({ left: clamped * el.clientWidth, behavior: "smooth" });
+    window.setTimeout(() => {
+      scrollLockRef.current = false;
+      syncActiveFromScroll();
+    }, 420);
+  }
 
   return (
     <section>
       <h2 className="text-xl font-extrabold tracking-tight uppercase">{title}</h2>
       <div className="mt-5">
-        <button
-          type="button"
-          onClick={openCurrent}
-          onTouchStart={onTouchStart}
-          onTouchEnd={onTouchEnd}
+        <div
+          ref={scrollerRef}
+          onScroll={syncActiveFromScroll}
           className={cn(
-            "block w-full overflow-hidden rounded-2xl ring-1 ring-black/5 transition hover:opacity-95",
+            "flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain rounded-2xl ring-1 ring-black/5",
+            "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+            "touch-pan-x",
             fit === "contain" ? "bg-slate-50" : "bg-slate-900"
           )}
-          aria-label={`Открыть: ${altPrefix}`}
         >
-          <img
-            src={current.sourceUrl}
-            alt={`${altPrefix} — ${active + 1}`}
-            loading="lazy"
-            decoding="async"
-            draggable={false}
-            className={cn(
-              "w-full select-none",
-              fit === "contain"
-                ? "max-h-[70vh] object-contain"
-                : "aspect-video object-cover"
-            )}
-          />
-        </button>
+          {assets.map((asset, index) => (
+            <button
+              key={asset.id ?? asset.sourceUrl + index}
+              type="button"
+              onClick={() => onOpen(asset.sourceUrl)}
+              className="w-full min-w-full shrink-0 snap-center snap-always transition hover:opacity-95"
+              aria-label={`Открыть: ${altPrefix} ${index + 1}`}
+            >
+              <img
+                src={asset.sourceUrl}
+                alt={`${altPrefix} — ${index + 1}`}
+                loading={index === 0 ? "eager" : "lazy"}
+                decoding="async"
+                draggable={false}
+                className={cn(
+                  "w-full select-none",
+                  fit === "contain"
+                    ? "max-h-[70vh] object-contain"
+                    : "aspect-video object-cover"
+                )}
+              />
+            </button>
+          ))}
+        </div>
 
         {assets.length > 1 ? (
           <div className="mt-3 flex gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -138,7 +138,7 @@ function ProjectMediaGallery({
                 <button
                   key={asset.id ?? asset.sourceUrl + index}
                   type="button"
-                  onClick={() => setActive(index)}
+                  onClick={() => goTo(index)}
                   aria-label={`${altPrefix} ${index + 1}`}
                   aria-pressed={selected}
                   className={cn(
