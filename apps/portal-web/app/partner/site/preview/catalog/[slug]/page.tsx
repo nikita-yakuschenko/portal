@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import {
   IconBath,
   IconBed,
@@ -49,7 +49,7 @@ function splitProjectMark(name: string): { title: string; mark: string } {
   return { title: match[1].trimEnd(), mark: match[2]! };
 }
 
-/** Главное фото + карусель миниатюр оверлеем снизу */
+/** Главное фото + миниатюры под ним; на мобилке — свайп влево/вправо */
 function ProjectMediaGallery({
   title,
   assets,
@@ -65,18 +65,52 @@ function ProjectMediaGallery({
 }) {
   const [active, setActive] = useState(0);
   const current = assets[Math.min(active, assets.length - 1)];
+  const touchRef = useRef<{ x: number; y: number } | null>(null);
+  const swipedRef = useRef(false);
+
+  function onTouchStart(event: TouchEvent<HTMLButtonElement>) {
+    const touch = event.touches[0];
+    if (!touch) return;
+    touchRef.current = { x: touch.clientX, y: touch.clientY };
+    swipedRef.current = false;
+  }
+
+  function onTouchEnd(event: TouchEvent<HTMLButtonElement>) {
+    const start = touchRef.current;
+    touchRef.current = null;
+    if (!start || assets.length < 2) return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 40 || Math.abs(dx) <= Math.abs(dy)) return;
+    swipedRef.current = true;
+    if (dx < 0) setActive((index) => Math.min(index + 1, assets.length - 1));
+    else setActive((index) => Math.max(index - 1, 0));
+  }
+
+  function openCurrent() {
+    if (swipedRef.current) {
+      swipedRef.current = false;
+      return;
+    }
+    if (!current) return;
+    onOpen(current.sourceUrl);
+  }
 
   if (!current) return null;
 
   return (
     <section>
       <h2 className="text-xl font-extrabold tracking-tight uppercase">{title}</h2>
-      <div className="relative mt-5 overflow-hidden rounded-2xl bg-slate-200 ring-1 ring-black/5">
+      <div className="mt-5">
         <button
           type="button"
-          onClick={() => onOpen(current.sourceUrl)}
+          onClick={openCurrent}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
           className={cn(
-            "block w-full transition hover:opacity-95",
+            "block w-full overflow-hidden rounded-2xl ring-1 ring-black/5 transition hover:opacity-95",
             fit === "contain" ? "bg-slate-50" : "bg-slate-900"
           )}
           aria-label={`Открыть: ${altPrefix}`}
@@ -86,8 +120,9 @@ function ProjectMediaGallery({
             alt={`${altPrefix} — ${active + 1}`}
             loading="lazy"
             decoding="async"
+            draggable={false}
             className={cn(
-              "w-full",
+              "w-full select-none",
               fit === "contain"
                 ? "max-h-[70vh] object-contain"
                 : "aspect-video object-cover"
@@ -96,41 +131,36 @@ function ProjectMediaGallery({
         </button>
 
         {assets.length > 1 ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/35 to-transparent pt-16">
-            <div className="pointer-events-auto flex gap-2 overflow-x-auto px-3 pt-1.5 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {assets.map((asset, index) => {
-                const selected = index === active;
-                return (
-                  <button
-                    key={asset.id ?? asset.sourceUrl + index}
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setActive(index);
-                    }}
-                    aria-label={`${altPrefix} ${index + 1}`}
-                    aria-pressed={selected}
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {assets.map((asset, index) => {
+              const selected = index === active;
+              return (
+                <button
+                  key={asset.id ?? asset.sourceUrl + index}
+                  type="button"
+                  onClick={() => setActive(index)}
+                  aria-label={`${altPrefix} ${index + 1}`}
+                  aria-pressed={selected}
+                  className={cn(
+                    "relative h-14 w-[4.5rem] shrink-0 overflow-hidden rounded-lg border-2 transition sm:h-16 sm:w-24",
+                    selected
+                      ? "border-avgst-yellow"
+                      : "border-slate-200 hover:border-slate-400"
+                  )}
+                >
+                  <img
+                    src={asset.sourceUrl}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
                     className={cn(
-                      "relative h-14 w-[4.5rem] shrink-0 overflow-hidden rounded-lg border-2 transition sm:h-16 sm:w-24",
-                      selected
-                        ? "border-avgst-yellow"
-                        : "border-white/40 hover:border-white/75"
+                      "size-full",
+                      fit === "contain" ? "object-contain bg-white" : "object-cover"
                     )}
-                  >
-                    <img
-                      src={asset.sourceUrl}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className={cn(
-                        "size-full",
-                        fit === "contain" ? "object-contain bg-white" : "object-cover"
-                      )}
-                    />
-                  </button>
-                );
-              })}
-            </div>
+                  />
+                </button>
+              );
+            })}
           </div>
         ) : null}
       </div>
@@ -707,6 +737,12 @@ export default function PartnerSiteProjectDetailPage() {
                   src={lightboxImage}
                   alt={lightboxLabel ?? project.name}
                   className="absolute inset-0"
+                  onSwipeLeft={() => {
+                    if (canStepNext) step(1);
+                  }}
+                  onSwipeRight={() => {
+                    if (canStepPrev) step(-1);
+                  }}
                 />
               ) : null}
 

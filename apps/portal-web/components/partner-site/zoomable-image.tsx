@@ -14,15 +14,19 @@ function midpoint(a: Point, b: Point): Point {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
-/** Pinch / double-tap zoom только на картинке, без зума страницы */
+/** Pinch / double-tap zoom только на картинке; свайп влево/вправо при scale=1 */
 export function ZoomableImage({
   src,
   alt,
-  className
+  className,
+  onSwipeLeft,
+  onSwipeRight
 }: {
   src: string;
   alt: string;
   className?: string;
+  onSwipeLeft?: () => void;
+  onSwipeRight?: () => void;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -37,8 +41,11 @@ export function ZoomableImage({
     startMid: Point;
   } | null>(null);
   const panRef = useRef<{ start: Point; origin: Point } | null>(null);
+  const swipeRef = useRef<Point | null>(null);
   const lastTapRef = useRef(0);
   const movingRef = useRef(false);
+  const swipeLeftRef = useRef(onSwipeLeft);
+  const swipeRightRef = useRef(onSwipeRight);
 
   useEffect(() => {
     scaleRef.current = scale;
@@ -46,6 +53,12 @@ export function ZoomableImage({
   useEffect(() => {
     offsetRef.current = offset;
   }, [offset]);
+  useEffect(() => {
+    swipeLeftRef.current = onSwipeLeft;
+  }, [onSwipeLeft]);
+  useEffect(() => {
+    swipeRightRef.current = onSwipeRight;
+  }, [onSwipeRight]);
 
   useEffect(() => {
     setScale(1);
@@ -54,6 +67,7 @@ export function ZoomableImage({
     offsetRef.current = { x: 0, y: 0 };
     pinchRef.current = null;
     panRef.current = null;
+    swipeRef.current = null;
   }, [src]);
 
   useEffect(() => {
@@ -81,16 +95,21 @@ export function ZoomableImage({
           startMid: midpoint(a, b)
         };
         panRef.current = null;
+        swipeRef.current = null;
         movingRef.current = true;
         return;
       }
 
-      if (event.touches.length === 1 && scaleRef.current > 1) {
-        panRef.current = {
-          start: { x: event.touches[0]!.clientX, y: event.touches[0]!.clientY },
-          origin: offsetRef.current
-        };
-        movingRef.current = true;
+      if (event.touches.length === 1) {
+        const point = { x: event.touches[0]!.clientX, y: event.touches[0]!.clientY };
+        if (scaleRef.current > 1) {
+          panRef.current = { start: point, origin: offsetRef.current };
+          swipeRef.current = null;
+          movingRef.current = true;
+        } else {
+          swipeRef.current = point;
+          movingRef.current = false;
+        }
       }
     }
 
@@ -133,7 +152,19 @@ export function ZoomableImage({
     function onTouchEnd(event: TouchEvent) {
       if (event.touches.length < 2) pinchRef.current = null;
       if (event.touches.length === 0) {
+        // Свайп между фото только без зума
+        if (swipeRef.current && scaleRef.current <= 1 && event.changedTouches[0]) {
+          const dx = event.changedTouches[0].clientX - swipeRef.current.x;
+          const dy = event.changedTouches[0].clientY - swipeRef.current.y;
+          if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy)) {
+            if (dx < 0) swipeLeftRef.current?.();
+            else swipeRightRef.current?.();
+            movingRef.current = true;
+          }
+        }
+
         panRef.current = null;
+        swipeRef.current = null;
         if (scaleRef.current <= 1.05) {
           scaleRef.current = 1;
           offsetRef.current = { x: 0, y: 0 };
