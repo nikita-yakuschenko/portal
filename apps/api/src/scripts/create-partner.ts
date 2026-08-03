@@ -16,8 +16,11 @@ function argValue(flag: string): string | undefined {
     return hit.slice(prefix.length);
   }
   const idx = process.argv.indexOf(flag);
-  if (idx >= 0 && process.argv[idx + 1] && !process.argv[idx + 1].startsWith("--")) {
-    return process.argv[idx + 1];
+  if (idx >= 0) {
+    const next = process.argv[idx + 1];
+    if (next && !next.startsWith("--")) {
+      return next;
+    }
   }
   return undefined;
 }

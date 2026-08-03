@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 
-import { and, desc, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 
 import type {
   CatalogProjectDetails,
@@ -22,6 +22,7 @@ import {
   partnerInquiries,
   partnerProjectPrices,
   partners,
+  partnerSites,
   passwordResetTokens,
   users
 } from "../../db/schema.js";
@@ -46,6 +47,36 @@ type SessionUser = {
   email: string;
   fullName: string;
 };
+
+/** Поля каталога, которые HQ может защитить от перезаписи синком Tilda */
+const CATALOG_SYNC_OVERRIDE_FIELDS = [
+  "name",
+  "description",
+  "technology",
+  "area",
+  "floors",
+  "bedrooms",
+  "bathrooms",
+  "basePrice",
+  "active"
+] as const;
+
+type CatalogSyncOverrideField = (typeof CATALOG_SYNC_OVERRIDE_FIELDS)[number];
+type CatalogSyncOverrides = Partial<Record<CatalogSyncOverrideField, boolean>>;
+
+function normalizeSyncOverrides(value: unknown): CatalogSyncOverrides {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  const raw = value as Record<string, unknown>;
+  const out: CatalogSyncOverrides = {};
+  for (const field of CATALOG_SYNC_OVERRIDE_FIELDS) {
+    if (raw[field] === true) {
+      out[field] = true;
+    }
+  }
+  return out;
+}
 
 function normalizeOptionalNumber(value: number | null): number | undefined {
   return value ?? undefined;
@@ -130,11 +161,13 @@ export class PortalService {
   async createPartnerAccount(input: {
     email: string;
     password: string;
-    fullName?: string;
-    companyName?: string;
-    region?: string;
-    phone?: string;
-    resetPassword?: boolean;
+    fullName?: string | undefined;
+    companyName?: string | undefined;
+    region?: string | undefined;
+    phone?: string | undefined;
+    inn?: string | null | undefined;
+    legalName?: string | null | undefined;
+    resetPassword?: boolean | undefined;
   }): Promise<{
     partnerId: string;
     userId: string;
@@ -148,6 +181,11 @@ export class PortalService {
     const companyName = (input.companyName?.trim() || `Дилер ${localPart}`).slice(0, 200);
     const region = (input.region?.trim() || "не указан").slice(0, 120);
     const phone = (input.phone?.trim() || "+7 (000) 000-00-00").slice(0, 64);
+    const innRaw = input.inn?.trim() || null;
+    if (innRaw && !/^\d{10}(\d{2})?$/.test(innRaw)) {
+      throw new Error("ИНН должен содержать 10 или 12 цифр.");
+    }
+    const legalName = input.legalName?.trim() || null;
 
     const existing = await db.query.users.findFirst({
       where: eq(users.email, email)
@@ -184,6 +222,8 @@ export class PortalService {
     await db.insert(partners).values({
       id: partnerId,
       companyName,
+      legalName,
+      inn: innRaw,
       status: "active",
       region,
       email,
@@ -429,22 +469,24 @@ export class PortalService {
         });
 
         if (existing) {
+          const overrides = normalizeSyncOverrides(existing.syncOverrides);
           await db
             .update(catalogProjects)
             .set({
-              name: mapped.name,
-              slug: projectSlug(mapped.name),
-              description: mapped.description,
-              technology: mapped.technology,
+              ...(overrides.name
+                ? {}
+                : { name: mapped.name, slug: projectSlug(mapped.name) }),
+              ...(overrides.description ? {} : { description: mapped.description }),
+              ...(overrides.technology ? {} : { technology: mapped.technology }),
               details: mapped.details,
-              area,
-              floors,
-              bedrooms,
-              bathrooms,
-              basePrice,
+              ...(overrides.area ? {} : { area }),
+              ...(overrides.floors ? {} : { floors }),
+              ...(overrides.bedrooms ? {} : { bedrooms }),
+              ...(overrides.bathrooms ? {} : { bathrooms }),
+              ...(overrides.basePrice ? {} : { basePrice }),
               currency: mapped.currency,
               projectUrl: mapped.projectUrl,
-              active: true,
+              ...(overrides.active ? {} : { active: true }),
               sourcePayload: mapped.sourcePayload,
               lastSyncedAt: new Date(mapped.lastSyncedAt)
             })
@@ -891,6 +933,13 @@ export class PortalService {
       return null;
     }
 
+    const syncOverrides = { ...normalizeSyncOverrides(existing.syncOverrides) };
+    for (const field of CATALOG_SYNC_OVERRIDE_FIELDS) {
+      if (patch[field] !== undefined) {
+        syncOverrides[field] = true;
+      }
+    }
+
     await db
       .update(catalogProjects)
       .set({
@@ -902,7 +951,8 @@ export class PortalService {
         ...(patch.bedrooms !== undefined ? { bedrooms: patch.bedrooms } : {}),
         ...(patch.bathrooms !== undefined ? { bathrooms: patch.bathrooms } : {}),
         ...(patch.basePrice !== undefined ? { basePrice: patch.basePrice } : {}),
-        ...(patch.active !== undefined ? { active: patch.active } : {})
+        ...(patch.active !== undefined ? { active: patch.active } : {}),
+        syncOverrides
       })
       .where(eq(catalogProjects.id, projectId));
 
@@ -913,6 +963,33 @@ export class PortalService {
         .set({ floorNumber: null })
         .where(eq(catalogAssets.projectId, projectId));
     }
+
+    return this.getCatalogProject(projectId);
+  }
+
+  /** Сброс защиты полей от синка (все или выбранные) */
+  async clearCatalogSyncOverrides(projectId: string, fields?: string[]) {
+    const existing = await db.query.catalogProjects.findFirst({
+      where: eq(catalogProjects.id, projectId)
+    });
+    if (!existing) {
+      return null;
+    }
+
+    let syncOverrides: CatalogSyncOverrides = {};
+    if (fields && fields.length > 0) {
+      syncOverrides = { ...normalizeSyncOverrides(existing.syncOverrides) };
+      for (const field of fields) {
+        if ((CATALOG_SYNC_OVERRIDE_FIELDS as readonly string[]).includes(field)) {
+          delete syncOverrides[field as CatalogSyncOverrideField];
+        }
+      }
+    }
+
+    await db
+      .update(catalogProjects)
+      .set({ syncOverrides })
+      .where(eq(catalogProjects.id, projectId));
 
     return this.getCatalogProject(projectId);
   }
@@ -1002,6 +1079,7 @@ export class PortalService {
       currency: project.currency,
       projectUrl: project.projectUrl,
       active: project.active,
+      syncOverrides: normalizeSyncOverrides(project.syncOverrides),
       sourcePayload: project.sourcePayload as Record<string, unknown>,
       lastSyncedAt: project.lastSyncedAt.toISOString(),
       assets: assets
@@ -1134,6 +1212,161 @@ export class PortalService {
     });
 
     return db.query.partners.findFirst({ where: eq(partners.id, input.partnerId) });
+  }
+
+  async updatePartnerStatus(input: {
+    actorUserId: string;
+    partnerId: string;
+    status: "active" | "suspended";
+  }) {
+    const existing = await db.query.partners.findFirst({
+      where: eq(partners.id, input.partnerId)
+    });
+    if (!existing) {
+      throw new Error("Партнёр не найден.");
+    }
+
+    await db
+      .update(partners)
+      .set({ status: input.status })
+      .where(eq(partners.id, input.partnerId));
+
+    await this.writeAuditLog(input.actorUserId, "partner.status.updated", "partner", input.partnerId, {
+      status: input.status
+    });
+
+    return db.query.partners.findFirst({ where: eq(partners.id, input.partnerId) });
+  }
+
+  async resetPartnerOwnerPassword(input: { actorUserId: string; partnerId: string }) {
+    const owner = await db.query.users.findFirst({
+      where: and(eq(users.partnerId, input.partnerId), eq(users.role, "partner_owner"))
+    });
+    if (!owner) {
+      throw new Error("Владелец кабинета партнёра не найден.");
+    }
+
+    const temporaryPassword = randomBytes(9).toString("base64url");
+    await db
+      .update(users)
+      .set({ passwordHash: await hashPassword(temporaryPassword), isActive: true })
+      .where(eq(users.id, owner.id));
+
+    await this.writeAuditLog(
+      input.actorUserId,
+      "partner.owner_password.reset",
+      "user",
+      owner.id,
+      { partnerId: input.partnerId }
+    );
+
+    return {
+      userId: owner.id,
+      email: owner.email,
+      temporaryPassword
+    };
+  }
+
+  async listCompanySites() {
+    const rows = await db
+      .select({
+        id: partnerSites.id,
+        partnerId: partnerSites.partnerId,
+        companyName: partners.companyName,
+        subdomain: partnerSites.subdomain,
+        domain: partnerSites.domain,
+        status: partnerSites.status,
+        publishedAt: partnerSites.publishedAt,
+        updatedAt: partnerSites.updatedAt
+      })
+      .from(partnerSites)
+      .innerJoin(partners, eq(partnerSites.partnerId, partners.id))
+      .orderBy(desc(partnerSites.updatedAt));
+
+    return rows.map((row) => {
+      const custom = row.domain?.trim();
+      const publicHost = custom
+        ? custom.replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase()
+        : `${row.subdomain}.avgst.ru`;
+      return {
+        ...row,
+        publishedAt: row.publishedAt?.toISOString() ?? null,
+        updatedAt: row.updatedAt.toISOString(),
+        publicUrl: `https://${publicHost}`
+      };
+    });
+  }
+
+  async listCompanyTeam() {
+    return db
+      .select()
+      .from(users)
+      .where(and(isNull(users.partnerId), inArray(users.role, ["company_admin", "company_manager"])))
+      .orderBy(users.fullName);
+  }
+
+  async createCompanyTeamUser(input: {
+    actorUserId: string;
+    fullName: string;
+    email: string;
+    password: string;
+    role: "company_admin" | "company_manager";
+  }) {
+    const email = input.email.trim().toLowerCase();
+    const clash = await db.query.users.findFirst({ where: eq(users.email, email) });
+    if (clash) {
+      throw new Error("Пользователь с таким email уже есть.");
+    }
+
+    const user = {
+      id: randomUUID(),
+      partnerId: null,
+      fullName: input.fullName.trim(),
+      email,
+      role: input.role,
+      passwordHash: await hashPassword(input.password),
+      isActive: true
+    } as const;
+
+    await db.insert(users).values(user);
+    await this.writeAuditLog(input.actorUserId, "company.team_user.created", "user", user.id, {
+      role: input.role
+    });
+    return {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive
+    };
+  }
+
+  async setCompanyTeamUserActive(input: {
+    actorUserId: string;
+    userId: string;
+    isActive: boolean;
+  }) {
+    if (input.userId === input.actorUserId && !input.isActive) {
+      throw new Error("Нельзя деактивировать свой аккаунт.");
+    }
+
+    const existing = await db.query.users.findFirst({
+      where: and(
+        eq(users.id, input.userId),
+        isNull(users.partnerId),
+        inArray(users.role, ["company_admin", "company_manager"])
+      )
+    });
+    if (!existing) {
+      throw new Error("Сотрудник завода не найден.");
+    }
+
+    await db.update(users).set({ isActive: input.isActive }).where(eq(users.id, input.userId));
+    await this.writeAuditLog(input.actorUserId, "company.team_user.active", "user", input.userId, {
+      isActive: input.isActive
+    });
+
+    return { ...existing, isActive: input.isActive };
   }
 
   async listPartnerTeam(partnerId: string) {

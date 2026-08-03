@@ -1,6 +1,7 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
+import { randomBytes } from "node:crypto";
 import Fastify from "fastify";
 import { z } from "zod";
 
@@ -534,6 +535,29 @@ export async function buildApp() {
     return project;
   });
 
+  app.post("/api/company/catalog/projects/:id/clear-sync-overrides", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const parsed = z
+      .object({
+        fields: z.array(z.string()).optional()
+      })
+      .safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    const { id } = request.params as { id: string };
+    const project = await portalService.clearCatalogSyncOverrides(id, parsed.data.fields);
+    if (!project) {
+      return reply.status(404).send({ message: "Проект не найден" });
+    }
+    return project;
+  });
+
   app.patch("/api/company/catalog/assets/:id", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
     if (roleCheck) {
@@ -570,6 +594,170 @@ export async function buildApp() {
       return roleCheck;
     }
     return portalService.listPartners();
+  });
+
+  app.post("/api/company/partners", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const parsed = z
+      .object({
+        email: z.email(),
+        password: z.string().min(8).optional(),
+        fullName: z.string().min(1).optional(),
+        companyName: z.string().min(2).optional(),
+        region: z.string().min(1).optional(),
+        phone: z.string().min(1).optional(),
+        inn: z.string().nullable().optional(),
+        legalName: z.string().nullable().optional()
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    const temporaryPassword =
+      parsed.data.password?.trim() || randomBytes(9).toString("base64url");
+
+    try {
+      const created = await portalService.createPartnerAccount({
+        email: parsed.data.email,
+        password: temporaryPassword,
+        fullName: parsed.data.fullName,
+        companyName: parsed.data.companyName,
+        region: parsed.data.region,
+        phone: parsed.data.phone,
+        inn: parsed.data.inn ?? null,
+        legalName: parsed.data.legalName ?? null
+      });
+      return {
+        ...created,
+        temporaryPassword
+      };
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось создать партнёра"
+      });
+    }
+  });
+
+  app.patch("/api/company/partners/:partnerId/status", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const partnerId = (request.params as { partnerId: string }).partnerId;
+    const parsed = z
+      .object({ status: z.enum(["active", "suspended"]) })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    try {
+      return await portalService.updatePartnerStatus({
+        actorUserId: getAuthUser(request)!.sub,
+        partnerId,
+        status: parsed.data.status
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось обновить статус"
+      });
+    }
+  });
+
+  app.post("/api/company/partners/:partnerId/reset-password", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const partnerId = (request.params as { partnerId: string }).partnerId;
+    try {
+      return await portalService.resetPartnerOwnerPassword({
+        actorUserId: getAuthUser(request)!.sub,
+        partnerId
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось сбросить пароль"
+      });
+    }
+  });
+
+  app.get("/api/company/sites", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    return portalService.listCompanySites();
+  });
+
+  app.get("/api/company/team", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    return portalService.listCompanyTeam();
+  });
+
+  app.post("/api/company/team", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const parsed = z
+      .object({
+        fullName: z.string().min(2),
+        email: z.email(),
+        password: z.string().min(8),
+        role: z.enum(["company_admin", "company_manager"])
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    try {
+      return await portalService.createCompanyTeamUser({
+        actorUserId: getAuthUser(request)!.sub,
+        ...parsed.data
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось добавить сотрудника"
+      });
+    }
+  });
+
+  app.patch("/api/company/team/:userId", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const userId = (request.params as { userId: string }).userId;
+    const parsed = z.object({ isActive: z.boolean() }).safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    try {
+      return await portalService.setCompanyTeamUserActive({
+        actorUserId: getAuthUser(request)!.sub,
+        userId,
+        isActive: parsed.data.isActive
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось обновить сотрудника"
+      });
+    }
   });
 
   app.get("/api/partner/me", async (request, reply) => {

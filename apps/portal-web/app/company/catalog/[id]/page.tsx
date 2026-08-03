@@ -55,6 +55,21 @@ type Asset = {
   isHidden: boolean;
 };
 
+type SyncOverrides = Partial<
+  Record<
+    | "name"
+    | "description"
+    | "technology"
+    | "area"
+    | "floors"
+    | "bedrooms"
+    | "bathrooms"
+    | "basePrice"
+    | "active",
+    boolean
+  >
+>;
+
 type Project = {
   id: string;
   name: string;
@@ -67,8 +82,56 @@ type Project = {
   basePrice: number | null;
   projectUrl: string;
   active: boolean;
+  syncOverrides?: SyncOverrides;
   assets: Asset[];
 };
+
+const OVERRIDE_FIELD_LABELS: Record<keyof SyncOverrides, string> = {
+  name: "Название",
+  description: "Описание",
+  technology: "Технология",
+  area: "Площадь, м²",
+  floors: "Этажи",
+  bedrooms: "Спальни",
+  bathrooms: "Санузлы",
+  basePrice: "Заводская цена, ₽",
+  active: "Статус"
+};
+
+function FieldLabelWithOverride({
+  htmlFor,
+  field,
+  overrides,
+  onClear
+}: {
+  htmlFor: string;
+  field: keyof SyncOverrides;
+  overrides: SyncOverrides;
+  onClear: (field: keyof SyncOverrides) => void;
+}) {
+  const protectedBySync = overrides[field] === true;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Label htmlFor={htmlFor}>{OVERRIDE_FIELD_LABELS[field]}</Label>
+      {protectedBySync ? (
+        <>
+          <Badge variant="outline" className="text-xs font-normal">
+            защищено от синка
+          </Badge>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={() => onClear(field)}
+          >
+            Сбросить
+          </Button>
+        </>
+      ) : null}
+    </div>
+  );
+}
 
 export default function CompanyCatalogProjectPage() {
   const params = useParams<{ id: string }>();
@@ -155,6 +218,28 @@ export default function CompanyCatalogProjectPage() {
     }
   }
 
+  async function clearSyncOverrides(fields?: Array<keyof SyncOverrides>) {
+    if (!project) return;
+    try {
+      const updated = await apiFetch<Project>(
+        `/api/company/catalog/projects/${id}/clear-sync-overrides`,
+        {
+          method: "POST",
+          body: JSON.stringify(fields ? { fields } : {})
+        }
+      );
+      setProject(updated);
+      setTechnology(updated.technology);
+      setActive(updated.active);
+      toast.success(fields ? "Защита поля сброшена" : "Защита от синка сброшена");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось сбросить защиту");
+    }
+  }
+
+  const overrides = project?.syncOverrides ?? {};
+  const hasAnyOverride = Object.values(overrides).some(Boolean);
+
   return (
     <DashboardShell
       cabinetLabel={companyCabinetLabel}
@@ -204,8 +289,23 @@ export default function CompanyCatalogProjectPage() {
           </div>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Описание и характеристики</CardTitle>
+            <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+              <div className="space-y-1.5">
+                <CardTitle>Описание и характеристики</CardTitle>
+                <p className="text-muted-foreground text-sm">
+                  После ручного сохранения поле защищается от перезаписи синком Tilda.
+                </p>
+              </div>
+              {hasAnyOverride ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void clearSyncOverrides()}
+                >
+                  Сбросить всю защиту
+                </Button>
+              ) : null}
             </CardHeader>
             <CardContent>
               <form
@@ -214,11 +314,21 @@ export default function CompanyCatalogProjectPage() {
                 onSubmit={saveProject}
               >
                 <div className="space-y-1.5 md:col-span-2">
-                  <Label htmlFor="name">Название</Label>
+                  <FieldLabelWithOverride
+                    htmlFor="name"
+                    field="name"
+                    overrides={overrides}
+                    onClear={(field) => void clearSyncOverrides([field])}
+                  />
                   <Input id="name" name="name" defaultValue={project.name} required />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="technology">Технология</Label>
+                  <FieldLabelWithOverride
+                    htmlFor="technology"
+                    field="technology"
+                    overrides={overrides}
+                    onClear={(field) => void clearSyncOverrides([field])}
+                  />
                   <Select
                     value={technology}
                     onValueChange={(value) =>
@@ -235,7 +345,12 @@ export default function CompanyCatalogProjectPage() {
                   </Select>
                 </div>
                 <div className="space-y-1.5 md:col-span-3">
-                  <Label htmlFor="description">Описание</Label>
+                  <FieldLabelWithOverride
+                    htmlFor="description"
+                    field="description"
+                    overrides={overrides}
+                    onClear={(field) => void clearSyncOverrides([field])}
+                  />
                   <Textarea
                     id="description"
                     name="description"
@@ -245,7 +360,12 @@ export default function CompanyCatalogProjectPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="area">Площадь, м²</Label>
+                  <FieldLabelWithOverride
+                    htmlFor="area"
+                    field="area"
+                    overrides={overrides}
+                    onClear={(field) => void clearSyncOverrides([field])}
+                  />
                   <Input
                     id="area"
                     name="area"
@@ -255,7 +375,12 @@ export default function CompanyCatalogProjectPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="floors">Этажи</Label>
+                  <FieldLabelWithOverride
+                    htmlFor="floors"
+                    field="floors"
+                    overrides={overrides}
+                    onClear={(field) => void clearSyncOverrides([field])}
+                  />
                   <Input
                     id="floors"
                     name="floors"
@@ -265,7 +390,12 @@ export default function CompanyCatalogProjectPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="bedrooms">Спальни</Label>
+                  <FieldLabelWithOverride
+                    htmlFor="bedrooms"
+                    field="bedrooms"
+                    overrides={overrides}
+                    onClear={(field) => void clearSyncOverrides([field])}
+                  />
                   <Input
                     id="bedrooms"
                     name="bedrooms"
@@ -275,7 +405,12 @@ export default function CompanyCatalogProjectPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="bathrooms">Санузлы</Label>
+                  <FieldLabelWithOverride
+                    htmlFor="bathrooms"
+                    field="bathrooms"
+                    overrides={overrides}
+                    onClear={(field) => void clearSyncOverrides([field])}
+                  />
                   <Input
                     id="bathrooms"
                     name="bathrooms"
@@ -283,7 +418,12 @@ export default function CompanyCatalogProjectPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="basePrice">Заводская цена, ₽</Label>
+                  <FieldLabelWithOverride
+                    htmlFor="basePrice"
+                    field="basePrice"
+                    overrides={overrides}
+                    onClear={(field) => void clearSyncOverrides([field])}
+                  />
                   <Input
                     id="basePrice"
                     name="basePrice"
@@ -293,7 +433,12 @@ export default function CompanyCatalogProjectPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="active">Статус</Label>
+                  <FieldLabelWithOverride
+                    htmlFor="active"
+                    field="active"
+                    overrides={overrides}
+                    onClear={(field) => void clearSyncOverrides([field])}
+                  />
                   <Select
                     value={active ? "true" : "false"}
                     onValueChange={(value) => setActive(value === "true")}

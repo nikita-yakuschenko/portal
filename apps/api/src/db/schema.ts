@@ -125,6 +125,8 @@ export const catalogProjects = pgTable(
     currency: text("currency").notNull().default("RUB"),
     projectUrl: text("project_url").notNull(),
     active: boolean("active").notNull().default(true),
+    // Ручные правки HQ: поля с true не перезаписываются синком Tilda
+    syncOverrides: jsonb("sync_overrides").notNull().default({}),
     sourcePayload: jsonb("source_payload").notNull().default({}),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()

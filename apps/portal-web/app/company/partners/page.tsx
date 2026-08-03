@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { IconUsers } from "@tabler/icons-react";
 import { toast } from "sonner";
 
@@ -50,25 +50,39 @@ type Partner = {
   createdAt: string;
 };
 
-// Значения partner_status на стороне API: pending | active | suspended
 const partnerStatusLabels: Record<string, string> = {
   active: "Активен",
   pending: "Ожидает",
   suspended: "Приостановлен"
 };
 
+type DialogMode = "legal" | "create" | "password" | null;
+
 export default function CompanyPartnersPage() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<Partner | null>(null);
+  const [dialog, setDialog] = useState<DialogMode>(null);
+  const [selected, setSelected] = useState<Partner | null>(null);
   const [legalName, setLegalName] = useState("");
   const [inn, setInn] = useState("");
+  const [createForm, setCreateForm] = useState({
+    companyName: "",
+    fullName: "",
+    email: "",
+    phone: "",
+    region: "",
+    password: "",
+    legalName: "",
+    inn: ""
+  });
+  const [tempPassword, setTempPassword] = useState("");
   const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  useEffect(() => {
-    void (async () => {
-      try {
+  const load = useCallback(async () => {
+    try {
+      setError("");
       const rows = await apiFetch<Partner[]>("/api/company/partners");
       setPartners(
         rows.map((row) => ({
@@ -77,49 +91,147 @@ export default function CompanyPartnersPage() {
           inn: row.inn ?? null
         }))
       );
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Не удалось загрузить партнёров");
-      } finally {
-        setLoading(false);
-      }
-    })();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось загрузить партнёров");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  function openLegalDialog(partner: Partner) {
-    setEditing(partner);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  function openLegal(partner: Partner) {
+    setSelected(partner);
     setLegalName(partner.legalName ?? "");
     setInn(partner.inn ?? "");
+    setDialog("legal");
+  }
+
+  function closeDialog() {
+    if (saving) return;
+    setDialog(null);
+    setSelected(null);
+    setTempPassword("");
   }
 
   async function handleSaveLegal() {
-    if (!editing) return;
+    if (!selected) return;
     setSaving(true);
     try {
-      const updated = await apiFetch<Partner>(
-        `/api/company/partners/${editing.id}/legal`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({
-            legalName: legalName.trim() || null,
-            inn: inn.trim() || null
-          })
-        }
-      );
+      const updated = await apiFetch<Partner>(`/api/company/partners/${selected.id}/legal`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          legalName: legalName.trim() || null,
+          inn: inn.trim() || null
+        })
+      });
       setPartners((prev) =>
         prev.map((row) =>
-          row.id === editing.id
-            ? {
-                ...row,
-                legalName: updated.legalName ?? null,
-                inn: updated.inn ?? null
-              }
+          row.id === selected.id
+            ? { ...row, legalName: updated.legalName ?? null, inn: updated.inn ?? null }
             : row
         )
       );
-      setEditing(null);
       toast.success("Юр. реквизиты обновлены");
+      closeDialog();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось сохранить");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleStatus(partner: Partner, status: "active" | "suspended") {
+    setBusyId(partner.id);
+    try {
+      const updated = await apiFetch<Partner>(`/api/company/partners/${partner.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status })
+      });
+      setPartners((prev) =>
+        prev.map((row) => (row.id === partner.id ? { ...row, status: updated.status } : row))
+      );
+      toast.success(status === "active" ? "Партнёр активирован" : "Партнёр приостановлен");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось обновить статус");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleResetPassword(partner: Partner) {
+    setBusyId(partner.id);
+    try {
+      const result = await apiFetch<{ temporaryPassword: string; email: string }>(
+        `/api/company/partners/${partner.id}/reset-password`,
+        { method: "POST", body: "{}" }
+      );
+      setSelected(partner);
+      setTempPassword(result.temporaryPassword);
+      setDialog("password");
+      toast.success(`Пароль сброшен для ${result.email}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось сбросить пароль");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleCreate() {
+    if (!createForm.email.trim() || !createForm.companyName.trim()) {
+      toast.error("Укажите компанию и email");
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await apiFetch<{
+        created: boolean;
+        temporaryPassword?: string;
+        email: string;
+      }>("/api/company/partners", {
+        method: "POST",
+        body: JSON.stringify({
+          email: createForm.email.trim(),
+          companyName: createForm.companyName.trim(),
+          fullName: createForm.fullName.trim() || undefined,
+          phone: createForm.phone.trim() || undefined,
+          region: createForm.region.trim() || undefined,
+          password: createForm.password.trim() || undefined,
+          legalName: createForm.legalName.trim() || null,
+          inn: createForm.inn.trim() || null
+        })
+      });
+      const password = result.temporaryPassword;
+      if (password) {
+        toast.success("Партнёр создан", {
+          description: `Пароль: ${password}`,
+          duration: Infinity,
+          closeButton: true,
+          action: {
+            label: "Скопировать",
+            onClick: () => void navigator.clipboard.writeText(password)
+          }
+        });
+      } else {
+        toast.success("Партнёр создан");
+      }
+      setCreateForm({
+        companyName: "",
+        fullName: "",
+        email: "",
+        phone: "",
+        region: "",
+        password: "",
+        legalName: "",
+        inn: ""
+      });
+      setDialog(null);
+      setLoading(true);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось создать партнёра");
     } finally {
       setSaving(false);
     }
@@ -134,8 +246,11 @@ export default function CompanyPartnersPage() {
       <PageAlert message={error} variant="destructive" />
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
           <CardTitle>Список партнёров</CardTitle>
+          <Button type="button" onClick={() => setDialog("create")}>
+            Создать партнёра
+          </Button>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -152,7 +267,7 @@ export default function CompanyPartnersPage() {
                 </EmptyMedia>
                 <EmptyTitle>Партнёров пока нет</EmptyTitle>
                 <EmptyDescription>
-                  Партнёр появляется в списке после одобрения заявки в разделе «Заявки».
+                  Создайте партнёра вручную или одобрите заявку в разделе «Заявки».
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -200,14 +315,45 @@ export default function CompanyPartnersPage() {
                         {new Date(partner.createdAt).toLocaleDateString("ru-RU")}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openLegalDialog(partner)}
-                        >
-                          Реквизиты
-                        </Button>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openLegal(partner)}
+                          >
+                            Реквизиты
+                          </Button>
+                          {partner.status === "suspended" ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={busyId === partner.id}
+                              onClick={() => void handleStatus(partner, "active")}
+                            >
+                              Активировать
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={busyId === partner.id}
+                              onClick={() => void handleStatus(partner, "suspended")}
+                            >
+                              Приостановить
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={busyId === partner.id}
+                            onClick={() => void handleResetPassword(partner)}
+                          >
+                            Пароль
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -218,18 +364,13 @@ export default function CompanyPartnersPage() {
         </CardContent>
       </Card>
 
-      <Dialog
-        open={Boolean(editing)}
-        onOpenChange={(open) => {
-          if (!open && !saving) setEditing(null);
-        }}
-      >
+      <Dialog open={dialog === "legal"} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Юр. реквизиты</DialogTitle>
             <DialogDescription>
-              {editing
-                ? `Партнёр «${editing.companyName}». Меняйте юр. название только по запросу и при документах о смене юрлица.`
+              {selected
+                ? `Партнёр «${selected.companyName}». Меняйте юр. название только по запросу и при документах.`
                 : null}
             </DialogDescription>
           </DialogHeader>
@@ -241,7 +382,6 @@ export default function CompanyPartnersPage() {
                 value={legalName}
                 disabled={saving}
                 onChange={(e) => setLegalName(e.target.value)}
-                placeholder="ООО «…»"
               />
             </div>
             <div className="space-y-2">
@@ -252,21 +392,139 @@ export default function CompanyPartnersPage() {
                 disabled={saving}
                 inputMode="numeric"
                 onChange={(e) => setInn(e.target.value)}
-                placeholder="10 или 12 цифр"
               />
             </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={saving} onClick={closeDialog}>
+              Отмена
+            </Button>
+            <Button type="button" disabled={saving} onClick={() => void handleSaveLegal()}>
+              {saving ? "Сохранение…" : "Сохранить"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialog === "create"} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Создать партнёра</DialogTitle>
+            <DialogDescription>
+              Без заявки. Если пароль не указать — сгенерируем и покажем один раз.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-2 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="create-company">Компания</Label>
+              <Input
+                id="create-company"
+                value={createForm.companyName}
+                disabled={saving}
+                onChange={(e) => setCreateForm((p) => ({ ...p, companyName: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-name">Контакт</Label>
+              <Input
+                id="create-name"
+                value={createForm.fullName}
+                disabled={saving}
+                onChange={(e) => setCreateForm((p) => ({ ...p, fullName: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-email">Email входа</Label>
+              <Input
+                id="create-email"
+                type="email"
+                value={createForm.email}
+                disabled={saving}
+                onChange={(e) => setCreateForm((p) => ({ ...p, email: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-phone">Телефон</Label>
+              <Input
+                id="create-phone"
+                value={createForm.phone}
+                disabled={saving}
+                onChange={(e) => setCreateForm((p) => ({ ...p, phone: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-region">Регион</Label>
+              <Input
+                id="create-region"
+                value={createForm.region}
+                disabled={saving}
+                onChange={(e) => setCreateForm((p) => ({ ...p, region: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="create-password">Пароль (необязательно)</Label>
+              <Input
+                id="create-password"
+                type="text"
+                value={createForm.password}
+                disabled={saving}
+                onChange={(e) => setCreateForm((p) => ({ ...p, password: e.target.value }))}
+                placeholder="Минимум 8 символов или пусто"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-legal">Юр. название</Label>
+              <Input
+                id="create-legal"
+                value={createForm.legalName}
+                disabled={saving}
+                onChange={(e) => setCreateForm((p) => ({ ...p, legalName: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-inn">ИНН</Label>
+              <Input
+                id="create-inn"
+                value={createForm.inn}
+                disabled={saving}
+                onChange={(e) => setCreateForm((p) => ({ ...p, inn: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={saving} onClick={closeDialog}>
+              Отмена
+            </Button>
+            <Button type="button" disabled={saving} onClick={() => void handleCreate()}>
+              {saving ? "Создание…" : "Создать"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialog === "password"} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Новый пароль</DialogTitle>
+            <DialogDescription>
+              {selected
+                ? `Владелец «${selected.companyName}». Пароль показывается один раз.`
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border bg-muted/40 px-3 py-2 font-mono text-sm break-all">
+            {tempPassword}
           </div>
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              disabled={saving}
-              onClick={() => setEditing(null)}
+              onClick={() => void navigator.clipboard.writeText(tempPassword)}
             >
-              Отмена
+              Скопировать
             </Button>
-            <Button type="button" disabled={saving} onClick={() => void handleSaveLegal()}>
-              {saving ? "Сохранение…" : "Сохранить"}
+            <Button type="button" onClick={closeDialog}>
+              Закрыть
             </Button>
           </DialogFooter>
         </DialogContent>
