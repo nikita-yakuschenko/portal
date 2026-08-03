@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { IconHeart, IconSearch, IconSearchOff } from "@tabler/icons-react";
+import { IconHeart, IconSearch, IconSearchOff, IconX } from "@tabler/icons-react";
 
 import { usePartnerSitePreview } from "@/components/partner-site/preview-context";
 import { PartnerSiteProjectCard } from "@/components/partner-site/project-card";
@@ -52,6 +52,50 @@ function rangeStep(min: number, max: number): number {
   if (span <= 5_000) return 50;
   if (span <= 500_000) return 10_000;
   return 50_000;
+}
+
+/** Карточка диапазона: сброс — крестик в правом верхнем углу */
+function RangeFilterCard({
+  title,
+  valueLabel,
+  active,
+  disabled = false,
+  onClear,
+  clearLabel,
+  children
+}: {
+  title: string;
+  valueLabel: string;
+  active: boolean;
+  disabled?: boolean;
+  onClear?: () => void;
+  clearLabel?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative rounded-xl border border-slate-200 bg-white",
+        disabled && "opacity-55"
+      )}
+    >
+      {active && !disabled && onClear ? (
+        <button
+          type="button"
+          aria-label={clearLabel || "Сбросить"}
+          className="absolute top-2.5 right-2.5 z-10 inline-flex size-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          onClick={onClear}
+        >
+          <IconX className="size-3.5 stroke-[2.25]" />
+        </button>
+      ) : null}
+      <div className={cn("px-4 pt-3 pb-1", active && !disabled && "pr-10")}>
+        <p className="text-sm font-medium text-slate-900">{title}</p>
+        <p className="mt-0.5 text-xs tabular-nums text-slate-500">{valueLabel}</p>
+      </div>
+      <div className="px-4 pt-2 pb-3">{children}</div>
+    </div>
+  );
 }
 
 function PartnerSiteProjectsContent() {
@@ -350,78 +394,71 @@ function PartnerSiteProjectsContent() {
           </FilterControlShell>
         </div>
 
-        {/* Нижний ряд: на ту же ширину, что и верхний */}
-        {(priceBounds && priceRange) || (areaBounds && areaRange) ? (
-          <div className="grid w-full gap-3 md:grid-cols-2">
-            {priceBounds && priceRange ? (
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                <div className="flex items-stretch">
-                  <div className="min-w-0 flex-1 px-4 py-3">
-                    <p className="text-sm font-medium text-slate-900">Цена</p>
-                    <p className="mt-0.5 text-xs tabular-nums text-slate-500">
-                      {formatPriceRange(priceRange[0])} — {formatPriceRange(priceRange[1])}
-                    </p>
-                  </div>
-                  <FilterTrailingSlot
-                    mode={priceActive ? "clear" : "empty"}
-                    onClear={() => setPriceRange([priceBounds.min, priceBounds.max])}
-                    label="Сбросить фильтр цены"
-                    className="self-stretch"
-                  />
-                </div>
-                <div className="px-4 pb-3">
-                  <Slider
-                    className={cn(sliderClassName)}
-                    min={priceBounds.min}
-                    max={priceBounds.max}
-                    step={rangeStep(priceBounds.min, priceBounds.max)}
-                    value={priceRange}
-                    onValueChange={(value) => {
-                      if (value.length >= 2) setPriceRange([value[0]!, value[1]!]);
-                    }}
-                    aria-label="Диапазон цены"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="hidden md:block" aria-hidden />
-            )}
+        {/* Нижний ряд: цена всегда; без цен — неактивна. Сброс — крестик в углу */}
+        <div className="grid w-full gap-3 md:grid-cols-2">
+          {priceBounds && priceRange ? (
+            <RangeFilterCard
+              title="Цена"
+              valueLabel={`${formatPriceRange(priceRange[0])} — ${formatPriceRange(priceRange[1])}`}
+              active={priceActive}
+              onClear={() => setPriceRange([priceBounds.min, priceBounds.max])}
+              clearLabel="Сбросить фильтр цены"
+            >
+              <Slider
+                className={cn(sliderClassName)}
+                min={priceBounds.min}
+                max={priceBounds.max}
+                step={rangeStep(priceBounds.min, priceBounds.max)}
+                value={priceRange}
+                onValueChange={(value) => {
+                  if (value.length >= 2) setPriceRange([value[0]!, value[1]!]);
+                }}
+                aria-label="Диапазон цены"
+              />
+            </RangeFilterCard>
+          ) : (
+            <RangeFilterCard
+              title="Цена"
+              valueLabel="Цены не опубликованы"
+              active={false}
+              disabled
+            >
+              <Slider
+                className={cn(sliderClassName)}
+                min={0}
+                max={100}
+                step={1}
+                value={[0, 100]}
+                disabled
+                aria-label="Диапазон цены недоступен"
+              />
+            </RangeFilterCard>
+          )}
 
-            {areaBounds && areaRange ? (
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                <div className="flex items-stretch">
-                  <div className="min-w-0 flex-1 px-4 py-3">
-                    <p className="text-sm font-medium text-slate-900">Площадь</p>
-                    <p className="mt-0.5 text-xs tabular-nums text-slate-500">
-                      {areaRange[0]} — {areaRange[1]} м²
-                    </p>
-                  </div>
-                  <FilterTrailingSlot
-                    mode={areaActive ? "clear" : "empty"}
-                    onClear={() => setAreaRange([areaBounds.min, areaBounds.max])}
-                    label="Сбросить фильтр площади"
-                    className="self-stretch"
-                  />
-                </div>
-                <div className="px-4 pb-3">
-                  <Slider
-                    className={cn(sliderClassName)}
-                    min={areaBounds.min}
-                    max={areaBounds.max}
-                    step={rangeStep(areaBounds.min, areaBounds.max)}
-                    value={areaRange}
-                    onValueChange={(value) => {
-                      if (value.length >= 2) setAreaRange([value[0]!, value[1]!]);
-                    }}
-                    aria-label="Диапазон площади"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="hidden md:block" aria-hidden />
-            )}
-          </div>
-        ) : null}
+          {areaBounds && areaRange ? (
+            <RangeFilterCard
+              title="Площадь"
+              valueLabel={`${areaRange[0]} — ${areaRange[1]} м²`}
+              active={areaActive}
+              onClear={() => setAreaRange([areaBounds.min, areaBounds.max])}
+              clearLabel="Сбросить фильтр площади"
+            >
+              <Slider
+                className={cn(sliderClassName)}
+                min={areaBounds.min}
+                max={areaBounds.max}
+                step={rangeStep(areaBounds.min, areaBounds.max)}
+                value={areaRange}
+                onValueChange={(value) => {
+                  if (value.length >= 2) setAreaRange([value[0]!, value[1]!]);
+                }}
+                aria-label="Диапазон площади"
+              />
+            </RangeFilterCard>
+          ) : (
+            <div className="hidden md:block" aria-hidden />
+          )}
+        </div>
       </div>
 
       {projects.length === 0 ? (
