@@ -6,7 +6,8 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
-  useState
+  useState,
+  type PointerEvent as ReactPointerEvent
 } from "react";
 import { IconMinus, IconPlus } from "@tabler/icons-react";
 
@@ -61,9 +62,11 @@ export const ZoomableImage = forwardRef<
     startMid: Point;
   } | null>(null);
   const panRef = useRef<{ start: Point; origin: Point } | null>(null);
+  const mousePanRef = useRef<{ start: Point; origin: Point; pointerId: number } | null>(null);
   const lastTapRef = useRef(0);
   const movingRef = useRef(false);
   const onZoomChangeRef = useRef(onZoomChange);
+  const [panning, setPanning] = useState(false);
 
   useEffect(() => {
     scaleRef.current = scale;
@@ -138,8 +141,50 @@ export const ZoomableImage = forwardRef<
     offsetRef.current = { x: 0, y: 0 };
     pinchRef.current = null;
     panRef.current = null;
+    mousePanRef.current = null;
+    setPanning(false);
     onZoomChangeRef.current?.(false);
   }, [src]);
+
+  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    // Мышь: drag по увеличенному ассету. Touch — отдельные обработчики.
+    if (event.pointerType === "touch") return;
+    if (event.button !== 0) return;
+    if (scaleRef.current <= MIN_SCALE) return;
+    event.preventDefault();
+    mousePanRef.current = {
+      start: { x: event.clientX, y: event.clientY },
+      origin: offsetRef.current,
+      pointerId: event.pointerId
+    };
+    setPanning(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const pan = mousePanRef.current;
+    if (!pan || event.pointerId !== pan.pointerId) return;
+    event.preventDefault();
+    const nextOffset = clampOffset(
+      {
+        x: pan.origin.x + (event.clientX - pan.start.x),
+        y: pan.origin.y + (event.clientY - pan.start.y)
+      },
+      scaleRef.current
+    );
+    offsetRef.current = nextOffset;
+    setOffset(nextOffset);
+  }
+
+  function onPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    const pan = mousePanRef.current;
+    if (!pan || event.pointerId !== pan.pointerId) return;
+    mousePanRef.current = null;
+    setPanning(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
 
   useEffect(() => {
     const el = viewportRef.current;
@@ -252,9 +297,14 @@ export const ZoomableImage = forwardRef<
   return (
     <div
       ref={viewportRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
       className={cn(
         "flex h-full w-full items-center justify-center overflow-hidden",
         scale > MIN_SCALE ? "touch-none" : "touch-pan-x",
+        scale > MIN_SCALE && (panning ? "cursor-grabbing" : "cursor-grab"),
         className
       )}
     >
@@ -266,7 +316,8 @@ export const ZoomableImage = forwardRef<
         className="max-h-full max-w-full origin-center object-contain select-none"
         style={{
           transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`,
-          transition: pinchRef.current || panRef.current ? "none" : "transform 160ms ease-out"
+          transition:
+            pinchRef.current || panRef.current || panning ? "none" : "transform 160ms ease-out"
         }}
       />
     </div>
