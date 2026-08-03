@@ -1277,7 +1277,11 @@ export class PortalService {
         domain: partnerSites.domain,
         status: partnerSites.status,
         publishedAt: partnerSites.publishedAt,
-        updatedAt: partnerSites.updatedAt
+        updatedAt: partnerSites.updatedAt,
+        publishLocked: partnerSites.publishLocked,
+        republishRequestStatus: partnerSites.republishRequestStatus,
+        republishRequestedAt: partnerSites.republishRequestedAt,
+        republishRequestComment: partnerSites.republishRequestComment
       })
       .from(partnerSites)
       .innerJoin(partners, eq(partnerSites.partnerId, partners.id))
@@ -1292,6 +1296,8 @@ export class PortalService {
         ...row,
         publishedAt: row.publishedAt?.toISOString() ?? null,
         updatedAt: row.updatedAt.toISOString(),
+        republishRequestStatus: row.republishRequestStatus === "pending" ? "pending" : null,
+        republishRequestedAt: row.republishRequestedAt?.toISOString() ?? null,
         publicUrl: `https://${publicHost}`
       };
     });

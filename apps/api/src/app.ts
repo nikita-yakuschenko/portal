@@ -697,6 +697,69 @@ export async function buildApp() {
     return portalService.listCompanySites();
   });
 
+  app.post("/api/company/sites/:partnerId/unpublish", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const partnerId = (request.params as { partnerId: string }).partnerId;
+    try {
+      return await partnerSiteService.unpublishByHq({
+        partnerId,
+        actorUserId: getAuthUser(request)!.sub
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось снять сайт с публикации"
+      });
+    }
+  });
+
+  app.post("/api/company/sites/:partnerId/unlock-publish", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const partnerId = (request.params as { partnerId: string }).partnerId;
+    try {
+      return await partnerSiteService.unlockPublishByHq(partnerId);
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось разблокировать публикацию"
+      });
+    }
+  });
+
+  app.post("/api/company/sites/:partnerId/approve-republish", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const partnerId = (request.params as { partnerId: string }).partnerId;
+    try {
+      return await partnerSiteService.approveRepublishByHq(partnerId);
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось одобрить возобновление"
+      });
+    }
+  });
+
+  app.post("/api/company/sites/:partnerId/reject-republish", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const partnerId = (request.params as { partnerId: string }).partnerId;
+    try {
+      return await partnerSiteService.rejectRepublishByHq(partnerId);
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось отклонить запрос"
+      });
+    }
+  });
+
   app.get("/api/company/team", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
     if (roleCheck) {
@@ -998,6 +1061,51 @@ export async function buildApp() {
         .status(400)
         .send({ message: error instanceof Error ? error.message : "Не удалось опубликовать сайт" });
     }
+  });
+
+  app.post("/api/partner/site/unpublish", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    try {
+      return await partnerSiteService.unpublishByPartner(getAuthUser(request)!.partnerId!);
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось снять сайт с публикации"
+      });
+    }
+  });
+
+  app.post("/api/partner/site/republish-request", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const parsed = z
+      .object({ comment: z.string().max(1000).optional() })
+      .safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    try {
+      return await partnerSiteService.requestRepublish({
+        partnerId: getAuthUser(request)!.partnerId!,
+        comment: parsed.data.comment
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось отправить запрос"
+      });
+    }
+  });
+
+  app.post("/api/partner/site/notice-read", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    return partnerSiteService.markPublishLockNoticeRead(getAuthUser(request)!.partnerId!);
   });
 
   app.get("/api/partner/storefront/projects/:key", async (request, reply) => {

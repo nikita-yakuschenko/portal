@@ -264,6 +264,15 @@ export const partnerSites = pgTable(
     status: partnerSiteStatusEnum("status").notNull().default("draft"),
     config: jsonb("config").notNull().default({}),
     publishedAt: timestamp("published_at", { withTimezone: true }),
+    // HQ снял с публикации — партнёр не может опубликовать без одобрения/разблокировки
+    publishLocked: boolean("publish_locked").notNull().default(false),
+    publishLockedAt: timestamp("publish_locked_at", { withTimezone: true }),
+    publishLockedByUserId: text("publish_locked_by_user_id"),
+    publishLockNotice: text("publish_lock_notice"),
+    publishLockNoticeReadAt: timestamp("publish_lock_notice_read_at", { withTimezone: true }),
+    republishRequestStatus: text("republish_request_status"),
+    republishRequestedAt: timestamp("republish_requested_at", { withTimezone: true }),
+    republishRequestComment: text("republish_request_comment"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },

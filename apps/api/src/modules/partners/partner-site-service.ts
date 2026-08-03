@@ -21,6 +21,13 @@ export type PartnerSiteRecord = {
   status: PartnerSiteStatus;
   config: PartnerSiteDraft;
   publishedAt: string | null;
+  publishLocked: boolean;
+  publishLockedAt: string | null;
+  publishLockNotice: string | null;
+  publishLockNoticeReadAt: string | null;
+  republishRequestStatus: "pending" | null;
+  republishRequestedAt: string | null;
+  republishRequestComment: string | null;
   createdAt: string;
   updatedAt: string;
   partner?: {
@@ -29,6 +36,22 @@ export type PartnerSiteRecord = {
     inn: string | null;
   } | undefined;
 };
+
+const HQ_UNPUBLISH_NOTICE =
+  "Администратор сети снял ваш сайт с публикации. Повторная публикация заблокирована — запросите возобновление или дождитесь разблокировки сетью.";
+
+function mapLockFields(row: typeof partnerSites.$inferSelect) {
+  const requestStatus = row.republishRequestStatus === "pending" ? ("pending" as const) : null;
+  return {
+    publishLocked: Boolean(row.publishLocked),
+    publishLockedAt: row.publishLockedAt?.toISOString() ?? null,
+    publishLockNotice: row.publishLockNotice ?? null,
+    publishLockNoticeReadAt: row.publishLockNoticeReadAt?.toISOString() ?? null,
+    republishRequestStatus: requestStatus,
+    republishRequestedAt: row.republishRequestedAt?.toISOString() ?? null,
+    republishRequestComment: row.republishRequestComment ?? null
+  };
+}
 
 function normalizeHost(host: string): string {
   const cleaned = host
@@ -98,6 +121,7 @@ function mapRow(row: typeof partnerSites.$inferSelect): PartnerSiteRecord {
       domain: row.domain ?? ""
     },
     publishedAt: row.publishedAt?.toISOString() ?? null,
+    ...mapLockFields(row),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
   };
@@ -134,6 +158,14 @@ export class PartnerSiteService {
       status: "draft" as const,
       config: { ...defaults, subdomain, domain: "" },
       publishedAt: null as Date | null,
+      publishLocked: false,
+      publishLockedAt: null as Date | null,
+      publishLockedByUserId: null as string | null,
+      publishLockNotice: null as string | null,
+      publishLockNoticeReadAt: null as Date | null,
+      republishRequestStatus: null as string | null,
+      republishRequestedAt: null as Date | null,
+      republishRequestComment: null as string | null,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -175,6 +207,11 @@ export class PartnerSiteService {
     }
 
     const nextStatus: PartnerSiteStatus = input.publish ? "published" : site.status;
+    if (input.publish && site.publishLocked) {
+      throw new Error(
+        "Публикация заблокирована администратором сети. Запросите возобновление или дождитесь разблокировки."
+      );
+    }
     const publishedAt =
       input.publish && site.status !== "published"
         ? new Date()
@@ -206,6 +243,136 @@ export class PartnerSiteService {
   async publish(partnerId: string): Promise<PartnerSiteRecord> {
     const site = await this.ensurePartnerSite(partnerId);
     return this.updateSite(partnerId, { config: site.config, publish: true });
+  }
+
+  /** Партнёр снимает сайт — без блокировки повторной публикации */
+  async unpublishByPartner(partnerId: string): Promise<PartnerSiteRecord> {
+    const site = await this.ensurePartnerSite(partnerId);
+    if (site.status !== "published") {
+      return site;
+    }
+    await db
+      .update(partnerSites)
+      .set({ status: "draft", updatedAt: new Date() })
+      .where(eq(partnerSites.id, site.id));
+    return this.getByPartnerId(partnerId);
+  }
+
+  /** HQ снимает сайт и блокирует повторную публикацию дилером */
+  async unpublishByHq(input: {
+    partnerId: string;
+    actorUserId: string;
+    notice?: string | undefined;
+  }): Promise<PartnerSiteRecord> {
+    const site = await this.ensurePartnerSite(input.partnerId);
+    const notice = input.notice?.trim() || HQ_UNPUBLISH_NOTICE;
+    await db
+      .update(partnerSites)
+      .set({
+        status: "draft",
+        publishLocked: true,
+        publishLockedAt: new Date(),
+        publishLockedByUserId: input.actorUserId,
+        publishLockNotice: notice,
+        publishLockNoticeReadAt: null,
+        republishRequestStatus: null,
+        republishRequestedAt: null,
+        republishRequestComment: null,
+        updatedAt: new Date()
+      })
+      .where(eq(partnerSites.id, site.id));
+    return this.getByPartnerId(input.partnerId);
+  }
+
+  async requestRepublish(input: {
+    partnerId: string;
+    comment?: string | undefined;
+  }): Promise<PartnerSiteRecord> {
+    const site = await this.ensurePartnerSite(input.partnerId);
+    if (!site.publishLocked) {
+      throw new Error("Публикация не заблокирована — можно опубликовать сайт самостоятельно.");
+    }
+    if (site.republishRequestStatus === "pending") {
+      return site;
+    }
+    await db
+      .update(partnerSites)
+      .set({
+        republishRequestStatus: "pending",
+        republishRequestedAt: new Date(),
+        republishRequestComment: input.comment?.trim() || null,
+        updatedAt: new Date()
+      })
+      .where(eq(partnerSites.id, site.id));
+    return this.getByPartnerId(input.partnerId);
+  }
+
+  async markPublishLockNoticeRead(partnerId: string): Promise<PartnerSiteRecord> {
+    const site = await this.ensurePartnerSite(partnerId);
+    if (!site.publishLockNotice || site.publishLockNoticeReadAt) {
+      return site;
+    }
+    await db
+      .update(partnerSites)
+      .set({ publishLockNoticeReadAt: new Date(), updatedAt: new Date() })
+      .where(eq(partnerSites.id, site.id));
+    return this.getByPartnerId(partnerId);
+  }
+
+  /** HQ разблокирует возможность публикации (сайт остаётся draft) */
+  async unlockPublishByHq(partnerId: string): Promise<PartnerSiteRecord> {
+    const site = await this.ensurePartnerSite(partnerId);
+    await db
+      .update(partnerSites)
+      .set({
+        publishLocked: false,
+        publishLockedAt: null,
+        publishLockedByUserId: null,
+        publishLockNotice: null,
+        publishLockNoticeReadAt: null,
+        republishRequestStatus: null,
+        republishRequestedAt: null,
+        republishRequestComment: null,
+        updatedAt: new Date()
+      })
+      .where(eq(partnerSites.id, site.id));
+    return this.getByPartnerId(partnerId);
+  }
+
+  /** HQ одобряет запрос — снимает lock и сразу публикует */
+  async approveRepublishByHq(partnerId: string): Promise<PartnerSiteRecord> {
+    const site = await this.ensurePartnerSite(partnerId);
+    await db
+      .update(partnerSites)
+      .set({
+        status: "published",
+        publishedAt: site.publishedAt ? new Date(site.publishedAt) : new Date(),
+        publishLocked: false,
+        publishLockedAt: null,
+        publishLockedByUserId: null,
+        publishLockNotice: null,
+        publishLockNoticeReadAt: null,
+        republishRequestStatus: null,
+        republishRequestedAt: null,
+        republishRequestComment: null,
+        updatedAt: new Date()
+      })
+      .where(eq(partnerSites.id, site.id));
+    return this.getByPartnerId(partnerId);
+  }
+
+  async rejectRepublishByHq(partnerId: string): Promise<PartnerSiteRecord> {
+    const site = await this.ensurePartnerSite(partnerId);
+    await db
+      .update(partnerSites)
+      .set({
+        republishRequestStatus: null,
+        republishRequestedAt: null,
+        republishRequestComment: null,
+        updatedAt: new Date()
+      })
+      .where(eq(partnerSites.id, site.id));
+    return this.getByPartnerId(partnerId);
   }
 
   /** Резолв публичного сайта по Host (только published) */

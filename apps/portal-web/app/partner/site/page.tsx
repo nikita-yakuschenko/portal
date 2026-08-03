@@ -56,25 +56,43 @@ function PartnerSiteContent() {
 
   const [form, setForm] = useState<PartnerSiteDraft>(emptyPartnerSiteDraft);
   const [siteStatus, setSiteStatus] = useState<"draft" | "published">("draft");
+  const [publishLocked, setPublishLocked] = useState(false);
+  const [publishLockNotice, setPublishLockNotice] = useState<string | null>(null);
+  const [noticeReadAt, setNoticeReadAt] = useState<string | null>(null);
+  const [republishRequestStatus, setRepublishRequestStatus] = useState<"pending" | null>(null);
   const [projects, setProjects] = useState<StorefrontProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  type SiteApi = {
+    status: "draft" | "published";
+    config: PartnerSiteDraft;
+    publishLocked?: boolean;
+    publishLockNotice?: string | null;
+    publishLockNoticeReadAt?: string | null;
+    republishRequestStatus?: "pending" | null;
+  };
+
+  function applySiteMeta(site: SiteApi) {
+    setSiteStatus(site.status);
+    setPublishLocked(Boolean(site.publishLocked));
+    setPublishLockNotice(site.publishLockNotice ?? null);
+    setNoticeReadAt(site.publishLockNoticeReadAt ?? null);
+    setRepublishRequestStatus(site.republishRequestStatus === "pending" ? "pending" : null);
+  }
+
   useEffect(() => {
     void (async () => {
       try {
         const [site, storefront] = await Promise.all([
-          apiFetch<{
-            status: "draft" | "published";
-            config: PartnerSiteDraft;
-          }>("/api/partner/site"),
+          apiFetch<SiteApi>("/api/partner/site"),
           apiFetch<StorefrontProject[]>("/api/partner/storefront/projects").catch(
             () => [] as StorefrontProject[]
           )
         ]);
         setProjects(filterStorefrontProjects(storefront));
-        setSiteStatus(site.status);
+        applySiteMeta(site);
 
         let config = normalizePartnerSiteDraft(site.config) ?? site.config;
         // Одноразовая миграция: если на сервере пустое имя — подтянуть localStorage
@@ -194,14 +212,11 @@ function PartnerSiteContent() {
 
     setSaving(true);
     try {
-      const saved = await apiFetch<{
-        status: "draft" | "published";
-        config: PartnerSiteDraft;
-      }>("/api/partner/site", {
+      const saved = await apiFetch<SiteApi>("/api/partner/site", {
         method: "PUT",
         body: JSON.stringify({ config: form, publish })
       });
-      setSiteStatus(saved.status);
+      applySiteMeta(saved);
       setForm(saved.config);
       savePartnerSiteDraft(saved.config);
       toast.success(publish ? "Сайт опубликован" : "Черновик сохранён", {
@@ -227,6 +242,44 @@ function PartnerSiteContent() {
     await persistSite(true);
   }
 
+  async function handleUnpublish() {
+    setSaving(true);
+    try {
+      const saved = await apiFetch<SiteApi>("/api/partner/site/unpublish", { method: "POST" });
+      applySiteMeta(saved);
+      toast.success("Сайт снят с публикации");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось снять с публикации");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRepublishRequest() {
+    setSaving(true);
+    try {
+      const saved = await apiFetch<SiteApi>("/api/partner/site/republish-request", {
+        method: "POST",
+        body: JSON.stringify({})
+      });
+      applySiteMeta(saved);
+      toast.success("Запрос на возобновление отправлен");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось отправить запрос");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleNoticeRead() {
+    try {
+      const saved = await apiFetch<SiteApi>("/api/partner/site/notice-read", { method: "POST" });
+      applySiteMeta(saved);
+    } catch {
+      /* ignore */
+    }
+  }
+
   async function openPreview() {
     const ok = await persistSite(false);
     if (ok) {
@@ -243,6 +296,7 @@ function PartnerSiteContent() {
           <Badge variant={siteStatus === "published" ? "default" : "secondary"}>
             {siteStatus === "published" ? "Опубликован" : "Черновик"}
           </Badge>
+          {publishLocked ? <Badge variant="destructive">Публикация заблокирована</Badge> : null}
           <Button type="button" variant="outline" onClick={() => void openPreview()} disabled={loading || saving}>
             <IconExternalLink />
             Предпросмотр
@@ -251,6 +305,19 @@ function PartnerSiteContent() {
       }
     >
       <PageAlert message={error} variant="destructive" />
+      {publishLocked && publishLockNotice ? (
+        <PageAlert
+          message={publishLockNotice}
+          variant={noticeReadAt ? "default" : "destructive"}
+        />
+      ) : null}
+      {publishLocked && publishLockNotice && !noticeReadAt ? (
+        <div className="mb-4">
+          <Button type="button" variant="outline" size="sm" onClick={() => void handleNoticeRead()}>
+            Понятно
+          </Button>
+        </div>
+      ) : null}
 
       <p className="text-muted-foreground max-w-3xl text-sm">
         Публичный сайт по структуре msk.avgst.ru: своё лого, свой бренд, каталог и цены из портала.
@@ -760,9 +827,37 @@ function PartnerSiteContent() {
               <IconExternalLink />
               Открыть предпросмотр
             </Button>
-            <Button type="button" variant="secondary" disabled={saving} onClick={() => void handlePublish()}>
-              Опубликовать
-            </Button>
+            {siteStatus === "published" ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving}
+                onClick={() => void handleUnpublish()}
+              >
+                Снять с публикации
+              </Button>
+            ) : null}
+            {publishLocked ? (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={saving || republishRequestStatus === "pending"}
+                onClick={() => void handleRepublishRequest()}
+              >
+                {republishRequestStatus === "pending"
+                  ? "Запрос отправлен"
+                  : "Запросить возобновление"}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={saving || siteStatus === "published"}
+                onClick={() => void handlePublish()}
+              >
+                Опубликовать
+              </Button>
+            )}
           </div>
         </form>
       )}

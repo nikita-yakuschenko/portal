@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { IconWorldWww } from "@tabler/icons-react";
+import { toast } from "sonner";
 
 import { DashboardShell } from "@/components/dashboard-shell";
 import { PageAlert } from "@/components/page-alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Empty,
@@ -15,6 +17,7 @@ import {
   EmptyTitle
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -36,24 +39,49 @@ type SiteRow = {
   publishedAt: string | null;
   updatedAt: string;
   publicUrl: string;
+  publishLocked: boolean;
+  republishRequestStatus: "pending" | null;
+  republishRequestedAt: string | null;
+  republishRequestComment: string | null;
 };
 
 export default function CompanySitesPage() {
   const [sites, setSites] = useState<SiteRow[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setError("");
+      setSites(await apiFetch<SiteRow[]>("/api/company/sites"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось загрузить сайты");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        setSites(await apiFetch<SiteRow[]>("/api/company/sites"));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Не удалось загрузить сайты");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+    void load();
+  }, [load]);
+
+  async function runAction(
+    partnerId: string,
+    path: string,
+    successMessage: string
+  ) {
+    setBusyId(partnerId);
+    try {
+      await apiFetch(`/api/company/sites/${partnerId}/${path}`, { method: "POST" });
+      toast.success(successMessage);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Операция не выполнена");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <DashboardShell
@@ -96,39 +124,121 @@ export default function CompanySitesPage() {
                     <TableHead>Свой домен</TableHead>
                     <TableHead>Статус</TableHead>
                     <TableHead>Ссылка</TableHead>
-                    <TableHead>Обновлён</TableHead>
+                    <TableHead>Действия</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sites.map((site) => (
-                    <TableRow key={site.id}>
-                      <TableCell className="font-medium">{site.companyName}</TableCell>
-                      <TableCell className="font-mono text-sm">{site.subdomain}.avgst.ru</TableCell>
-                      <TableCell>{site.domain?.trim() || "—"}</TableCell>
-                      <TableCell>
-                        <Badge variant={site.status === "published" ? "default" : "secondary"}>
-                          {site.status === "published" ? "Опубликован" : "Черновик"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {site.status === "published" ? (
-                          <a
-                            href={site.publicUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-sm underline-offset-4 hover:underline"
-                          >
-                            Открыть
-                          </a>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground whitespace-nowrap">
-                        {new Date(site.updatedAt).toLocaleDateString("ru-RU")}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {sites.map((site) => {
+                    const busy = busyId === site.partnerId;
+                    return (
+                      <TableRow key={site.id}>
+                        <TableCell className="font-medium">{site.companyName}</TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {site.subdomain}.avgst.ru
+                        </TableCell>
+                        <TableCell>{site.domain?.trim() || "—"}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <Badge variant={site.status === "published" ? "default" : "secondary"}>
+                              {site.status === "published" ? "Опубликован" : "Черновик"}
+                            </Badge>
+                            {site.publishLocked ? (
+                              <Badge variant="destructive">Заблокирован</Badge>
+                            ) : null}
+                            {site.republishRequestStatus === "pending" ? (
+                              <Badge variant="outline">Запрос на возобновление</Badge>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {site.status === "published" ? (
+                            <a
+                              href={site.publicUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-sm underline-offset-4 hover:underline"
+                            >
+                              Открыть
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-2">
+                            {busy ? <Spinner className="size-4" /> : null}
+                            {site.status === "published" ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={busy}
+                                onClick={() =>
+                                  void runAction(
+                                    site.partnerId,
+                                    "unpublish",
+                                    "Сайт снят с публикации, публикация заблокирована"
+                                  )
+                                }
+                              >
+                                Снять с публикации
+                              </Button>
+                            ) : null}
+                            {site.publishLocked ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                disabled={busy}
+                                onClick={() =>
+                                  void runAction(
+                                    site.partnerId,
+                                    "unlock-publish",
+                                    "Публикация разблокирована"
+                                  )
+                                }
+                              >
+                                Разблокировать
+                              </Button>
+                            ) : null}
+                            {site.republishRequestStatus === "pending" ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={busy}
+                                  onClick={() =>
+                                    void runAction(
+                                      site.partnerId,
+                                      "approve-republish",
+                                      "Возобновление одобрено, сайт опубликован"
+                                    )
+                                  }
+                                >
+                                  Одобрить
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={busy}
+                                  onClick={() =>
+                                    void runAction(
+                                      site.partnerId,
+                                      "reject-republish",
+                                      "Запрос отклонён"
+                                    )
+                                  }
+                                >
+                                  Отклонить
+                                </Button>
+                              </>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
