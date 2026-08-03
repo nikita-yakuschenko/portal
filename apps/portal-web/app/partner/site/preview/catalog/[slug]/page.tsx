@@ -503,15 +503,15 @@ export default function PartnerSiteProjectDetailPage() {
               )}
             >
               {specs.length > 0 ? (
-                <ul className="flex min-w-0 divide-x divide-white/20 lg:flex-1">
+                <ul className="flex shrink-0 divide-x divide-white/20">
                   {specs.map((spec) => {
                     const Icon = spec.icon;
                     return (
                       <li
                         key={spec.label}
-                        className="min-w-0 flex-1 px-1.5 py-0.5 first:pl-0 last:pr-0 sm:px-2.5 lg:px-4 lg:py-1"
+                        className="w-[4.25rem] shrink-0 px-1.5 py-0.5 first:pl-0 last:pr-0 sm:w-[4.75rem] sm:px-2 lg:w-[5rem] lg:px-2.5 lg:py-1"
                       >
-                        {/* Мобилка: компактная колонка в общем ряду; десктоп — крупнее */}
+                        {/* Фикс. узкая колонка — не растягивается от цены */}
                         <div className="flex flex-col gap-0.5 lg:block">
                           <div className="flex items-center gap-1 text-[0.6rem] font-medium tracking-wide text-white/65 uppercase sm:text-[0.65rem] lg:gap-1.5 lg:text-xs">
                             <Icon className="size-3 shrink-0 text-avgst-yellow lg:size-3.5" stroke={1.75} />
@@ -531,14 +531,14 @@ export default function PartnerSiteProjectDetailPage() {
                 className={cn(
                   "mt-3 flex items-center justify-between gap-3 border-t border-white/15 pt-3",
                   "sm:mt-3.5 sm:gap-4 sm:pt-3.5",
-                  "lg:mt-0 lg:shrink-0 lg:gap-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-4"
+                  "lg:mt-0 lg:ml-auto lg:shrink-0 lg:gap-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-4"
                 )}
               >
-                <div className="min-w-0">
+                <div className="min-w-0 lg:w-[17ch] lg:shrink-0">
                   <p className="text-[0.65rem] font-medium tracking-wide text-white/65 uppercase sm:text-xs">
                     Стоимость
                   </p>
-                  <p className="mt-0.5 text-lg font-extrabold tracking-tight text-white tabular-nums sm:text-xl lg:text-xl xl:text-2xl">
+                  <p className="mt-0.5 truncate text-lg font-extrabold tracking-tight text-white tabular-nums sm:text-xl lg:text-xl xl:text-2xl">
                     {priceAmount == null ? (
                       "Цена по запросу"
                     ) : (
