@@ -509,13 +509,13 @@ export default function PartnerSiteProjectDetailPage() {
                     return (
                       <li
                         key={spec.label}
-                        className="w-[4.25rem] shrink-0 px-1.5 py-0.5 first:pl-0 last:pr-0 sm:w-[4.75rem] sm:px-2 lg:w-[5rem] lg:px-2.5 lg:py-1"
+                        className="shrink-0 px-2.5 py-0.5 first:pl-0 last:pr-0 sm:px-3 lg:px-3.5 lg:py-1"
                       >
-                        {/* Фикс. узкая колонка — не растягивается от цены */}
+                        {/* Ширина по контенту — подписи не режем */}
                         <div className="flex flex-col gap-0.5 lg:block">
-                          <div className="flex items-center gap-1 text-[0.6rem] font-medium tracking-wide text-white/65 uppercase sm:text-[0.65rem] lg:gap-1.5 lg:text-xs">
+                          <div className="flex items-center gap-1 whitespace-nowrap text-[0.6rem] font-medium tracking-wide text-white/65 uppercase sm:text-[0.65rem] lg:gap-1.5 lg:text-xs">
                             <Icon className="size-3 shrink-0 text-avgst-yellow lg:size-3.5" stroke={1.75} />
-                            <span className="truncate">{spec.label}</span>
+                            <span>{spec.label}</span>
                           </div>
                           <p className="text-sm font-extrabold tabular-nums text-avgst-yellow sm:text-base lg:mt-1 lg:text-xl xl:text-2xl">
                             {spec.value}
