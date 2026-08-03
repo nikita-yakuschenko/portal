@@ -59,7 +59,7 @@ export function ProjectQuoteSummary({
 
   return (
     <section className={cn(className)}>
-      <h2 className="text-xl font-extrabold tracking-tight uppercase">Расчёт</h2>
+      <h2 className="text-xl font-extrabold tracking-tight uppercase">Конфигуратор</h2>
 
       <div className="mt-5 overflow-hidden rounded-2xl bg-white ring-1 ring-black/5">
         <div className="px-4 py-5 sm:px-6 sm:py-6">
