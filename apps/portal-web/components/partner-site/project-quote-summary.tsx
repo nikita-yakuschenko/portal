@@ -12,10 +12,10 @@ import { formatRub } from "@/lib/partner-pricing";
 import { cn } from "@/lib/utils";
 
 export type ProjectQuoteSpec = {
-  area?: number | null;
-  floors?: number | null;
-  bedrooms?: number | null;
-  bathrooms?: string | null;
+  area?: number | null | undefined;
+  floors?: number | null | undefined;
+  bedrooms?: number | null | undefined;
+  bathrooms?: string | null | undefined;
 };
 
 type ProjectQuoteSummaryProps = {
