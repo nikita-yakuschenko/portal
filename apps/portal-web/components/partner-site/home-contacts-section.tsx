@@ -11,8 +11,14 @@ import { PhoneInput } from "@/components/partner-site/phone-input";
 import { usePartnerSitePreview } from "@/components/partner-site/preview-context";
 import { isValidRuMobile } from "@/lib/ru-phone";
 
-/** Блок контактов на главной — перед подвалом */
-export function HomeContactsSection() {
+/** Блок контактов витрины — перед подвалом */
+export function HomeContactsSection({
+  projectId,
+  projectName
+}: {
+  projectId?: string;
+  projectName?: string;
+} = {}) {
   const { draft, submitLead } = usePartnerSitePreview();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -46,12 +52,17 @@ export function HomeContactsSection() {
         customerName: string;
         customerPhone: string;
         message?: string;
+        projectId?: string;
       } = {
         customerName: name.trim(),
         customerPhone: phone
       };
       const msg = message.trim();
       if (msg) payload.message = msg;
+      else if (projectName?.trim()) {
+        payload.message = `Вопрос по проекту «${projectName.trim()}»`;
+      }
+      if (projectId) payload.projectId = projectId;
       await submitLead(payload);
       toast.success("Заявка отправлена", {
         description: "Мы свяжемся с вами в ближайшее время."

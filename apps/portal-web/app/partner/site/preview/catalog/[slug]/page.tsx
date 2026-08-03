@@ -25,6 +25,7 @@ import {
   type ConfiguratorSelection
 } from "@/components/partner-site/project-options-configurator";
 import { ProjectQuoteSummary } from "@/components/partner-site/project-quote-summary";
+import { HomeContactsSection } from "@/components/partner-site/home-contacts-section";
 import { apiFetch } from "@/lib/api";
 import {
   technologyBadgeCode
@@ -549,11 +550,11 @@ export default function PartnerSiteProjectDetailPage() {
                     )}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex h-10 shrink-0 items-stretch gap-2">
                   <Button
                     type="button"
                     size="lg"
-                    className="h-10 rounded-md bg-avgst-yellow px-3.5 text-sm font-bold text-slate-950 hover:bg-avgst-yellow/90 sm:px-5"
+                    className="h-full rounded-md bg-avgst-yellow px-3.5 text-sm font-bold text-slate-950 hover:bg-avgst-yellow/90 sm:px-5"
                     onClick={() =>
                       openLeadForm({
                         kind: "quote",
@@ -568,7 +569,7 @@ export default function PartnerSiteProjectDetailPage() {
                   <button
                     type="button"
                     onClick={() => void shareProject()}
-                    className="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white/80 transition hover:bg-white/20 hover:text-white focus-visible:ring-[3px] focus-visible:ring-white/40 focus-visible:outline-none"
+                    className="inline-flex aspect-square h-full shrink-0 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white/80 transition hover:bg-white/20 hover:text-white focus-visible:ring-[3px] focus-visible:ring-white/40 focus-visible:outline-none"
                     aria-label="Поделиться"
                     title="Поделиться"
                   >
@@ -577,7 +578,7 @@ export default function PartnerSiteProjectDetailPage() {
                   <button
                     type="button"
                     onClick={() => toggleFavorite(project.id)}
-                    className="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white/80 transition hover:bg-white/20 hover:text-white focus-visible:ring-[3px] focus-visible:ring-white/40 focus-visible:outline-none"
+                    className="inline-flex aspect-square h-full shrink-0 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white/80 transition hover:bg-white/20 hover:text-white focus-visible:ring-[3px] focus-visible:ring-white/40 focus-visible:outline-none"
                     aria-label={isFavorite ? "Убрать из избранного" : "В избранное"}
                     aria-pressed={isFavorite}
                   >
@@ -694,6 +695,8 @@ export default function PartnerSiteProjectDetailPage() {
           />
         )}
       </div>
+
+      <HomeContactsSection projectId={project.id} projectName={project.name} />
 
       <Dialog
         open={lightbox.open}
