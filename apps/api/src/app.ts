@@ -9,6 +9,7 @@ import { config } from "./config.js";
 import { StoreTildaClient, verifyOfficialTildaKeys } from "./modules/catalog/tilda-client.js";
 import { hashResetToken } from "./modules/auth/passwords.js";
 import { partnerSiteService } from "./modules/partners/partner-site-service.js";
+import { notificationService } from "./modules/notifications/notification-service.js";
 import { PortalService } from "./modules/portal/portal-service.js";
 import { partnerSiteDraftSchema } from "@b2b/site-schema";
 
@@ -346,6 +347,41 @@ export async function buildApp() {
     }
 
     return portalService.getMe(user.sub);
+  });
+
+  app.get("/api/notifications", async (request, reply) => {
+    const authResult = await requireAuth(request, reply);
+    if (authResult) return authResult;
+    const user = getAuthUser(request)!;
+    const query = request.query as { unreadOnly?: string; limit?: string };
+    return notificationService.listForUser(user.sub, {
+      unreadOnly: query.unreadOnly === "1" || query.unreadOnly === "true",
+      limit: query.limit ? Number(query.limit) : 30
+    });
+  });
+
+  app.get("/api/notifications/unread-count", async (request, reply) => {
+    const authResult = await requireAuth(request, reply);
+    if (authResult) return authResult;
+    const count = await notificationService.unreadCount(getAuthUser(request)!.sub);
+    return { count };
+  });
+
+  app.post("/api/notifications/:id/read", async (request, reply) => {
+    const authResult = await requireAuth(request, reply);
+    if (authResult) return authResult;
+    const { id } = request.params as { id: string };
+    const row = await notificationService.markRead(getAuthUser(request)!.sub, id);
+    if (!row) {
+      return reply.status(404).send({ message: "Уведомление не найдено" });
+    }
+    return row;
+  });
+
+  app.post("/api/notifications/read-all", async (request, reply) => {
+    const authResult = await requireAuth(request, reply);
+    if (authResult) return authResult;
+    return notificationService.markAllRead(getAuthUser(request)!.sub);
   });
 
   app.post("/api/auth/password-reset/request", async (request, reply) => {
@@ -722,7 +758,10 @@ export async function buildApp() {
     }
     const partnerId = (request.params as { partnerId: string }).partnerId;
     try {
-      return await partnerSiteService.unlockPublishByHq(partnerId);
+      return await partnerSiteService.unlockPublishByHq({
+        partnerId,
+        actorUserId: getAuthUser(request)!.sub
+      });
     } catch (error) {
       return reply.status(400).send({
         message: error instanceof Error ? error.message : "Не удалось разблокировать публикацию"
@@ -737,7 +776,10 @@ export async function buildApp() {
     }
     const partnerId = (request.params as { partnerId: string }).partnerId;
     try {
-      return await partnerSiteService.approveRepublishByHq(partnerId);
+      return await partnerSiteService.approveRepublishByHq({
+        partnerId,
+        actorUserId: getAuthUser(request)!.sub
+      });
     } catch (error) {
       return reply.status(400).send({
         message: error instanceof Error ? error.message : "Не удалось одобрить возобновление"
@@ -752,7 +794,10 @@ export async function buildApp() {
     }
     const partnerId = (request.params as { partnerId: string }).partnerId;
     try {
-      return await partnerSiteService.rejectRepublishByHq(partnerId);
+      return await partnerSiteService.rejectRepublishByHq({
+        partnerId,
+        actorUserId: getAuthUser(request)!.sub
+      });
     } catch (error) {
       return reply.status(400).send({
         message: error instanceof Error ? error.message : "Не удалось отклонить запрос"
@@ -1091,7 +1136,8 @@ export async function buildApp() {
     try {
       return await partnerSiteService.requestRepublish({
         partnerId: getAuthUser(request)!.partnerId!,
-        comment: parsed.data.comment
+        comment: parsed.data.comment,
+        actorUserId: getAuthUser(request)!.sub
       });
     } catch (error) {
       return reply.status(400).send({

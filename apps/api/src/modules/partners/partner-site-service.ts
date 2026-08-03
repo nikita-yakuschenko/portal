@@ -12,6 +12,7 @@ import {
 
 import { db } from "../../db/client.js";
 import { partnerSites, partners } from "../../db/schema.js";
+import { notificationService } from "../notifications/notification-service.js";
 
 export type PartnerSiteRecord = {
   id: string;
@@ -281,12 +282,26 @@ export class PartnerSiteService {
         updatedAt: new Date()
       })
       .where(eq(partnerSites.id, site.id));
+
+    const partner = await db.query.partners.findFirst({ where: eq(partners.id, input.partnerId) });
+    await notificationService.notifyPartnerUsers(input.partnerId, {
+      type: "site.unpublished_by_hq",
+      title: "Сайт снят с публикации",
+      body: notice,
+      entityType: "partner_site",
+      entityId: site.id,
+      actionUrl: "/partner/site",
+      excludeUserId: input.actorUserId,
+      payload: { companyName: partner?.companyName ?? null }
+    });
+
     return this.getByPartnerId(input.partnerId);
   }
 
   async requestRepublish(input: {
     partnerId: string;
     comment?: string | undefined;
+    actorUserId?: string | undefined;
   }): Promise<PartnerSiteRecord> {
     const site = await this.ensurePartnerSite(input.partnerId);
     if (!site.publishLocked) {
@@ -304,6 +319,23 @@ export class PartnerSiteService {
         updatedAt: new Date()
       })
       .where(eq(partnerSites.id, site.id));
+
+    const partner = await db.query.partners.findFirst({ where: eq(partners.id, input.partnerId) });
+    const companyName = partner?.companyName ?? "Партнёр";
+    await notificationService.notifyCompanyUsers({
+      type: "site.republish.requested",
+      title: "Запрос на возобновление публикации",
+      body: `${companyName} просит снова опубликовать сайт${
+        input.comment?.trim() ? `: ${input.comment.trim()}` : "."
+      }`,
+      partnerId: input.partnerId,
+      entityType: "partner_site",
+      entityId: site.id,
+      actionUrl: "/company/sites",
+      excludeUserId: input.actorUserId,
+      payload: { companyName, comment: input.comment?.trim() || null }
+    });
+
     return this.getByPartnerId(input.partnerId);
   }
 
@@ -320,8 +352,11 @@ export class PartnerSiteService {
   }
 
   /** HQ разблокирует возможность публикации (сайт остаётся draft) */
-  async unlockPublishByHq(partnerId: string): Promise<PartnerSiteRecord> {
-    const site = await this.ensurePartnerSite(partnerId);
+  async unlockPublishByHq(input: {
+    partnerId: string;
+    actorUserId?: string | undefined;
+  }): Promise<PartnerSiteRecord> {
+    const site = await this.ensurePartnerSite(input.partnerId);
     await db
       .update(partnerSites)
       .set({
@@ -336,12 +371,26 @@ export class PartnerSiteService {
         updatedAt: new Date()
       })
       .where(eq(partnerSites.id, site.id));
-    return this.getByPartnerId(partnerId);
+
+    await notificationService.notifyPartnerUsers(input.partnerId, {
+      type: "site.publish.unlocked",
+      title: "Публикация разблокирована",
+      body: "Администратор сети снова разрешил публикацию сайта. Вы можете опубликовать сайт самостоятельно.",
+      entityType: "partner_site",
+      entityId: site.id,
+      actionUrl: "/partner/site",
+      excludeUserId: input.actorUserId
+    });
+
+    return this.getByPartnerId(input.partnerId);
   }
 
   /** HQ одобряет запрос — снимает lock и сразу публикует */
-  async approveRepublishByHq(partnerId: string): Promise<PartnerSiteRecord> {
-    const site = await this.ensurePartnerSite(partnerId);
+  async approveRepublishByHq(input: {
+    partnerId: string;
+    actorUserId?: string | undefined;
+  }): Promise<PartnerSiteRecord> {
+    const site = await this.ensurePartnerSite(input.partnerId);
     await db
       .update(partnerSites)
       .set({
@@ -358,11 +407,25 @@ export class PartnerSiteService {
         updatedAt: new Date()
       })
       .where(eq(partnerSites.id, site.id));
-    return this.getByPartnerId(partnerId);
+
+    await notificationService.notifyPartnerUsers(input.partnerId, {
+      type: "site.republish.approved",
+      title: "Публикация возобновлена",
+      body: "Администратор сети одобрил запрос — ваш сайт снова опубликован.",
+      entityType: "partner_site",
+      entityId: site.id,
+      actionUrl: "/partner/site",
+      excludeUserId: input.actorUserId
+    });
+
+    return this.getByPartnerId(input.partnerId);
   }
 
-  async rejectRepublishByHq(partnerId: string): Promise<PartnerSiteRecord> {
-    const site = await this.ensurePartnerSite(partnerId);
+  async rejectRepublishByHq(input: {
+    partnerId: string;
+    actorUserId?: string | undefined;
+  }): Promise<PartnerSiteRecord> {
+    const site = await this.ensurePartnerSite(input.partnerId);
     await db
       .update(partnerSites)
       .set({
@@ -372,7 +435,18 @@ export class PartnerSiteService {
         updatedAt: new Date()
       })
       .where(eq(partnerSites.id, site.id));
-    return this.getByPartnerId(partnerId);
+
+    await notificationService.notifyPartnerUsers(input.partnerId, {
+      type: "site.republish.rejected",
+      title: "Запрос на возобновление отклонён",
+      body: "Администратор сети отклонил запрос на публикацию. Сайт остаётся заблокированным.",
+      entityType: "partner_site",
+      entityId: site.id,
+      actionUrl: "/partner/site",
+      excludeUserId: input.actorUserId
+    });
+
+    return this.getByPartnerId(input.partnerId);
   }
 
   /** Резолв публичного сайта по Host (только published) */

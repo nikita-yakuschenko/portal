@@ -1,5 +1,6 @@
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -280,5 +281,30 @@ export const partnerSites = pgTable(
     partnerIdx: uniqueIndex("partner_sites_partner_id_idx").on(table.partnerId),
     subdomainIdx: uniqueIndex("partner_sites_subdomain_idx").on(table.subdomain),
     domainIdx: uniqueIndex("partner_sites_domain_idx").on(table.domain)
+  })
+);
+
+/** In-app inbox: адресат — user_id; бизнес-состояние (lock) живёт отдельно на partner_sites */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    audience: text("audience").notNull(),
+    partnerId: text("partner_id").references(() => partners.id, { onDelete: "set null" }),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    payload: jsonb("payload").notNull().default({}),
+    actionUrl: text("action_url"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    userCreatedIdx: index("notifications_user_created_idx").on(table.userId, table.createdAt)
   })
 );

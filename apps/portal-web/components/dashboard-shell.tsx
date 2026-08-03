@@ -2,6 +2,7 @@
 
 import { AppSidebar, type NavigationItem } from "@/components/app-sidebar";
 import { ModeToggle } from "@/components/mode-toggle";
+import { NotificationsBell } from "@/components/notifications-bell";
 import { Separator } from "@/components/ui/separator";
 import {
   SidebarInset,
@@ -79,6 +80,9 @@ export function DashboardShell(props: {
             <h1 className="truncate text-base font-medium">{sectionTitle}</h1>
           )}
           <div className="ml-auto flex flex-wrap items-center gap-2">
+            <NotificationsBell
+              listHref={isPartnerCabinet ? "/partner/notifications" : "/company/notifications"}
+            />
             {props.headerActions}
             {/* Тема — в Настройках партнёра; для HQ оставляем быстрый переключатель */}
             {!isPartnerCabinet ? <ModeToggle /> : null}
