@@ -76,23 +76,19 @@ function BrandAside({
         }}
       />
       <div className="relative">
-        <div className="flex items-center gap-4">
-          {logoDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={logoDataUrl}
-              alt={name || "Логотип"}
-              className="h-14 w-14 rounded-xl bg-white object-contain p-1.5"
-            />
-          ) : (
-            <span className="inline-flex h-14 w-14 items-center justify-center rounded-xl bg-avgst-yellow text-lg font-extrabold tracking-tight text-slate-950">
-              {(name || "А").slice(0, 1).toUpperCase()}
-            </span>
-          )}
-          <p className="text-lg leading-snug font-extrabold tracking-tight text-white">
+        {logoDataUrl ? (
+          // Тот же логотип, что в шапке — без текста рядом и без обрезки в квадрат
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={logoDataUrl}
+            alt={name || "Логотип"}
+            className="h-12 w-auto max-w-[220px] object-contain drop-shadow-sm sm:h-14 sm:max-w-[260px]"
+          />
+        ) : (
+          <p className="text-lg font-extrabold tracking-wide text-white uppercase">
             {name || "Строительная компания"}
           </p>
-        </div>
+        )}
       </div>
       {address ? (
         <div className="relative mt-8 border-t border-white/10 pt-5">
