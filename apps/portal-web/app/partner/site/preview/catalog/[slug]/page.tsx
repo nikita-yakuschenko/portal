@@ -24,6 +24,7 @@ import {
   ProjectOptionsConfigurator,
   type ConfiguratorSelection
 } from "@/components/partner-site/project-options-configurator";
+import { ProjectQuoteSummary } from "@/components/partner-site/project-quote-summary";
 import { apiFetch } from "@/lib/api";
 import {
   technologyBadgeCode
@@ -641,7 +642,28 @@ export default function PartnerSiteProjectDetailPage() {
               })
             }
           />
-        ) : null}
+        ) : (
+          <ProjectQuoteSummary
+            title={projectTitle}
+            mark={projectMark}
+            specs={{
+              area: project.area,
+              floors: project.floors,
+              bedrooms: project.bedrooms,
+              bathrooms: project.bathrooms
+            }}
+            basePrice={project.basePrice}
+            priceOnRequest={Boolean(project.priceOnRequest)}
+            onRequestQuote={() =>
+              openLeadForm({
+                kind: "quote",
+                projectName: project.name,
+                technology: project.technology,
+                ...(heroImage ? { projectImageUrl: heroImage } : {})
+              })
+            }
+          />
+        )}
       </div>
 
       <Dialog
