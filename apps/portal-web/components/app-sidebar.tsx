@@ -38,6 +38,8 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   cabinetLabel: string;
   navigation: NavigationItem[];
   activeHref?: string | undefined;
+  /** Пункты «Настройки» в меню профиля */
+  accountMenuItems?: NavigationItem[];
   /** Заголовок бренда в шапке сайдбара */
   brandTitle?: string;
   /** Свой логотип (партнёр — сокращённая версия) */
@@ -51,6 +53,7 @@ export function AppSidebar({
   cabinetLabel,
   navigation,
   activeHref,
+  accountMenuItems = [],
   brandTitle = "Авангард Строй",
   brandLogoSrc = null,
   plainBrandMark = false,
@@ -120,7 +123,7 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter>
-        <NavUser />
+        <NavUser accountMenuItems={accountMenuItems} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

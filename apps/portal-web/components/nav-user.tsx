@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { IconLogout, IconSelector } from "@tabler/icons-react";
 
+import type { NavigationItem } from "@/components/app-sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -43,7 +45,11 @@ function initials(name: string) {
     .join("");
 }
 
-export function NavUser() {
+export function NavUser({
+  accountMenuItems = []
+}: {
+  accountMenuItems?: NavigationItem[];
+}) {
   const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
 
@@ -128,6 +134,25 @@ export function NavUser() {
                 </div>
               </div>
             </DropdownMenuLabel>
+            {accountMenuItems.length > 0 ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-muted-foreground text-xs font-medium">
+                  Настройки
+                </DropdownMenuLabel>
+                {accountMenuItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <DropdownMenuItem key={item.href} asChild>
+                      <Link href={item.href}>
+                        <Icon />
+                        {item.title}
+                      </Link>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </>
+            ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => void handleLogout()}>
               <IconLogout />

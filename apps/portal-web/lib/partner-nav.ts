@@ -2,7 +2,7 @@ import {
   IconBook,
   IconHelpCircle,
   IconLayoutDashboard,
-  IconMessage,
+  IconMessageCircle,
   IconMessages,
   IconSettings,
   IconWorld
@@ -19,7 +19,7 @@ const BASE_NAV: NavigationItem[] = [
   { title: "Сайт", href: "/partner/site", icon: IconWorld },
   { title: "Каталог", href: "/partner/catalog", icon: IconBook },
   { title: "Запросы", href: "/partner/inquiries", icon: IconHelpCircle },
-  { title: "Мессенджер", href: "/partner/messenger", icon: IconMessage },
+  { title: "Мессенджер", href: "/partner/messenger", icon: IconMessageCircle },
   { title: "Настройки", href: "/partner/settings", icon: IconSettings }
 ];
 

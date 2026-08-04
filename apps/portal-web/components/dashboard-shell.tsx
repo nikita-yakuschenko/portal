@@ -9,6 +9,7 @@ import {
   SidebarProvider,
   SidebarTrigger
 } from "@/components/ui/sidebar";
+import { companyAccountMenu } from "@/lib/company-nav";
 import { partnerCabinetLabel } from "@/lib/partner-nav";
 
 const PARTNER_TEST_BANNER =
@@ -51,7 +52,13 @@ export function DashboardShell(props: {
   headerActions?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const activeHref = props.navigation
+  const isPartnerCabinet =
+    props.cabinetKind === "partner" || props.cabinetLabel === partnerCabinetLabel;
+
+  const accountMenuItems = isPartnerCabinet ? [] : companyAccountMenu;
+
+  const navForTitle = [...props.navigation, ...accountMenuItems];
+  const activeHref = navForTitle
     .map((item) => item.href)
     .filter(
       (href) => props.currentPath === href || props.currentPath.startsWith(`${href}/`)
@@ -60,11 +67,16 @@ export function DashboardShell(props: {
 
   const sectionTitle =
     props.title ??
-    props.navigation.find((item) => item.href === props.currentPath)?.title ??
+    navForTitle.find((item) => item.href === props.currentPath)?.title ??
+    navForTitle.find((item) => item.href === activeHref)?.title ??
     "";
 
-  const isPartnerCabinet =
-    props.cabinetKind === "partner" || props.cabinetLabel === partnerCabinetLabel;
+  const sidebarActiveHref = props.navigation.some(
+    (item) =>
+      props.currentPath === item.href || props.currentPath.startsWith(`${item.href}/`)
+  )
+    ? activeHref
+    : undefined;
 
   return (
     <SidebarProvider>
@@ -72,7 +84,8 @@ export function DashboardShell(props: {
         variant="inset"
         cabinetLabel={props.cabinetLabel}
         navigation={props.navigation}
-        activeHref={activeHref}
+        accountMenuItems={accountMenuItems}
+        activeHref={sidebarActiveHref}
         plainBrandMark={!isPartnerCabinet}
         brandTitle={props.brandTitle ?? (isPartnerCabinet ? "Партнёр" : "Авангард Строй")}
         brandLogoSrc={props.brandLogoSrc ?? null}
