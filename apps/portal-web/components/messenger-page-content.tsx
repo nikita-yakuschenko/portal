@@ -87,6 +87,7 @@ type Conversation = {
   type: "dm" | "request" | "channel";
   partnerId: string | null;
   partnerName: string | null;
+  partnerRegion?: string | null;
   partnerAvatarUrl?: string | null;
   title: string;
   description?: string | null;
@@ -1106,6 +1107,12 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                     </p>
                   ) : (
                     <div className="text-muted-foreground flex min-h-4 flex-wrap items-center gap-2 text-xs">
+                      {active?.type === "dm" &&
+                      isCompany &&
+                      active.partnerRegion?.trim() &&
+                      active.partnerRegion.trim().toLowerCase() !== "не указан" ? (
+                        <span className="truncate">{active.partnerRegion.trim()}</span>
+                      ) : null}
                       {active?.type === "channel" && active.description ? (
                         <span className="line-clamp-2">{active.description}</span>
                       ) : null}

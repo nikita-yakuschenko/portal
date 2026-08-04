@@ -77,6 +77,7 @@ function mapConversation(
   row: typeof messengerConversations.$inferSelect,
   extra: {
     partnerName?: string | null;
+    partnerRegion?: string | null;
     projectName?: string | null;
     partnerAvatarUrl?: string | null;
     lastMessagePreview?: LastMessagePreview | null;
@@ -90,6 +91,7 @@ function mapConversation(
     type: row.type,
     partnerId: row.partnerId,
     partnerName: extra.partnerName ?? null,
+    partnerRegion: extra.partnerRegion ?? null,
     partnerAvatarUrl: extra.partnerAvatarUrl ?? null,
     title: row.title,
     description: row.description ?? null,
@@ -228,6 +230,7 @@ export class MessengerService {
       .select({
         conversation: messengerConversations,
         partnerName: partners.companyName,
+        partnerRegion: partners.region,
         projectName: catalogProjects.name,
         siteConfig: partnerSites.config
       })
@@ -335,9 +338,10 @@ export class MessengerService {
     }
 
     const q = filters?.q?.trim().toLowerCase();
-    const mapped = scoped.map(({ conversation, partnerName, projectName, siteConfig }) => {
+    const mapped = scoped.map(({ conversation, partnerName, partnerRegion, projectName, siteConfig }) => {
       return mapConversation(conversation, {
         partnerName,
+        partnerRegion,
         projectName,
         partnerAvatarUrl: partnerAvatarFromSiteConfig(siteConfig),
         lastMessagePreview: previewMap.get(conversation.id) ?? null,
@@ -360,6 +364,7 @@ export class MessengerService {
         item.title,
         item.requestNumber,
         item.partnerName,
+        item.partnerRegion,
         item.projectName,
         item.lastMessagePreview?.text
       ]
@@ -375,6 +380,7 @@ export class MessengerService {
       .select({
         conversation: messengerConversations,
         partnerName: partners.companyName,
+        partnerRegion: partners.region,
         projectName: catalogProjects.name,
         siteConfig: partnerSites.config
       })
@@ -389,6 +395,7 @@ export class MessengerService {
     await this.assertCanAccess(actor, row.conversation);
     return mapConversation(row.conversation, {
       partnerName: row.partnerName,
+      partnerRegion: row.partnerRegion,
       projectName: row.projectName,
       partnerAvatarUrl: partnerAvatarFromSiteConfig(row.siteConfig)
     });
