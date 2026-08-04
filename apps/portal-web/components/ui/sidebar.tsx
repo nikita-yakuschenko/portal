@@ -26,11 +26,50 @@ import {
 } from "@/components/ui/tooltip"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
+const SIDEBAR_STORAGE_KEY = "b2b_sidebar_open"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "16rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null
+  const row = document.cookie.split("; ").find((part) => part.startsWith(`${name}=`))
+  if (!row) return null
+  return decodeURIComponent(row.slice(name.length + 1))
+}
+
+function storageKeyForUser(userId?: string | null) {
+  return userId ? `${SIDEBAR_STORAGE_KEY}:${userId}` : SIDEBAR_STORAGE_KEY
+}
+
+function readSidebarOpen(defaultOpen: boolean, userId?: string | null): boolean {
+  if (typeof window === "undefined") return defaultOpen
+  try {
+    const raw = window.sessionStorage.getItem(storageKeyForUser(userId))
+    if (raw === "true") return true
+    if (raw === "false") return false
+  } catch {
+    /* private mode */
+  }
+  const cookie = readCookie(SIDEBAR_COOKIE_NAME)
+  if (cookie === "true") return true
+  if (cookie === "false") return false
+  return defaultOpen
+}
+
+function persistSidebarOpen(open: boolean, userId?: string | null) {
+  if (typeof document !== "undefined") {
+    document.cookie = `${SIDEBAR_COOKIE_NAME}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}; SameSite=Lax`
+  }
+  if (typeof window === "undefined") return
+  try {
+    window.sessionStorage.setItem(storageKeyForUser(userId), String(open))
+  } catch {
+    /* private mode */
+  }
+}
 
 type SidebarContextProps = {
   state: "expanded" | "collapsed"
@@ -68,10 +107,10 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
+  const userIdRef = React.useRef<string | null>(null)
 
-  // This is the internal state of the sidebar.
-  // We use openProp and setOpenProp for control from outside the component.
-  const [_open, _setOpen] = React.useState(defaultOpen)
+  // Читаем сохранённое состояние сразу (cookie / sessionStorage), иначе после refresh всегда expanded
+  const [_open, _setOpen] = React.useState(() => readSidebarOpen(defaultOpen))
   const open = openProp ?? _open
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
@@ -81,12 +120,33 @@ function SidebarProvider({
       } else {
         _setOpen(openState)
       }
-
-      // This sets the cookie to keep the sidebar state.
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+      persistSidebarOpen(openState, userIdRef.current)
     },
     [setOpenProp, open]
   )
+
+  // Привязка к пользователю в рамках сессии браузера
+  React.useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch("/api/auth/session", { credentials: "include" })
+        if (!res.ok || cancelled) return
+        const data = (await res.json()) as { user?: { id?: string } }
+        const userId = data.user?.id?.trim() || null
+        if (!userId || cancelled) return
+        userIdRef.current = userId
+        const perUser = readSidebarOpen(defaultOpen, userId)
+        _setOpen(perUser)
+        persistSidebarOpen(perUser, userId)
+      } catch {
+        /* нет сессии — оставляем общий ключ */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [defaultOpen])
 
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
