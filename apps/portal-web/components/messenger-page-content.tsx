@@ -173,6 +173,34 @@ function formatTime(iso: string | null) {
     : date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 }
 
+/** В облачке сообщения всегда только часы:минуты */
+function formatClockTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function sameCalendarDay(a: string, b: string) {
+  return new Date(a).toDateString() === new Date(b).toDateString();
+}
+
+/** Подпись дня для бейджа-разделителя в ленте */
+function formatDayLabel(iso: string) {
+  const date = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return "Сегодня";
+  if (date.toDateString() === yesterday.toDateString()) return "Вчера";
+  const sameYear = date.getFullYear() === today.getFullYear();
+  return date.toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    ...(sameYear ? {} : { year: "numeric" })
+  });
+}
+
 function conversationTitle(item: Conversation, audience: MessengerAudience) {
   if (item.type === "request") {
     return item.requestNumber ? `${item.requestNumber} · ${item.title}` : item.title;
@@ -314,7 +342,7 @@ function MessageMeta({
           {message.viewCount}
         </span>
       ) : null}
-      <span className="tabular-nums">{formatTime(message.createdAt)}</span>
+      <span className="tabular-nums">{formatClockTime(message.createdAt)}</span>
       {mine ? <MessageReceipt receipt={message.receipt} onPrimary={onPrimary} /> : null}
     </span>
   );
@@ -1357,8 +1385,11 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                             const hasBody = Boolean(msg.body?.trim());
                             const dissolving = deletingIds.has(msg.id);
                             const prev = index > 0 ? messages[index - 1] : undefined;
+                            const showDayBadge =
+                              !prev || !sameCalendarDay(prev.createdAt, msg.createdAt);
                             // Подряд идущие сообщения одного автора в пределах минуты — одна группа
                             const grouped =
+                              !showDayBadge &&
                               prev != null &&
                               prev.authorUserId === msg.authorUserId &&
                               new Date(msg.createdAt).getTime() -
@@ -1370,6 +1401,18 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                                 id={msg.id}
                                 className={cn(grouped && "-mt-3")}
                               >
+                                {showDayBadge ? (
+                                  <div
+                                    className="flex items-center gap-3 py-1"
+                                    aria-label={formatDayLabel(msg.createdAt)}
+                                  >
+                                    <div className="bg-border/70 h-px flex-1" />
+                                    <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium">
+                                      {formatDayLabel(msg.createdAt)}
+                                    </span>
+                                    <div className="bg-border/70 h-px flex-1" />
+                                  </div>
+                                ) : null}
                                 <ContextMenu>
                                   <ContextMenuTrigger asChild disabled={dissolving}>
                                     <Message
