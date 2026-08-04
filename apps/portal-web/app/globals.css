@@ -367,3 +367,43 @@ html.dark::-webkit-scrollbar-thumb:hover {
     animation: none;
   }
 }
+
+/* Удаление сообщения в мессенджере — «песок» как в Telegram */
+@keyframes message-sand {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+    clip-path: inset(0 0 0 0);
+  }
+  35% {
+    opacity: 0.85;
+    filter: blur(0.6px);
+    transform: translateY(-2px) scale(0.99);
+    clip-path: inset(0 2% 8% 2%);
+  }
+  70% {
+    opacity: 0.35;
+    filter: blur(2px);
+    transform: translateY(-10px) scale(0.96);
+    clip-path: inset(0 8% 35% 8%);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(-18px) scale(0.9);
+    clip-path: inset(0 18% 100% 18%);
+  }
+}
+
+.animate-message-sand {
+  animation: message-sand 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  pointer-events: none;
+  transform-origin: center top;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-message-sand {
+    animation: message-sand 0.2s linear forwards;
+  }
+}

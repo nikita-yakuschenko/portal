@@ -7,15 +7,17 @@ import {
   IconArchive,
   IconArrowLeft,
   IconArrowUp,
+  IconCheck,
+  IconChecks,
   IconDotsVertical,
   IconFile,
   IconHash,
   IconMessage,
-  IconPaperclip,
   IconPhoto,
   IconPlus,
   IconSearch,
   IconTicket,
+  IconTrash,
   IconX
 } from "@tabler/icons-react";
 import { toast } from "sonner";
@@ -154,19 +156,21 @@ function conversationTitle(item: Conversation, audience: MessengerAudience) {
   return item.title || "Канал";
 }
 
+function isImageMime(mimeType: string) {
+  return mimeType.startsWith("image/");
+}
+
 function MessageReceipt({ receipt }: { receipt?: ChatMessage["receipt"] }) {
   if (!receipt) return null;
+  const read = receipt === "read";
+  const Icon = receipt === "sent" ? IconCheck : IconChecks;
   const label =
     receipt === "sent" ? "Отправлено" : receipt === "delivered" ? "Доставлено" : "Прочитано";
   return (
-    <span
-      className={cn(
-        "text-[11px] leading-none",
-        receipt === "read" ? "text-sky-400" : "text-muted-foreground/80"
-      )}
-    >
-      {label}
-    </span>
+    <Icon
+      className={cn("size-3.5 shrink-0", read ? "text-sky-400" : "text-muted-foreground/80")}
+      aria-label={label}
+    />
   );
 }
 
@@ -231,6 +235,9 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   const [archiveMode, setArchiveMode] = useState(false);
   const [archiveCount, setArchiveCount] = useState(0);
   const [archiving, setArchiving] = useState(false);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(() => new Set());
+  const deletingIdsRef = useRef(deletingIds);
+  deletingIdsRef.current = deletingIds;
 
   const isCompany = audience === "company";
   const basePath = isCompany ? "/company/messenger" : "/partner/messenger";
@@ -291,6 +298,17 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
           : [];
 
       setMessages((prev) => {
+        const deleting = deletingIdsRef.current;
+        if (deleting.size > 0) {
+          const byId = new Map(nextMessages.map((m) => [m.id, m]));
+          const kept = prev
+            .filter((m) => byId.has(m.id) || deleting.has(m.id))
+            .map((m) => byId.get(m.id) ?? m);
+          const added = nextMessages.filter(
+            (m) => !prev.some((p) => p.id === m.id) && !deleting.has(m.id)
+          );
+          return added.length ? [...kept, ...added] : kept;
+        }
         if (
           silent &&
           prev.length === nextMessages.length &&
@@ -451,6 +469,32 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       toast.error(err instanceof Error ? err.message : "Не удалось отправить");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function deleteMessage(messageId: string) {
+    if (deletingIds.has(messageId)) return;
+    setDeletingIds((prev) => new Set(prev).add(messageId));
+    try {
+      await apiFetch<{ ok: true }>(`/api/messenger/messages/${messageId}`, {
+        method: "DELETE"
+      });
+      window.setTimeout(() => {
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+        setDeletingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(messageId);
+          return next;
+        });
+        void loadList();
+      }, 700);
+    } catch (err) {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(messageId);
+        return next;
+      });
+      toast.error(err instanceof Error ? err.message : "Не удалось удалить");
     }
   }
 
@@ -724,7 +768,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                   {typers.length > 0 ? (
                     <p className="text-primary flex min-h-4 items-center gap-1.5 text-xs font-medium">
                       <TypingDots />
-                      <span className="truncate">{typingLabel(typers)}…</span>
+                      <span className="truncate">{typingLabel(typers)}</span>
                     </p>
                   ) : (
                     <div className="text-muted-foreground flex min-h-4 flex-wrap items-center gap-2 text-xs">
@@ -806,37 +850,78 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                           {messages.map((msg) => {
                             const mine = meId != null && msg.authorUserId === meId;
                             const attachments = msg.attachments ?? [];
+                            const hasBody = Boolean(msg.body?.trim());
+                            const dissolving = deletingIds.has(msg.id);
                             return (
                               <MessageScrollerItem key={msg.id} id={msg.id}>
-                                <Message align={mine ? "end" : "start"}>
-                                  <MessageContent>
+                                <Message
+                                  align={mine ? "end" : "start"}
+                                  className={cn(dissolving && "animate-message-sand")}
+                                >
+                                  <MessageContent className="relative">
+                                    {mine && !dissolving ? (
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button
+                                            type="button"
+                                            size="icon"
+                                            variant="ghost"
+                                            className="text-muted-foreground absolute top-0 right-0 size-7 opacity-0 transition-opacity group-hover/message:opacity-100 data-[state=open]:opacity-100"
+                                            aria-label="Действия с сообщением"
+                                          >
+                                            <IconDotsVertical className="size-3.5" />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="w-44">
+                                          <DropdownMenuItem
+                                            className="text-destructive focus:text-destructive gap-2"
+                                            onSelect={() => void deleteMessage(msg.id)}
+                                          >
+                                            <IconTrash className="size-4" />
+                                            Удалить
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    ) : null}
                                     <MessageHeader>{msg.authorName}</MessageHeader>
-                                    <Bubble variant={mine ? "default" : "secondary"}>
-                                      <BubbleContent className="whitespace-pre-wrap">
-                                        {msg.body || null}
-                                        {attachments.length > 0 ? (
-                                          <div className="mt-2 flex flex-col gap-2">
-                                            {attachments.map((att) => (
-                                              <a
-                                                key={att.id}
-                                                href={`/api/messenger/attachments/${att.id}`}
-                                                target="_blank"
-                                                rel="noreferrer"
+                                    {hasBody ? (
+                                      <Bubble variant={mine ? "default" : "secondary"}>
+                                        <BubbleContent className="whitespace-pre-wrap">
+                                          {msg.body}
+                                        </BubbleContent>
+                                      </Bubble>
+                                    ) : null}
+                                    {attachments.length > 0 ? (
+                                      <div className={cn("flex flex-col gap-2", hasBody && "mt-0.5")}>
+                                        {attachments.map((att) => {
+                                          const image = isImageMime(att.mimeType);
+                                          return (
+                                            <a
+                                              key={att.id}
+                                              href={`/api/messenger/attachments/${att.id}`}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                            >
+                                              <Attachment
+                                                size="sm"
+                                                className="bg-muted/80 border-border/60"
                                               >
-                                                <Attachment size="sm">
-                                                  <AttachmentMedia>
-                                                    <IconPaperclip className="size-4" />
-                                                  </AttachmentMedia>
-                                                  <AttachmentContent>
-                                                    <AttachmentTitle>{att.fileName}</AttachmentTitle>
-                                                  </AttachmentContent>
-                                                </Attachment>
-                                              </a>
-                                            ))}
-                                          </div>
-                                        ) : null}
-                                      </BubbleContent>
-                                    </Bubble>
+                                                <AttachmentMedia>
+                                                  {image ? (
+                                                    <IconPhoto className="size-4" />
+                                                  ) : (
+                                                    <IconFile className="size-4" />
+                                                  )}
+                                                </AttachmentMedia>
+                                                <AttachmentContent>
+                                                  <AttachmentTitle>{att.fileName}</AttachmentTitle>
+                                                </AttachmentContent>
+                                              </Attachment>
+                                            </a>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : null}
                                     <MessageFooter className="gap-1.5">
                                       <span>{formatTime(msg.createdAt)}</span>
                                       {mine ? <MessageReceipt receipt={msg.receipt} /> : null}
@@ -862,7 +947,11 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                           key={file.id}
                           className="bg-muted inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs"
                         >
-                          <IconPaperclip className="size-3.5 shrink-0" />
+                          {isImageMime(file.mimeType) ? (
+                            <IconPhoto className="size-3.5 shrink-0" />
+                          ) : (
+                            <IconFile className="size-3.5 shrink-0" />
+                          )}
                           <span className="truncate">{file.fileName}</span>
                           <button
                             type="button"

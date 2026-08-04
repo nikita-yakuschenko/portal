@@ -1,4 +1,4 @@
-import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
@@ -548,6 +548,50 @@ export class MessengerService {
       receipt: "sent" as const,
       attachments: savedAttachments
     };
+  }
+
+  async deleteMessage(actor: Actor, messageId: string) {
+    const [message] = await db
+      .select()
+      .from(messengerMessages)
+      .where(eq(messengerMessages.id, messageId))
+      .limit(1);
+    if (!message) throw new Error("Сообщение не найдено");
+    if (message.authorUserId !== actor.sub) {
+      throw new Error("Можно удалить только своё сообщение");
+    }
+
+    const conversation = await this.requireConversation(message.conversationId);
+    await this.assertCanAccess(actor, conversation);
+
+    const files = await db
+      .select()
+      .from(messengerAttachments)
+      .where(eq(messengerAttachments.messageId, messageId));
+
+    for (const file of files) {
+      try {
+        await unlink(path.join(UPLOAD_ROOT, file.storageKey));
+      } catch {
+        /* файла уже нет — ок */
+      }
+    }
+
+    await db.delete(messengerMessages).where(eq(messengerMessages.id, messageId));
+
+    const [last] = await db
+      .select({ createdAt: messengerMessages.createdAt })
+      .from(messengerMessages)
+      .where(eq(messengerMessages.conversationId, message.conversationId))
+      .orderBy(desc(messengerMessages.createdAt))
+      .limit(1);
+
+    await db
+      .update(messengerConversations)
+      .set({ lastMessageAt: last?.createdAt ?? conversation.createdAt })
+      .where(eq(messengerConversations.id, message.conversationId));
+
+    return { ok: true as const, conversationId: message.conversationId };
   }
 
   async createRequest(

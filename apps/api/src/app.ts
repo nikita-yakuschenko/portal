@@ -1516,6 +1516,27 @@ export async function buildApp() {
     }
   });
 
+  app.delete("/api/messenger/messages/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+
+    try {
+      return await messengerService.deleteMessage(
+        getAuthUser(request)!,
+        (request.params as { id: string }).id
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не удалось удалить сообщение";
+      const status = message === "Сообщение не найдено" ? 404 : 400;
+      return reply.status(status).send({ message });
+    }
+  });
+
   app.post("/api/messenger/requests", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, [
       "company_admin",
