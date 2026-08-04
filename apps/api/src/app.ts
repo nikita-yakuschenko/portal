@@ -74,6 +74,10 @@ const messengerCreateRequestSchema = z.object({
   partnerId: z.string().optional()
 });
 
+const messengerCreateChannelSchema = z.object({
+  title: z.string().min(2).max(120)
+});
+
 const messengerUpdateRequestSchema = z.object({
   status: z.enum(["open", "in_progress", "closed"])
 });
@@ -1486,6 +1490,24 @@ export async function buildApp() {
     }
   });
 
+  app.get("/api/messenger/unread-count", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+    try {
+      const count = await messengerService.unreadTotal(getAuthUser(request)!);
+      return { count };
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось получить непрочитанные"
+      });
+    }
+  });
+
   app.post("/api/messenger/conversations/:id/messages", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, [
       "company_admin",
@@ -1561,6 +1583,26 @@ export async function buildApp() {
     } catch (error) {
       return reply.status(400).send({
         message: error instanceof Error ? error.message : "Не удалось создать запрос"
+      });
+    }
+  });
+
+  app.post("/api/messenger/channels", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) return roleCheck;
+
+    const parsed = messengerCreateChannelSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    try {
+      return await messengerService.createChannel(getAuthUser(request)!, {
+        title: parsed.data.title
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось создать канал"
       });
     }
   });

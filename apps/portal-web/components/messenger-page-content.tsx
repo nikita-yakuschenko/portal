@@ -74,6 +74,7 @@ import {
   AttachmentTitle
 } from "@/components/ui/attachment";
 import { apiFetch } from "@/lib/api";
+import { emitPortalEvent, PORTAL_EVENT } from "@/lib/portal-events";
 import { cn } from "@/lib/utils";
 
 export type MessengerAudience = "company" | "partner";
@@ -364,6 +365,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       );
       setConversations(Array.isArray(rows) ? rows : []);
       setError("");
+      emitPortalEvent(PORTAL_EVENT.messengerActivity);
 
       try {
         const archiveRes = await apiFetch<{ count: number }>("/api/messenger/archive-count");
@@ -429,6 +431,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
           c.id === conversationId ? { ...c, unread: false, unreadCount: 0 } : c
         )
       );
+      emitPortalEvent(PORTAL_EVENT.messengerActivity);
     } catch (err) {
       if (!silent) {
         toast.error(err instanceof Error ? err.message : "Не удалось загрузить сообщения");

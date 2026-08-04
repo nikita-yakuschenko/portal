@@ -779,6 +779,61 @@ export class MessengerService {
     }).length;
   }
 
+  async unreadTotal(actor: Actor) {
+    if (actor.partnerId) {
+      await this.ensureDm(actor.partnerId, actor.sub);
+    }
+
+    const archivedRows = await db
+      .select({ conversationId: messengerArchives.conversationId })
+      .from(messengerArchives)
+      .where(eq(messengerArchives.userId, actor.sub));
+    const archivedIds = new Set(archivedRows.map((r) => r.conversationId));
+
+    const visibility = isCompany(actor)
+      ? undefined
+      : or(
+          eq(messengerConversations.type, "channel"),
+          eq(messengerConversations.partnerId, actor.partnerId!)
+        );
+
+    const rows = await db
+      .select({
+        id: messengerConversations.id
+      })
+      .from(messengerConversations)
+      .where(visibility);
+
+    const conversationIds = rows.map((r) => r.id).filter((id) => !archivedIds.has(id));
+    if (conversationIds.length === 0) return 0;
+
+    const reads = await db
+      .select()
+      .from(messengerReads)
+      .where(eq(messengerReads.userId, actor.sub));
+    const readMap = new Map(reads.map((r) => [r.conversationId, r.lastReadAt]));
+
+    const counts = await Promise.all(
+      conversationIds.map(async (id) => {
+        const lastRead = readMap.get(id);
+        const conditions = [
+          eq(messengerMessages.conversationId, id),
+          ne(messengerMessages.authorUserId, actor.sub)
+        ];
+        if (lastRead) {
+          conditions.push(gt(messengerMessages.createdAt, lastRead));
+        }
+        const [countRow] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(messengerMessages)
+          .where(and(...conditions));
+        return countRow?.count ?? 0;
+      })
+    );
+
+    return counts.reduce((sum, n) => sum + n, 0);
+  }
+
   async updateRequestStatus(actor: Actor, conversationId: string, status: "open" | "in_progress" | "closed") {
     const conversation = await this.requireConversation(conversationId);
     await this.assertCanAccess(actor, conversation);

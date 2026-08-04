@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import type { TablerIcon } from "@tabler/icons-react";
 
 import { AdaptiveBrandMark } from "@/components/adaptive-brand-mark";
@@ -14,9 +15,12 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem
 } from "@/components/ui/sidebar";
+import { apiFetch } from "@/lib/api";
+import { PORTAL_EVENT } from "@/lib/portal-events";
 
 export type NavigationItem = {
   title: string;
@@ -31,6 +35,10 @@ function brandInitials(title: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+function isMessengerHref(href: string) {
+  return href.endsWith("/messenger");
 }
 
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
@@ -60,6 +68,32 @@ export function AppSidebar({
   ...props
 }: AppSidebarProps) {
   const logo = brandLogoSrc?.trim() || null;
+  const hasMessenger = navigation.some((item) => isMessengerHref(item.href));
+  const [messengerUnread, setMessengerUnread] = useState(0);
+
+  const refreshMessengerUnread = useCallback(async () => {
+    if (!hasMessenger) return;
+    try {
+      const res = await apiFetch<{ count: number }>("/api/messenger/unread-count");
+      setMessengerUnread(res.count ?? 0);
+    } catch {
+      /* сессия/сеть — бейдж молчит */
+    }
+  }, [hasMessenger]);
+
+  useEffect(() => {
+    if (!hasMessenger) return;
+    void refreshMessengerUnread();
+    const timer = window.setInterval(() => void refreshMessengerUnread(), 8_000);
+    const onRefresh = () => void refreshMessengerUnread();
+    window.addEventListener(PORTAL_EVENT.messengerActivity, onRefresh);
+    window.addEventListener("focus", onRefresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener(PORTAL_EVENT.messengerActivity, onRefresh);
+      window.removeEventListener("focus", onRefresh);
+    };
+  }, [hasMessenger, refreshMessengerUnread]);
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -101,6 +135,7 @@ export function AppSidebar({
             <SidebarMenu>
               {navigation.map((item) => {
                 const Icon = item.icon;
+                const showUnread = isMessengerHref(item.href) && messengerUnread > 0;
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
@@ -113,6 +148,11 @@ export function AppSidebar({
                         <span>{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
+                    {showUnread ? (
+                      <SidebarMenuBadge className="bg-primary text-primary-foreground rounded-full">
+                        {messengerUnread > 99 ? "99+" : messengerUnread}
+                      </SidebarMenuBadge>
+                    ) : null}
                   </SidebarMenuItem>
                 );
               })}
