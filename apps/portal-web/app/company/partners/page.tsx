@@ -205,13 +205,13 @@ function CompanyPartnersContent() {
     >
       <PageAlert message={error} variant="destructive" />
 
-      <Tabs value={tab} onValueChange={setTab} className="gap-4">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="partners">Партнёры</TabsTrigger>
           <TabsTrigger value="applications">Заявки на подключение</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="partners" className="mt-0">
+        <TabsContent value="partners">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
               <CardTitle>Список партнёров</CardTitle>
@@ -317,7 +317,7 @@ function CompanyPartnersContent() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="applications" className="mt-0">
+        <TabsContent value="applications">
           <CompanyPartnerApplicationsPanel
             onChanged={() => {
               setLoading(true);

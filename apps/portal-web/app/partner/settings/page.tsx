@@ -164,7 +164,7 @@ function PartnerSettingsContent() {
     <PartnerShell currentPath="/partner/settings" title="Настройки">
       <PageAlert message={error} variant="destructive" />
 
-      <Tabs value={tab} onValueChange={handleTabChange} className="space-y-4">
+      <Tabs value={tab} onValueChange={handleTabChange}>
         <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
           <TabsTrigger value="company">Компания</TabsTrigger>
           <TabsTrigger value="appearance">Внешний вид</TabsTrigger>

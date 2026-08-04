@@ -356,7 +356,7 @@ export default function PartnerCatalogProjectPage() {
               </CardContent>
             </Card>
 
-            <Tabs defaultValue="overview" className="space-y-4">
+            <Tabs defaultValue="overview">
               <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
                 <TabsTrigger value="overview">Обзор</TabsTrigger>
                 <TabsTrigger value="price">Цена</TabsTrigger>

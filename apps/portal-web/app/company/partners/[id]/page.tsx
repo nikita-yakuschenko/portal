@@ -241,7 +241,7 @@ function PartnerDetailContent() {
               <TabsTrigger value="security">Безопасность</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="overview" className="mt-4 space-y-4">
+            <TabsContent value="overview" className="space-y-4">
               <Card>
                 <CardHeader>
                   <CardTitle>Коммерческие данные</CardTitle>
@@ -301,7 +301,7 @@ function PartnerDetailContent() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="legal" className="mt-4">
+            <TabsContent value="legal">
               <Card>
                 <CardHeader>
                   <CardTitle>Юр. реквизиты</CardTitle>
@@ -337,7 +337,7 @@ function PartnerDetailContent() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="site" className="mt-4">
+            <TabsContent value="site">
               <Card>
                 <CardHeader>
                   <CardTitle>Сайт партнёра</CardTitle>
@@ -464,7 +464,7 @@ function PartnerDetailContent() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="security" className="mt-4">
+            <TabsContent value="security">
               <Card>
                 <CardHeader>
                   <CardTitle>Безопасность</CardTitle>

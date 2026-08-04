@@ -333,7 +333,7 @@ function PartnerSiteContent() {
         </div>
       ) : (
         <form className="flex flex-col gap-4 md:gap-6" onSubmit={handleSave}>
-          <Tabs value={tab} onValueChange={handleTabChange} className="space-y-4">
+          <Tabs value={tab} onValueChange={handleTabChange}>
             <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
               <TabsTrigger value="general">Основное</TabsTrigger>
               <TabsTrigger value="contacts">Контакты</TabsTrigger>
