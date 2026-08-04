@@ -1,7 +1,7 @@
 import {
-  IconBell,
   IconBuildingStore,
   IconInbox,
+  IconMessage,
   IconRefresh,
   IconUsers,
   IconUserShield
@@ -13,7 +13,7 @@ export const companyNavigation = [
   { title: "Каталог", href: "/company/catalog", icon: IconBuildingStore },
   { title: "Синхронизации", href: "/company/sync", icon: IconRefresh },
   { title: "Команда", href: "/company/team", icon: IconUserShield },
-  { title: "Уведомления", href: "/company/notifications", icon: IconBell }
+  { title: "Мессенджер", href: "/company/messenger", icon: IconMessage }
 ];
 
 export const companyCabinetLabel = "Управление B2B-порталом";

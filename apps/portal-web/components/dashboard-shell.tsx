@@ -89,13 +89,13 @@ export function DashboardShell(props: {
         >
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
+          <NotificationsBell
+            listHref={isPartnerCabinet ? "/partner/notifications" : "/company/notifications"}
+          />
           {props.breadcrumbs ?? (
             <h1 className="truncate text-base font-medium">{sectionTitle}</h1>
           )}
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <NotificationsBell
-              listHref={isPartnerCabinet ? "/partner/notifications" : "/company/notifications"}
-            />
             {props.headerActions}
             {/* Тема — в Настройках партнёра; для HQ оставляем быстрый переключатель */}
             {!isPartnerCabinet ? <ModeToggle /> : null}

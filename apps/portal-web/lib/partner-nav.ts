@@ -1,8 +1,8 @@
 import {
-  IconBell,
   IconBook,
   IconHelpCircle,
   IconLayoutDashboard,
+  IconMessage,
   IconMessages,
   IconSettings,
   IconWorld
@@ -19,7 +19,7 @@ const BASE_NAV: NavigationItem[] = [
   { title: "Сайт", href: "/partner/site", icon: IconWorld },
   { title: "Каталог", href: "/partner/catalog", icon: IconBook },
   { title: "Запросы", href: "/partner/inquiries", icon: IconHelpCircle },
-  { title: "Уведомления", href: "/partner/notifications", icon: IconBell },
+  { title: "Мессенджер", href: "/partner/messenger", icon: IconMessage },
   { title: "Настройки", href: "/partner/settings", icon: IconSettings }
 ];
 

@@ -97,7 +97,7 @@ export function NotificationsBell({ listHref }: NotificationsBellProps) {
           ) : null}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80 sm:w-96">
+      <DropdownMenuContent align="start" className="w-80 sm:w-96">
         <DropdownMenuLabel className="flex items-center justify-between gap-2">
           <span>Уведомления</span>
           {unread > 0 ? (
