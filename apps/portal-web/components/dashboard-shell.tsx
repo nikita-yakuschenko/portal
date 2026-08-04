@@ -104,7 +104,8 @@ export function DashboardShell(props: {
     : undefined;
 
   return (
-    <SidebarProvider>
+    // Кабинет = высота вьюпорта. Шапка на месте. Крутится только контент под ней.
+    <SidebarProvider className="h-svh overflow-hidden">
       <AppSidebar
         variant="inset"
         cabinetLabel={props.cabinetLabel}
@@ -116,12 +117,12 @@ export function DashboardShell(props: {
         brandLogoSrc={props.brandLogoSrc ?? null}
         brandHref={props.brandHref ?? (isPartnerCabinet ? "/partner" : "/")}
       />
-      <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
+      <SidebarInset className="flex min-h-0 min-w-0 flex-col overflow-hidden">
         {isPartnerCabinet ? <PartnerTestModeBanner /> : null}
 
         <header
           className={[
-            "bg-background sticky top-0 z-30 flex min-h-16 shrink-0 items-center gap-2 border-b px-4 py-3",
+            "bg-background z-30 flex min-h-16 shrink-0 items-center gap-2 border-b px-4 py-3",
             isPartnerCabinet ? "" : "md:rounded-t-xl"
           ].join(" ")}
         >
@@ -141,7 +142,7 @@ export function DashboardShell(props: {
           </div>
         </header>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
+        <div className="cabinet-content-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:gap-6 md:p-6">
           {props.children}
         </div>
       </SidebarInset>

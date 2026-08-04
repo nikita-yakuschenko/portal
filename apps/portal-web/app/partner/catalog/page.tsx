@@ -791,7 +791,7 @@ export default function PartnerCatalogPage() {
           )}
         </div>
 
-        <aside className="w-full shrink-0 space-y-3 lg:sticky lg:top-20 lg:w-72">
+        <aside className="w-full shrink-0 space-y-3 lg:sticky lg:top-6 lg:w-72">
           <FilterControlShell
             active={Boolean(query.trim())}
             className="h-9 w-full min-w-0"

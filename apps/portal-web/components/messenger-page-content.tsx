@@ -1007,14 +1007,14 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   }, [conversations]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       <PageAlert message={error} variant="destructive" />
 
       <Card
-        className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden py-0 md:grid-cols-[minmax(280px,340px)_1fr]"
+        className="grid h-full min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden py-0 md:grid-cols-[minmax(280px,340px)_1fr]"
         onContextMenu={(e) => e.preventDefault()}
       >
-        <div className="flex min-h-0 flex-col border-b md:border-r md:border-b-0">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden border-b md:border-r md:border-b-0">
           <div className="flex flex-col gap-3 border-b p-4">
             <div className="relative min-w-0">
               <IconSearch className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
@@ -1246,7 +1246,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
           </div>
         </div>
 
-        <div className="flex min-h-0 min-w-0 flex-col">
+        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
           {!activeId ? (
             <div className="text-muted-foreground flex flex-1 items-center justify-center p-8 text-sm">
               Выберите диалог
