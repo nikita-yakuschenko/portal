@@ -796,6 +796,36 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     }
   }
 
+  async function reopenRequest(conversationId?: string) {
+    if (!isCompany) return;
+    const id = conversationId ?? activeId ?? undefined;
+    if (!id) return;
+    const target = conversations.find((c) => c.id === id);
+    if (!target || target.type !== "request" || target.status !== "closed") return;
+
+    setArchiving(true);
+    try {
+      const updated = await apiFetch<Conversation>(`/api/messenger/requests/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "open" })
+      });
+      await apiFetch(`/api/messenger/conversations/${id}/archive`, {
+        method: "POST",
+        body: JSON.stringify({ archived: false })
+      });
+      setConversations((prev) => prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)));
+      toast.success("Обращение снова открыто");
+      setArchiveMode(false);
+      setTabState("request");
+      setActiveId(id);
+      writeMessengerUrl("request", id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось открыть обращение");
+    } finally {
+      setArchiving(false);
+    }
+  }
+
   async function copyMessageText(text: string) {
     const value = text.trim();
     if (!value) return;
@@ -1099,7 +1129,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-1">
-                  {active?.type === "request" && !archiveMode && active.status !== "closed" ? (
+                  {active?.type === "request" && active.status !== "closed" ? (
                     <Button
                       type="button"
                       size="sm"
@@ -1108,6 +1138,17 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                       onClick={() => void closeRequest()}
                     >
                       Закрыть обращение
+                    </Button>
+                  ) : null}
+
+                  {isCompany && active?.type === "request" && active.status === "closed" ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={archiving}
+                      onClick={() => void reopenRequest()}
+                    >
+                      Открыть обращение
                     </Button>
                   ) : null}
 
@@ -1371,8 +1412,20 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                   </div>
                 </div>
               ) : active?.type === "request" && active.status === "closed" ? (
-                <div className="text-muted-foreground flex min-h-[3.75rem] items-center justify-center border-t px-3 py-2 text-center text-sm">
-                  Обращение закрыто — писать нельзя
+                <div className="flex min-h-[3.75rem] flex-col items-center justify-center gap-2 border-t px-3 py-2 text-center">
+                  <p className="text-muted-foreground text-sm">
+                    Обращение закрыто — писать нельзя
+                  </p>
+                  {isCompany ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={archiving}
+                      onClick={() => void reopenRequest()}
+                    >
+                      Открыть обращение
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
             </>
