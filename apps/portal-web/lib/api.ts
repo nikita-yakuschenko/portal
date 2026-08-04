@@ -10,15 +10,23 @@ export const apiBaseUrl = resolveApiBaseUrl();
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const base = resolveApiBaseUrl();
+  const headers = new Headers(init?.headers);
+  // Content-Type: application/json только если есть body — иначе Fastify падает на пустом POST
+  const body = init?.body;
+  const hasJsonBody =
+    body != null &&
+    body !== "" &&
+    !(typeof FormData !== "undefined" && body instanceof FormData);
+  if (hasJsonBody && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
   let response: Response;
   try {
     response = await fetch(`${base}${path}`, {
       ...init,
       credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...(init?.headers ?? {})
-      }
+      headers
     });
   } catch {
     throw new Error("Нет связи с API. Убедитесь, что запущен npm run dev:api");
