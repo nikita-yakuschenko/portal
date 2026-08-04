@@ -246,18 +246,23 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
 
   const loadList = useCallback(async () => {
     try {
-      const [rows, archiveRes] = await Promise.all([
-        apiFetch<Conversation[]>(
-          `/api/messenger/conversations${archiveMode ? "?archived=1" : ""}`
-        ),
-        apiFetch<{ count: number }>("/api/messenger/archive-count")
-      ]);
-      setConversations(rows);
-      setArchiveCount(archiveRes.count);
+      const rows = await apiFetch<Conversation[]>(
+        `/api/messenger/conversations${archiveMode ? "?archived=1" : ""}`
+      );
+      setConversations(Array.isArray(rows) ? rows : []);
       setError("");
-      return rows;
+
+      try {
+        const archiveRes = await apiFetch<{ count: number }>("/api/messenger/archive-count");
+        setArchiveCount(archiveRes.count ?? 0);
+      } catch {
+        setArchiveCount(0);
+      }
+
+      return Array.isArray(rows) ? rows : [];
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить диалоги");
+      setConversations([]);
       return [] as Conversation[];
     } finally {
       setListLoading(false);
@@ -267,22 +272,34 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   const loadMessages = useCallback(async (conversationId: string, silent = false) => {
     if (!silent) setThreadLoading(true);
     try {
-      const payload = await apiFetch<{ messages: ChatMessage[]; typing: Typer[] }>(
-        `/api/messenger/conversations/${conversationId}/messages`
-      );
+      const payload = await apiFetch<
+        ChatMessage[] | { messages?: ChatMessage[]; typing?: Typer[] }
+      >(`/api/messenger/conversations/${conversationId}/messages`);
+
+      const nextMessages = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload.messages)
+          ? payload.messages
+          : [];
+      const nextTyping = Array.isArray(payload)
+        ? []
+        : Array.isArray(payload.typing)
+          ? payload.typing
+          : [];
+
       setMessages((prev) => {
         if (
           silent &&
-          prev.length === payload.messages.length &&
+          prev.length === nextMessages.length &&
           prev.every(
-            (m, i) => m.id === payload.messages[i]?.id && m.receipt === payload.messages[i]?.receipt
+            (m, i) => m.id === nextMessages[i]?.id && m.receipt === nextMessages[i]?.receipt
           )
         ) {
           return prev;
         }
-        return payload.messages;
+        return nextMessages;
       });
-      setTypers(payload.typing ?? []);
+      setTypers(nextTyping);
       setConversations((prev) =>
         prev.map((c) =>
           c.id === conversationId ? { ...c, unread: false, unreadCount: 0 } : c
@@ -756,6 +773,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                         <MessageScrollerContent className="gap-4">
                           {messages.map((msg) => {
                             const mine = meId != null && msg.authorUserId === meId;
+                            const attachments = msg.attachments ?? [];
                             return (
                               <MessageScrollerItem key={msg.id} id={msg.id}>
                                 <Message align={mine ? "end" : "start"}>
@@ -764,9 +782,9 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                                     <Bubble variant={mine ? "default" : "secondary"}>
                                       <BubbleContent className="whitespace-pre-wrap">
                                         {msg.body || null}
-                                        {msg.attachments.length > 0 ? (
+                                        {attachments.length > 0 ? (
                                           <div className="mt-2 flex flex-col gap-2">
-                                            {msg.attachments.map((att) => (
+                                            {attachments.map((att) => (
                                               <a
                                                 key={att.id}
                                                 href={`/api/messenger/attachments/${att.id}`}
