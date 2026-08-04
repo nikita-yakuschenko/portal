@@ -1009,7 +1009,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
             </Tabs>
           </div>
 
-          <div className="relative min-h-0 flex-1 overflow-y-auto">
+          <div className="relative min-h-0 flex-1 overflow-y-auto scrollbar-slim">
             {listLoading ? (
               <div className="space-y-3 p-4">
                 {[0, 1, 2, 3, 4].map((i) => (

@@ -209,6 +209,52 @@ option {
   display: none;
 }
 
+/* Тонкий скролл мессенджера: 4px, без стрелок, прозрачный трек */
+.scrollbar-slim {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(17, 17, 17, 0.28) transparent;
+}
+
+.scrollbar-slim::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.scrollbar-slim::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.scrollbar-slim::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-slim::-webkit-scrollbar-thumb {
+  background: rgba(17, 17, 17, 0.22);
+  border-radius: 999px;
+}
+
+.scrollbar-slim::-webkit-scrollbar-thumb:hover {
+  background: rgba(17, 17, 17, 0.38);
+}
+
+.scrollbar-slim::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.dark .scrollbar-slim {
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+.dark .scrollbar-slim::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.dark .scrollbar-slim::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.38);
+}
+
 /* Деликатный скролл: тонкий, полупрозрачный, без серого трека.
    scrollbar-gutter: stable — ширина страницы не прыгает при lock скролла модалками. */
 html {
