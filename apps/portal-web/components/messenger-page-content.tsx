@@ -4,15 +4,18 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  IconArrowUp,
   IconCheck,
   IconChecks,
+  IconFile,
   IconHash,
   IconMessage,
   IconPaperclip,
+  IconPhoto,
   IconPlus,
   IconSearch,
-  IconSend,
-  IconTicket
+  IconTicket,
+  IconX
 } from "@tabler/icons-react";
 import { toast } from "sonner";
 
@@ -29,6 +32,13 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Message,
@@ -92,7 +102,22 @@ type ChatMessage = {
   }>;
 };
 
+type Typer = { userId: string; fullName: string };
+
+type PendingFile = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  dataBase64: string;
+};
+
 type TabKey = "dm" | "request" | "channel";
+
+const MAX_ATTACHMENTS = 10;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MEDIA_ACCEPT = "image/*,video/*,audio/*";
+const DOC_ACCEPT =
+  ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.zip,.rar,.7z";
 
 const TAB_LABELS: Record<TabKey, string> = {
   dm: "Чаты",
@@ -152,6 +177,27 @@ function UnreadBadge({ count }: { count: number }) {
   );
 }
 
+function TypingDots() {
+  return (
+    <span className="inline-flex items-center gap-0.5 px-0.5" aria-hidden>
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="bg-muted-foreground/80 size-1 animate-bounce rounded-full"
+          style={{ animationDelay: `${i * 120}ms` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function typingLabel(typers: Typer[]) {
+  if (typers.length === 0) return "";
+  if (typers.length === 1) return `${typers[0]!.fullName} печатает`;
+  if (typers.length === 2) return `${typers[0]!.fullName} и ${typers[1]!.fullName} печатают`;
+  return `${typers[0]!.fullName} и ещё ${typers.length - 1} печатают`;
+}
+
 /** Inbox мессенджера: чаты / запросы / каналы */
 export function MessengerPageContent({ audience }: { audience: MessengerAudience }) {
   const searchParams = useSearchParams();
@@ -165,9 +211,15 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(initialId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [typers, setTypers] = useState<Typer[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [meId, setMeId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [fileAccept, setFileAccept] = useState(MEDIA_ACCEPT);
+  const typingTimerRef = useRef<number | null>(null);
+  const lastTypingSentRef = useRef(0);
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestForm, setRequestForm] = useState({ title: "", body: "" });
   const [creatingRequest, setCreatingRequest] = useState(false);
@@ -204,19 +256,22 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   const loadMessages = useCallback(async (conversationId: string, silent = false) => {
     if (!silent) setThreadLoading(true);
     try {
-      const rows = await apiFetch<ChatMessage[]>(
+      const payload = await apiFetch<{ messages: ChatMessage[]; typing: Typer[] }>(
         `/api/messenger/conversations/${conversationId}/messages`
       );
       setMessages((prev) => {
         if (
           silent &&
-          prev.length === rows.length &&
-          prev.every((m, i) => m.id === rows[i]?.id && m.receipt === rows[i]?.receipt)
+          prev.length === payload.messages.length &&
+          prev.every(
+            (m, i) => m.id === payload.messages[i]?.id && m.receipt === payload.messages[i]?.receipt
+          )
         ) {
           return prev;
         }
-        return rows;
+        return payload.messages;
       });
+      setTypers(payload.typing ?? []);
       setConversations((prev) =>
         prev.map((c) =>
           c.id === conversationId ? { ...c, unread: false, unreadCount: 0 } : c
@@ -230,6 +285,107 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       if (!silent) setThreadLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    setTypers([]);
+    setPendingFiles([]);
+    setDraft("");
+  }, [activeId]);
+
+  function pulseTyping() {
+    if (!activeId || !canWrite) return;
+    const now = Date.now();
+    if (now - lastTypingSentRef.current < 1500) return;
+    lastTypingSentRef.current = now;
+    void apiFetch(`/api/messenger/conversations/${activeId}/typing`, { method: "POST" }).catch(
+      () => undefined
+    );
+  }
+
+  function onDraftChange(value: string) {
+    setDraft(value);
+    if (!value.trim()) return;
+    if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = window.setTimeout(() => pulseTyping(), 200);
+  }
+
+  async function addFiles(fileList: FileList | null) {
+    if (!fileList?.length) return;
+    const room = MAX_ATTACHMENTS - pendingFiles.length;
+    if (room <= 0) {
+      toast.error(`Не больше ${MAX_ATTACHMENTS} вложений в одном сообщении`);
+      return;
+    }
+
+    const next: PendingFile[] = [];
+    for (const file of Array.from(fileList).slice(0, room)) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        toast.error(`«${file.name}» больше 10 МБ`);
+        continue;
+      }
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () => reject(new Error("read failed"));
+        reader.readAsDataURL(file);
+      });
+      next.push({
+        id: `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        dataBase64
+      });
+    }
+    if (next.length === 0) return;
+    setPendingFiles((prev) => {
+      const merged = [...prev, ...next];
+      if (merged.length > MAX_ATTACHMENTS) {
+        toast.error(`Не больше ${MAX_ATTACHMENTS} вложений в одном сообщении`);
+        return merged.slice(0, MAX_ATTACHMENTS);
+      }
+      return merged;
+    });
+  }
+
+  function openFilePicker(kind: "media" | "document") {
+    if (pendingFiles.length >= MAX_ATTACHMENTS) {
+      toast.error(`Не больше ${MAX_ATTACHMENTS} вложений в одном сообщении`);
+      return;
+    }
+    setFileAccept(kind === "media" ? MEDIA_ACCEPT : DOC_ACCEPT);
+    window.setTimeout(() => fileInputRef.current?.click(), 0);
+  }
+
+  async function sendMessage() {
+    if (!activeId || !canWrite) return;
+    const body = draft.trim();
+    if (!body && pendingFiles.length === 0) return;
+    setSending(true);
+    try {
+      const created = await apiFetch<ChatMessage>(
+        `/api/messenger/conversations/${activeId}/messages`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            body,
+            attachments: pendingFiles.map((f) => ({
+              fileName: f.fileName,
+              mimeType: f.mimeType,
+              dataBase64: f.dataBase64
+            }))
+          })
+        }
+      );
+      setMessages((prev) => [...prev, created]);
+      setDraft("");
+      setPendingFiles([]);
+      void loadList();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось отправить");
+    } finally {
+      setSending(false);
+    }
+  }
 
   useEffect(() => {
     void (async () => {
@@ -264,7 +420,6 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
 
-  // Живое обновление: список + активный тред
   useEffect(() => {
     const tick = () => {
       void (async () => {
@@ -281,26 +436,6 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       window.removeEventListener("focus", onFocus);
     };
   }, [loadList, loadMessages]);
-
-  async function sendMessage() {
-    if (!activeId || !canWrite) return;
-    const body = draft.trim();
-    if (!body) return;
-    setSending(true);
-    try {
-      const created = await apiFetch<ChatMessage>(
-        `/api/messenger/conversations/${activeId}/messages`,
-        { method: "POST", body: JSON.stringify({ body }) }
-      );
-      setMessages((prev) => [...prev, created]);
-      setDraft("");
-      void loadList();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Не удалось отправить");
-    } finally {
-      setSending(false);
-    }
-  }
 
   async function createRequest() {
     setCreatingRequest(true);
@@ -367,7 +502,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     <>
       <PageAlert message={error} variant="destructive" />
 
-      <Card className="grid h-[min(78vh,820px)] grid-cols-1 overflow-hidden py-0 md:grid-cols-[minmax(280px,340px)_1fr]">
+      <Card className="grid h-[min(78vh,820px)] grid-cols-1 gap-0 overflow-hidden py-0 md:grid-cols-[minmax(280px,340px)_1fr]">
         <div className="flex min-h-0 flex-col border-b md:border-r md:border-b-0">
           <div className="flex flex-col gap-3 border-b p-4">
             <div className="flex items-center gap-2">
@@ -588,29 +723,107 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
               </div>
 
               {canWrite ? (
-                <div className="flex gap-2 border-t p-3">
-                  <Textarea
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    placeholder="Напишите сообщение…"
-                    rows={2}
-                    className="min-h-12 resize-none"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        void sendMessage();
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    size="icon"
-                    className="shrink-0 self-end"
-                    disabled={sending || !draft.trim()}
-                    onClick={() => void sendMessage()}
-                  >
-                    <IconSend className="size-4" />
-                  </Button>
+                <div className="border-t px-3 pt-2 pb-3">
+                  <div className="text-muted-foreground mb-1.5 flex h-5 items-center gap-2 px-1 text-xs">
+                    {typers.length > 0 ? (
+                      <>
+                        <TypingDots />
+                        <span className="truncate">{typingLabel(typers)}…</span>
+                      </>
+                    ) : null}
+                  </div>
+
+                  {pendingFiles.length > 0 ? (
+                    <div className="mb-2 flex flex-wrap gap-2 px-1">
+                      {pendingFiles.map((file) => (
+                        <div
+                          key={file.id}
+                          className="bg-muted inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs"
+                        >
+                          <IconPaperclip className="size-3.5 shrink-0" />
+                          <span className="truncate">{file.fileName}</span>
+                          <button
+                            type="button"
+                            className="text-muted-foreground hover:text-foreground"
+                            aria-label="Убрать файл"
+                            onClick={() =>
+                              setPendingFiles((prev) => prev.filter((f) => f.id !== file.id))
+                            }
+                          >
+                            <IconX className="size-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="bg-muted flex items-end gap-1 rounded-3xl p-1.5">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      multiple
+                      accept={fileAccept}
+                      onChange={(e) => {
+                        void addFiles(e.target.files);
+                        e.target.value = "";
+                      }}
+                    />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="secondary"
+                          className="size-9 shrink-0 rounded-full"
+                          aria-label="Добавить вложение"
+                          disabled={pendingFiles.length >= MAX_ATTACHMENTS}
+                        >
+                          <IconPlus className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent side="top" align="start" className="w-56 rounded-2xl p-1.5">
+                        <DropdownMenuItem
+                          className="gap-2 rounded-xl"
+                          onSelect={() => openFilePicker("media")}
+                        >
+                          <IconPhoto className="size-4" />
+                          Медиафайл
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="gap-2 rounded-xl"
+                          onSelect={() => openFilePicker("document")}
+                        >
+                          <IconFile className="size-4" />
+                          Документ
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Textarea
+                      value={draft}
+                      onChange={(e) => onDraftChange(e.target.value)}
+                      placeholder="Напишите сообщение…"
+                      rows={1}
+                      className="max-h-32 min-h-9 flex-1 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void sendMessage();
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      className="size-9 shrink-0 rounded-full"
+                      disabled={sending || (!draft.trim() && pendingFiles.length === 0)}
+                      aria-label="Отправить"
+                      onClick={() => void sendMessage()}
+                    >
+                      <IconArrowUp className="size-4" />
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="text-muted-foreground border-t px-4 py-3 text-center text-sm">
