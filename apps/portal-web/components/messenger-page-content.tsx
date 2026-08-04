@@ -81,7 +81,10 @@ type Conversation = {
   projectName: string | null;
   status: "open" | "in_progress" | "closed" | null;
   lastMessageAt: string | null;
-  lastMessagePreview: string | null;
+  lastMessagePreview:
+    | { kind: "text" | "media" | "file"; text: string }
+    | string
+    | null;
   unread: boolean;
   unreadCount: number;
   createdAt: string;
@@ -158,6 +161,41 @@ function conversationTitle(item: Conversation, audience: MessengerAudience) {
 
 function isImageMime(mimeType: string) {
   return mimeType.startsWith("image/");
+}
+
+function previewMeta(preview: Conversation["lastMessagePreview"]) {
+  if (!preview) return null;
+  if (typeof preview === "string") {
+    const text = preview.trim();
+    return text ? ({ kind: "text" as const, text }) : null;
+  }
+  const text = preview.text?.trim();
+  if (!text) return null;
+  return { kind: preview.kind, text };
+}
+
+function MessageListPreview({ preview }: { preview: Conversation["lastMessagePreview"] }) {
+  const meta = previewMeta(preview);
+  if (!meta) {
+    return <span className="text-muted-foreground">Нет сообщений</span>;
+  }
+  if (meta.kind === "media") {
+    return (
+      <span className="text-muted-foreground inline-flex min-w-0 items-center gap-1">
+        <IconPhoto className="size-3.5 shrink-0" />
+        <span className="truncate">{meta.text}</span>
+      </span>
+    );
+  }
+  if (meta.kind === "file") {
+    return (
+      <span className="text-muted-foreground inline-flex min-w-0 items-center gap-1">
+        <IconFile className="size-3.5 shrink-0" />
+        <span className="truncate">{meta.text}</span>
+      </span>
+    );
+  }
+  return <span className="text-muted-foreground truncate">{meta.text}</span>;
 }
 
 function MessageReceipt({ receipt }: { receipt?: ChatMessage["receipt"] }) {
@@ -600,7 +638,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     const pool = needle ? conversations : filtered;
     if (!needle) return pool;
     return pool.filter((item) =>
-      [item.title, item.requestNumber, item.partnerName, item.projectName, item.lastMessagePreview]
+      [item.title, item.requestNumber, item.partnerName, item.projectName, previewMeta(item.lastMessagePreview)?.text]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
@@ -726,8 +764,8 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                             </span>
                           ) : null}
                         </div>
-                        <p className="text-muted-foreground line-clamp-2 text-xs">
-                          {item.lastMessagePreview || "Нет сообщений"}
+                        <p className="line-clamp-2 text-xs">
+                          <MessageListPreview preview={item.lastMessagePreview} />
                         </p>
                       </button>
                     </li>

@@ -46,16 +46,29 @@ function isCompany(actor: Actor) {
 
 function previewText(body: string) {
   const trimmed = body.trim().replace(/\s+/g, " ");
-  if (!trimmed) return "Вложение";
+  if (!trimmed) return "";
   return trimmed.length > 120 ? `${trimmed.slice(0, 117)}…` : trimmed;
 }
+
+function isMediaMime(mimeType: string) {
+  return (
+    mimeType.startsWith("image/") ||
+    mimeType.startsWith("video/") ||
+    mimeType.startsWith("audio/")
+  );
+}
+
+type LastMessagePreview = {
+  kind: "text" | "media" | "file";
+  text: string;
+};
 
 function mapConversation(
   row: typeof messengerConversations.$inferSelect,
   extra: {
     partnerName?: string | null;
     projectName?: string | null;
-    lastMessagePreview?: string | null;
+    lastMessagePreview?: LastMessagePreview | null;
     unreadCount?: number;
   } = {}
 ) {
@@ -218,7 +231,7 @@ export class MessengerService {
 
     const conversationIds = scoped.map((r) => r.conversation.id);
     const unreadCountMap = new Map<string, number>();
-    const previewMap = new Map<string, string | null>();
+    const previewMap = new Map<string, LastMessagePreview | null>();
 
     if (conversationIds.length > 0) {
       // Доставлено уже при опросе списка (страница мессенджера открыта)
@@ -236,16 +249,41 @@ export class MessengerService {
       const lastPreviews = await Promise.all(
         conversationIds.map(async (id) => {
           const [last] = await db
-            .select({ body: messengerMessages.body })
+            .select({ id: messengerMessages.id, body: messengerMessages.body })
             .from(messengerMessages)
             .where(eq(messengerMessages.conversationId, id))
             .orderBy(desc(messengerMessages.createdAt))
             .limit(1);
-          return [id, last?.body ?? null] as const;
+
+          if (!last) return [id, null] as const;
+
+          const text = previewText(last.body);
+          if (text) {
+            return [id, { kind: "text" as const, text }] as const;
+          }
+
+          const [att] = await db
+            .select({
+              fileName: messengerAttachments.fileName,
+              mimeType: messengerAttachments.mimeType
+            })
+            .from(messengerAttachments)
+            .where(eq(messengerAttachments.messageId, last.id))
+            .limit(1);
+
+          if (!att) return [id, null] as const;
+
+          return [
+            id,
+            {
+              kind: isMediaMime(att.mimeType) ? ("media" as const) : ("file" as const),
+              text: att.fileName
+            }
+          ] as const;
         })
       );
-      for (const [id, body] of lastPreviews) {
-        previewMap.set(id, body);
+      for (const [id, preview] of lastPreviews) {
+        previewMap.set(id, preview);
       }
 
       await Promise.all(
@@ -269,11 +307,10 @@ export class MessengerService {
 
     const q = filters?.q?.trim().toLowerCase();
     const mapped = scoped.map(({ conversation, partnerName, projectName }) => {
-      const preview = previewMap.get(conversation.id);
       return mapConversation(conversation, {
         partnerName,
         projectName,
-        lastMessagePreview: preview ? previewText(preview) : null,
+        lastMessagePreview: previewMap.get(conversation.id) ?? null,
         unreadCount: unreadCountMap.get(conversation.id) ?? 0
       });
     });
@@ -286,7 +323,7 @@ export class MessengerService {
         item.requestNumber,
         item.partnerName,
         item.projectName,
-        item.lastMessagePreview
+        item.lastMessagePreview?.text
       ]
         .filter(Boolean)
         .join(" ")
