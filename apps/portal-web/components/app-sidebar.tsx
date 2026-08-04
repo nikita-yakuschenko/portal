@@ -15,8 +15,7 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarRail
+  SidebarMenuItem
 } from "@/components/ui/sidebar";
 
 export type NavigationItem = {
@@ -125,7 +124,6 @@ export function AppSidebar({
       <SidebarFooter>
         <NavUser accountMenuItems={accountMenuItems} />
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   );
 }
