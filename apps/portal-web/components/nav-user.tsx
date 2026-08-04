@@ -3,7 +3,15 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { IconLogout, IconSelector } from "@tabler/icons-react";
+import { useTheme } from "next-themes";
+import {
+  IconCheck,
+  IconDeviceDesktop,
+  IconLogout,
+  IconMoon,
+  IconSelector,
+  IconSun
+} from "@tabler/icons-react";
 
 import type { NavigationItem } from "@/components/app-sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -13,6 +21,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import {
@@ -36,6 +47,12 @@ const ROLE_LABEL: Record<string, string> = {
   partner_member: "Сотрудник"
 };
 
+const THEME_OPTIONS = [
+  { value: "light", label: "Светлая", icon: IconSun },
+  { value: "dark", label: "Тёмная", icon: IconMoon },
+  { value: "system", label: "Системная", icon: IconDeviceDesktop }
+] as const;
+
 function initials(name: string) {
   return name
     .split(" ")
@@ -51,7 +68,13 @@ export function NavUser({
   accountMenuItems?: NavigationItem[];
 }) {
   const router = useRouter();
+  const { theme, setTheme } = useTheme();
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +117,7 @@ export function NavUser({
   }
 
   const name = user.fullName || user.email || "Пользователь";
+  const activeTheme = mounted ? theme : undefined;
 
   return (
     <SidebarMenu>
@@ -134,25 +158,43 @@ export function NavUser({
                 </div>
               </div>
             </DropdownMenuLabel>
-            {accountMenuItems.length > 0 ? (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel className="text-muted-foreground text-xs font-medium">
-                  Настройки
-                </DropdownMenuLabel>
-                {accountMenuItems.map((item) => {
-                  const Icon = item.icon;
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-muted-foreground text-xs font-medium">
+              Настройки
+            </DropdownMenuLabel>
+            {accountMenuItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <DropdownMenuItem key={item.href} asChild>
+                  <Link href={item.href}>
+                    <Icon />
+                    {item.title}
+                  </Link>
+                </DropdownMenuItem>
+              );
+            })}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <IconSun />
+                Тема
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {THEME_OPTIONS.map((option) => {
+                  const Icon = option.icon;
+                  const selected = activeTheme === option.value;
                   return (
-                    <DropdownMenuItem key={item.href} asChild>
-                      <Link href={item.href}>
-                        <Icon />
-                        {item.title}
-                      </Link>
+                    <DropdownMenuItem
+                      key={option.value}
+                      onSelect={() => setTheme(option.value)}
+                    >
+                      <Icon />
+                      {option.label}
+                      {selected ? <IconCheck className="ml-auto size-4" /> : null}
                     </DropdownMenuItem>
                   );
                 })}
-              </>
-            ) : null}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => void handleLogout()}>
               <IconLogout />
