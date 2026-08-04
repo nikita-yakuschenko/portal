@@ -9,6 +9,7 @@ import { technologyBadgeCode, technologyBadgeVariant } from "@/lib/catalog-displ
 import { catalogProseDescription } from "@/lib/strip-html";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -42,6 +43,8 @@ type CatalogProjectCardProps = {
   dragHandle?: ReactNode;
   /** Скрыть блок розничной цены (кабинет компании) */
   hideRetail?: boolean;
+  /** Ссылка «Запросить информацию» (карточка каталога дилера) */
+  requestInfoHref?: string;
 };
 
 const MAX_PREVIEW_ASSETS = 10;
@@ -143,7 +146,8 @@ export function CatalogProjectCard({
   selected,
   onSelectedChange,
   dragHandle,
-  hideRetail = false
+  hideRetail = false,
+  requestInfoHref
 }: CatalogProjectCardProps) {
   const prose = catalogProseDescription(description);
   const urls = previewUrls(assets);
@@ -264,6 +268,18 @@ export function CatalogProjectCard({
           ) : null}
         </div>
       </Link>
+      {requestInfoHref ? (
+        <div className="border-t px-4 py-3">
+          <Button type="button" variant="outline" size="sm" className="w-full" asChild>
+            <Link
+              href={requestInfoHref}
+              onClick={(event) => event.stopPropagation()}
+            >
+              Запросить информацию
+            </Link>
+          </Button>
+        </div>
+      ) : null}
     </Card>
   );
 }

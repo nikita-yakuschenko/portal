@@ -634,6 +634,7 @@ export default function PartnerCatalogPage() {
                             selected={selected.has(project.id)}
                             onSelectedChange={(next) => toggleSelected(project.id, next)}
                             dragHandle={dragHandle}
+                            requestInfoHref={`/partner/catalog/${project.id}?request=1`}
                           />
                         )}
                       </SortableCard>

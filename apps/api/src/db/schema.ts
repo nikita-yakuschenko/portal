@@ -37,6 +37,16 @@ export const leadDeliveryStatusEnum = pgEnum("lead_delivery_status", ["pending",
 export const inquiryStatusEnum = pgEnum("inquiry_status", ["new", "answered"]);
 export const syncStatusEnum = pgEnum("sync_status", ["running", "completed", "failed"]);
 export const partnerSiteStatusEnum = pgEnum("partner_site_status", ["draft", "published"]);
+export const messengerConversationTypeEnum = pgEnum("messenger_conversation_type", [
+  "dm",
+  "request",
+  "channel"
+]);
+export const messengerRequestStatusEnum = pgEnum("messenger_request_status", [
+  "open",
+  "in_progress",
+  "closed"
+]);
 
 export const partnerApplications = pgTable(
   "partner_applications",
@@ -281,6 +291,80 @@ export const partnerSites = pgTable(
     partnerIdx: uniqueIndex("partner_sites_partner_id_idx").on(table.partnerId),
     subdomainIdx: uniqueIndex("partner_sites_subdomain_idx").on(table.subdomain),
     domainIdx: uniqueIndex("partner_sites_domain_idx").on(table.domain)
+  })
+);
+
+/** Мессенджер: чат (dm), тикет-запрос, канал */
+export const messengerConversations = pgTable(
+  "messenger_conversations",
+  {
+    id: text("id").primaryKey(),
+    type: messengerConversationTypeEnum("type").notNull(),
+    partnerId: text("partner_id").references(() => partners.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default(""),
+    requestNumber: text("request_number"),
+    projectId: text("project_id").references(() => catalogProjects.id, { onDelete: "set null" }),
+    status: messengerRequestStatusEnum("status"),
+    createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    partnerTypeIdx: index("messenger_conversations_partner_type_idx").on(table.partnerId, table.type),
+    requestNumberIdx: uniqueIndex("messenger_conversations_request_number_idx").on(table.requestNumber),
+    lastMessageIdx: index("messenger_conversations_last_message_idx").on(table.lastMessageAt)
+  })
+);
+
+export const messengerMessages = pgTable(
+  "messenger_messages",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => messengerConversations.id, { onDelete: "cascade" }),
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    conversationCreatedIdx: index("messenger_messages_conversation_created_idx").on(
+      table.conversationId,
+      table.createdAt
+    )
+  })
+);
+
+export const messengerAttachments = pgTable("messenger_attachments", {
+  id: text("id").primaryKey(),
+  messageId: text("message_id")
+    .notNull()
+    .references(() => messengerMessages.id, { onDelete: "cascade" }),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  storageKey: text("storage_key").notNull()
+});
+
+export const messengerReads = pgTable(
+  "messenger_reads",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => messengerConversations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    lastReadAt: timestamp("last_read_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    conversationUserIdx: uniqueIndex("messenger_reads_conversation_user_idx").on(
+      table.conversationId,
+      table.userId
+    )
   })
 );
 

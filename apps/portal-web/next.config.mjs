@@ -28,6 +28,8 @@ const nextConfig = {
       { source: "/api/partner/:path*", destination: `${apiOrigin}/api/partner/:path*` },
       { source: "/api/company/:path*", destination: `${apiOrigin}/api/company/:path*` },
       { source: "/api/public/:path*", destination: `${apiOrigin}/api/public/:path*` },
+      { source: "/api/messenger", destination: `${apiOrigin}/api/messenger` },
+      { source: "/api/messenger/:path*", destination: `${apiOrigin}/api/messenger/:path*` },
       // in-app уведомления (колокольчик + страница)
       { source: "/api/notifications", destination: `${apiOrigin}/api/notifications` },
       {

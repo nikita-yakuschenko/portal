@@ -241,6 +241,9 @@ export class PortalService {
 
     await partnerSiteService.ensurePartnerSite(partnerId);
 
+    const { messengerService } = await import("../messenger/messenger-service.js");
+    await messengerService.ensureDm(partnerId, userId);
+
     return {
       partnerId,
       userId,
@@ -365,6 +368,9 @@ export class PortalService {
     });
 
     await partnerSiteService.ensurePartnerSite(partnerId);
+
+    const { messengerService } = await import("../messenger/messenger-service.js");
+    await messengerService.ensureDm(partnerId, userId);
 
     return {
       status: "approved" as const,
@@ -1730,17 +1736,31 @@ export class PortalService {
     message: string;
     projectId?: string;
   }) {
-    const inquiry = {
-      id: randomUUID(),
-      partnerId: input.partnerId,
-      subject: input.subject,
-      message: input.message
-    };
-    await db.insert(partnerInquiries).values(inquiry);
-    await this.writeAuditLog(input.actorUserId, "partner.inquiry.created", "partner_inquiry", inquiry.id, {
-      projectId: input.projectId ?? null
+    const { messengerService } = await import("../messenger/messenger-service.js");
+    const actorUser = await db.query.users.findFirst({ where: eq(users.id, input.actorUserId) });
+    if (!actorUser) throw new Error("User not found");
+
+    const conversation = await messengerService.createRequest(
+      {
+        sub: actorUser.id,
+        partnerId: actorUser.partnerId,
+        role: actorUser.role,
+        fullName: actorUser.fullName
+      },
+      {
+        title: input.subject,
+        body: input.message,
+        partnerId: input.partnerId,
+        ...(input.projectId ? { projectId: input.projectId } : {})
+      }
+    );
+
+    await this.writeAuditLog(input.actorUserId, "partner.inquiry.created", "messenger_conversation", conversation.id, {
+      projectId: input.projectId ?? null,
+      requestNumber: conversation.requestNumber
     });
-    return inquiry;
+
+    return conversation;
   }
 
   async listInquiries(partnerId: string) {

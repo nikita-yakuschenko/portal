@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { PartnerShell } from "@/components/partner-shell";
@@ -166,6 +166,7 @@ function Panel({ children }: { children: React.ReactNode }) {
 
 export default function PartnerCatalogProjectPage() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const projectId = params.id;
 
   const [project, setProject] = useState<Project | null>(null);
@@ -179,6 +180,12 @@ export default function PartnerCatalogProjectPage() {
   const [form, setForm] = useState({ subject: "", message: "" });
   const [canManagePricing, setCanManagePricing] = useState(false);
   const [retailLabel, setRetailLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get("request") === "1") {
+      setInquiryOpen(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     setFavorite(loadFavorites().has(projectId));
@@ -257,17 +264,32 @@ export default function PartnerCatalogProjectPage() {
 
     setSaving(true);
     try {
-      await apiFetch("/api/partner/inquiries", {
-        method: "POST",
-        body: JSON.stringify({
-          subject: form.subject,
-          message: form.message,
-          projectId: project.id
-        })
-      });
+      const created = await apiFetch<{ id: string; requestNumber: string | null }>(
+        "/api/messenger/requests",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            title: form.subject,
+            body: form.message,
+            projectId: project.id
+          })
+        }
+      );
       setForm((prev) => ({ ...prev, message: "" }));
       setInquiryOpen(false);
-      toast.success("Запрос отправлен на завод");
+      toast.success(
+        created.requestNumber
+          ? `Запрос ${created.requestNumber} создан`
+          : "Запрос отправлен",
+        {
+          action: {
+            label: "Открыть",
+            onClick: () => {
+              window.location.href = `/partner/messenger?c=${created.id}`;
+            }
+          }
+        }
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось отправить запрос");
     } finally {
@@ -304,7 +326,7 @@ export default function PartnerCatalogProjectPage() {
       title={project?.name ?? "Проект"}
       headerActions={
         <Button type="button" onClick={() => setInquiryOpen(true)} disabled={!project}>
-          Запрос на завод
+          Запросить информацию
         </Button>
       }
     >
@@ -764,10 +786,11 @@ export default function PartnerCatalogProjectPage() {
       <Dialog open={inquiryOpen} onOpenChange={setInquiryOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Запрос на завод</DialogTitle>
+            <DialogTitle>Запросить информацию</DialogTitle>
             <DialogDescription>
               Уточните комплектацию, документацию, отгрузку или условия поставки
-              {project ? ` по проекту «${project.name}»` : ""}.
+              {project ? ` по проекту «${project.name}»` : ""}. Запрос попадёт в мессенджер
+              отдельным тредом.
             </DialogDescription>
           </DialogHeader>
 

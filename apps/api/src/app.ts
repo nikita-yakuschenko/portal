@@ -10,6 +10,7 @@ import { StoreTildaClient, verifyOfficialTildaKeys } from "./modules/catalog/til
 import { hashResetToken } from "./modules/auth/passwords.js";
 import { partnerSiteService } from "./modules/partners/partner-site-service.js";
 import { notificationService } from "./modules/notifications/notification-service.js";
+import { messengerService } from "./modules/messenger/messenger-service.js";
 import { PortalService } from "./modules/portal/portal-service.js";
 import { partnerSiteDraftSchema } from "@b2b/site-schema";
 
@@ -51,6 +52,30 @@ const createInquirySchema = z.object({
   subject: z.string().min(2),
   message: z.string().min(2),
   projectId: z.string().optional()
+});
+
+const messengerPostMessageSchema = z.object({
+  body: z.string().optional(),
+  attachments: z
+    .array(
+      z.object({
+        fileName: z.string().min(1),
+        mimeType: z.string().min(1),
+        dataBase64: z.string().min(1)
+      })
+    )
+    .optional()
+});
+
+const messengerCreateRequestSchema = z.object({
+  title: z.string().min(2),
+  body: z.string().min(2),
+  projectId: z.string().optional(),
+  partnerId: z.string().optional()
+});
+
+const messengerUpdateRequestSchema = z.object({
+  status: z.enum(["open", "in_progress", "closed"])
 });
 
 const upsertPartnerPriceSchema = z.object({
@@ -181,6 +206,8 @@ export async function buildApp() {
     companyName: config.partnerCompanyName,
     region: config.partnerRegion
   });
+
+  await messengerService.ensureBootstrap();
 
   async function requireAuth(
     request: { jwtVerify: () => Promise<unknown>; user?: unknown },
@@ -1302,13 +1329,198 @@ export async function buildApp() {
       return reply.status(400).send(parsed.error.flatten());
     }
 
-    return portalService.createInquiry({
-      actorUserId: getAuthUser(request)!.sub,
-      partnerId: getAuthUser(request)!.partnerId!,
-      subject: parsed.data.subject,
-      message: parsed.data.message,
-      ...(parsed.data.projectId ? { projectId: parsed.data.projectId } : {})
-    });
+    try {
+      return await portalService.createInquiry({
+        actorUserId: getAuthUser(request)!.sub,
+        partnerId: getAuthUser(request)!.partnerId!,
+        subject: parsed.data.subject,
+        message: parsed.data.message,
+        ...(parsed.data.projectId ? { projectId: parsed.data.projectId } : {})
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось создать запрос"
+      });
+    }
+  });
+
+  app.get("/api/messenger/conversations", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+
+    const query = request.query as { type?: string; q?: string };
+    const type =
+      query.type === "dm" || query.type === "request" || query.type === "channel"
+        ? query.type
+        : undefined;
+
+    try {
+      return await messengerService.listConversations(getAuthUser(request)!, {
+        ...(type ? { type } : {}),
+        ...(query.q ? { q: query.q } : {})
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось загрузить диалоги"
+      });
+    }
+  });
+
+  app.get("/api/messenger/conversations/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+
+    try {
+      return await messengerService.getConversation(
+        getAuthUser(request)!,
+        (request.params as { id: string }).id
+      );
+    } catch (error) {
+      return reply.status(404).send({
+        message: error instanceof Error ? error.message : "Диалог не найден"
+      });
+    }
+  });
+
+  app.get("/api/messenger/conversations/:id/messages", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+
+    const query = request.query as { before?: string; limit?: string };
+    try {
+      return await messengerService.listMessages(
+        getAuthUser(request)!,
+        (request.params as { id: string }).id,
+        {
+          ...(query.before ? { before: query.before } : {}),
+          ...(query.limit ? { limit: Number(query.limit) } : {})
+        }
+      );
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось загрузить сообщения"
+      });
+    }
+  });
+
+  app.post("/api/messenger/conversations/:id/messages", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+
+    const parsed = messengerPostMessageSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    try {
+      return await messengerService.postMessage(
+        getAuthUser(request)!,
+        (request.params as { id: string }).id,
+        {
+          ...(parsed.data.body !== undefined ? { body: parsed.data.body } : {}),
+          ...(parsed.data.attachments ? { attachments: parsed.data.attachments } : {})
+        }
+      );
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось отправить сообщение"
+      });
+    }
+  });
+
+  app.post("/api/messenger/requests", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+
+    const parsed = messengerCreateRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    try {
+      return await messengerService.createRequest(getAuthUser(request)!, {
+        title: parsed.data.title,
+        body: parsed.data.body,
+        ...(parsed.data.projectId ? { projectId: parsed.data.projectId } : {}),
+        ...(parsed.data.partnerId ? { partnerId: parsed.data.partnerId } : {})
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось создать запрос"
+      });
+    }
+  });
+
+  app.patch("/api/messenger/requests/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) return roleCheck;
+
+    const parsed = messengerUpdateRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    try {
+      return await messengerService.updateRequestStatus(
+        getAuthUser(request)!,
+        (request.params as { id: string }).id,
+        parsed.data.status
+      );
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось обновить статус"
+      });
+    }
+  });
+
+  app.get("/api/messenger/attachments/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+
+    try {
+      const file = await messengerService.getAttachmentFile(
+        getAuthUser(request)!,
+        (request.params as { id: string }).id
+      );
+      return reply
+        .header("Content-Type", file.mimeType)
+        .header("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`)
+        .send(file.data);
+    } catch (error) {
+      return reply.status(404).send({
+        message: error instanceof Error ? error.message : "Файл не найден"
+      });
+    }
   });
 
   return app;
