@@ -7,8 +7,6 @@ import {
   IconArchive,
   IconArrowLeft,
   IconArrowUp,
-  IconCheck,
-  IconChecks,
   IconDotsVertical,
   IconFile,
   IconHash,
@@ -158,13 +156,17 @@ function conversationTitle(item: Conversation, audience: MessengerAudience) {
 
 function MessageReceipt({ receipt }: { receipt?: ChatMessage["receipt"] }) {
   if (!receipt) return null;
-  const read = receipt === "read";
-  const Icon = receipt === "sent" ? IconCheck : IconChecks;
+  const label =
+    receipt === "sent" ? "Отправлено" : receipt === "delivered" ? "Доставлено" : "Прочитано";
   return (
-    <Icon
-      className={cn("size-3.5 shrink-0", read ? "text-sky-400" : "text-muted-foreground/80")}
-      aria-label={receipt === "sent" ? "Отправлено" : receipt === "delivered" ? "Доставлено" : "Прочитано"}
-    />
+    <span
+      className={cn(
+        "text-[11px] leading-none",
+        receipt === "read" ? "text-sky-400" : "text-muted-foreground/80"
+      )}
+    >
+      {label}
+    </span>
   );
 }
 
