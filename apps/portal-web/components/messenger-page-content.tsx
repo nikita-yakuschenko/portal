@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   IconArchive,
   IconArrowLeft,
   IconArrowUp,
   IconCheck,
   IconChecks,
+  IconCopy,
   IconDotsVertical,
   IconFile,
   IconHash,
@@ -35,6 +36,13 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger
+} from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -118,6 +126,11 @@ type PendingFile = {
 };
 
 type TabKey = "dm" | "request" | "channel";
+
+function parseTab(raw: string | null): TabKey {
+  if (raw === "dm" || raw === "request" || raw === "channel") return raw;
+  return "dm";
+}
 
 const MAX_ATTACHMENTS = 10;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -247,10 +260,13 @@ function typingLabel(typers: Typer[]) {
 
 /** Inbox мессенджера: чаты / запросы / каналы */
 export function MessengerPageContent({ audience }: { audience: MessengerAudience }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialId = searchParams.get("c");
+  const isCompany = audience === "company";
+  const basePath = isCompany ? "/company/messenger" : "/partner/messenger";
 
-  const [tab, setTab] = useState<TabKey>("dm");
+  const [tab, setTabState] = useState<TabKey>(() => parseTab(searchParams.get("tab")));
   const [q, setQ] = useState("");
   const [listLoading, setListLoading] = useState(true);
   const [threadLoading, setThreadLoading] = useState(false);
@@ -277,9 +293,6 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   const deletingIdsRef = useRef(deletingIds);
   deletingIdsRef.current = deletingIds;
 
-  const isCompany = audience === "company";
-  const basePath = isCompany ? "/company/messenger" : "/partner/messenger";
-
   const active = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
     [conversations, activeId]
@@ -291,6 +304,34 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   );
 
   const canWrite = Boolean(active) && (active?.type !== "channel" || isCompany);
+
+  function writeMessengerUrl(nextTab: TabKey, nextId: string | null) {
+    const params = new URLSearchParams();
+    params.set("tab", nextTab);
+    if (nextId) params.set("c", nextId);
+    const qs = params.toString();
+    router.replace(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
+  }
+
+  function setTab(next: TabKey) {
+    setTabState(next);
+    writeMessengerUrl(next, activeId);
+  }
+
+  function openConversation(id: string, type: TabKey) {
+    setTabState(type);
+    setActiveId(id);
+    writeMessengerUrl(type, id);
+  }
+
+  function closeConversation() {
+    setActiveId(null);
+    setMessages([]);
+    setTypers([]);
+    setDraft("");
+    setPendingFiles([]);
+    writeMessengerUrl(tab, null);
+  }
 
   const loadList = useCallback(async () => {
     try {
@@ -388,9 +429,12 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     setListLoading(true);
     void (async () => {
       const rows = await loadList();
-      setActiveId((current) =>
-        current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? null
-      );
+      setActiveId((current) => {
+        const next =
+          current && rows.some((row) => row.id === current) ? current : null;
+        writeMessengerUrl(tab, next);
+        return next;
+      });
     })();
   }, [archiveMode, loadList]);
 
@@ -402,11 +446,9 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
         body: JSON.stringify({ archived })
       });
       toast.success(archived ? "В архиве" : "Убрано из архива");
-      const rows = await loadList();
-      if (archived) {
-        setActiveId((current) =>
-          current === conversationId ? rows[0]?.id ?? null : current
-        );
+      await loadList();
+      if (archived && activeId === conversationId) {
+        closeConversation();
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось изменить архив");
@@ -548,15 +590,13 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       const prefer = initialId && rows.some((r) => r.id === initialId) ? initialId : null;
       if (prefer) {
         const found = rows.find((r) => r.id === prefer);
-        if (found) setTab(found.type);
-        setActiveId(prefer);
-      } else if (!activeId && rows.length > 0) {
-        const firstOfTab = rows.find((r) => r.type === "dm") ?? rows[0];
-        if (firstOfTab) {
-          setTab(firstOfTab.type);
-          setActiveId(firstOfTab.id);
+        if (found) {
+          setTabState(found.type);
+          writeMessengerUrl(found.type, prefer);
         }
+        setActiveId(prefer);
       }
+      // Без автовыбора первого чата — можно остаться на «Выберите диалог»
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -603,8 +643,9 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
           ? `Запрос ${created.requestNumber} создан`
           : "Запрос создан"
       );
-      setTab("request");
+      setTabState("request");
       setActiveId(created.id);
+      writeMessengerUrl("request", created.id);
       await loadList();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось создать запрос");
@@ -613,10 +654,13 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     }
   }
 
-  async function updateStatus(status: "open" | "in_progress" | "closed") {
-    if (!active || active.type !== "request" || !activeId) return;
+  async function updateStatus(status: "open" | "in_progress" | "closed", conversationId?: string) {
+    const id = conversationId ?? activeId;
+    if (!id) return;
+    const target = conversations.find((c) => c.id === id);
+    if (!target || target.type !== "request") return;
     try {
-      const updated = await apiFetch<Conversation>(`/api/messenger/requests/${active.id}`, {
+      const updated = await apiFetch<Conversation>(`/api/messenger/requests/${id}`, {
         method: "PATCH",
         body: JSON.stringify({ status })
       });
@@ -627,9 +671,22 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     }
   }
 
-  async function closeRequest() {
-    if (!active || active.type !== "request" || active.status === "closed") return;
-    await updateStatus("closed");
+  async function closeRequest(conversationId?: string) {
+    const id = conversationId ?? activeId;
+    const target = conversations.find((c) => c.id === id);
+    if (!target || target.type !== "request" || target.status === "closed") return;
+    await updateStatus("closed", id);
+  }
+
+  async function copyMessageText(text: string) {
+    const value = text.trim();
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success("Скопировано");
+    } catch {
+      toast.error("Не удалось скопировать");
+    }
   }
 
   const searchFiltered = useMemo(() => {
@@ -660,7 +717,10 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageAlert message={error} variant="destructive" />
 
-      <Card className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden py-0 md:grid-cols-[minmax(280px,340px)_1fr]">
+      <Card
+        className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden py-0 md:grid-cols-[minmax(280px,340px)_1fr]"
+        onContextMenu={(e) => e.preventDefault()}
+      >
         <div className="flex min-h-0 flex-col border-b md:border-r md:border-b-0">
           <div className="flex flex-col gap-3 border-b p-4">
             <div className="flex items-center gap-2">
@@ -719,55 +779,94 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                   const selected = item.id === activeId;
                   return (
                     <li key={item.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTab(item.type);
-                          setActiveId(item.id);
-                          window.history.replaceState(null, "", `${basePath}?c=${item.id}`);
-                        }}
-                        className={cn(
-                          "hover:bg-muted/60 flex w-full flex-col gap-1 px-4 py-3 text-left transition-colors",
-                          selected && "bg-muted"
-                        )}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <span
+                      <ContextMenu>
+                        <ContextMenuTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => openConversation(item.id, item.type)}
                             className={cn(
-                              "line-clamp-1 text-sm",
-                              (item.unreadCount ?? 0) > 0 ? "font-semibold" : "font-medium"
+                              "hover:bg-muted/60 flex w-full flex-col gap-1 px-4 py-3 text-left transition-colors",
+                              selected && "bg-muted"
                             )}
                           >
-                            {conversationTitle(item, audience)}
-                          </span>
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            <span className="text-muted-foreground text-xs tabular-nums">
-                              {formatTime(item.lastMessageAt ?? item.createdAt)}
-                            </span>
-                            <UnreadBadge count={item.unreadCount ?? 0} />
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {isGlobalSearch ? (
-                            <Badge variant="outline" className="text-[10px]">
-                              {TAB_LABELS[item.type]}
-                            </Badge>
+                            <div className="flex items-start justify-between gap-2">
+                              <span
+                                className={cn(
+                                  "line-clamp-1 text-sm",
+                                  (item.unreadCount ?? 0) > 0 ? "font-semibold" : "font-medium"
+                                )}
+                              >
+                                {conversationTitle(item, audience)}
+                              </span>
+                              <div className="flex shrink-0 items-center gap-1.5">
+                                <span className="text-muted-foreground text-xs tabular-nums">
+                                  {formatTime(item.lastMessageAt ?? item.createdAt)}
+                                </span>
+                                <UnreadBadge count={item.unreadCount ?? 0} />
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {isGlobalSearch ? (
+                                <Badge variant="outline" className="text-[10px]">
+                                  {TAB_LABELS[item.type]}
+                                </Badge>
+                              ) : null}
+                              {item.type === "request" && item.status ? (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {STATUS_LABELS[item.status] ?? item.status}
+                                </Badge>
+                              ) : null}
+                              {item.projectName ? (
+                                <span className="text-muted-foreground line-clamp-1 text-xs">
+                                  {item.projectName}
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="line-clamp-2 text-xs">
+                              <MessageListPreview preview={item.lastMessagePreview} />
+                            </p>
+                          </button>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent className="w-48">
+                          <ContextMenuItem
+                            className="gap-2"
+                            onSelect={() => openConversation(item.id, item.type)}
+                          >
+                            <IconMessage className="size-4" />
+                            Открыть
+                          </ContextMenuItem>
+                          {item.type === "dm" ? (
+                            <ContextMenuItem
+                              className="gap-2"
+                              disabled={archiving}
+                              onSelect={() => void toggleArchive(item.id, !archiveMode)}
+                            >
+                              <IconArchive className="size-4" />
+                              {archiveMode ? "Вернуть из архива" : "В архив"}
+                            </ContextMenuItem>
                           ) : null}
-                          {item.type === "request" && item.status ? (
-                            <Badge variant="secondary" className="text-[10px]">
-                              {STATUS_LABELS[item.status] ?? item.status}
-                            </Badge>
+                          {item.type === "request" &&
+                          !archiveMode &&
+                          item.status !== "closed" ? (
+                            <ContextMenuItem
+                              className="gap-2"
+                              onSelect={() => void closeRequest(item.id)}
+                            >
+                              <IconTicket className="size-4" />
+                              Закрыть обращение
+                            </ContextMenuItem>
                           ) : null}
-                          {item.projectName ? (
-                            <span className="text-muted-foreground line-clamp-1 text-xs">
-                              {item.projectName}
-                            </span>
+                          {selected ? (
+                            <>
+                              <ContextMenuSeparator />
+                              <ContextMenuItem className="gap-2" onSelect={closeConversation}>
+                                <IconX className="size-4" />
+                                Свернуть диалог
+                              </ContextMenuItem>
+                            </>
                           ) : null}
-                        </div>
-                        <p className="line-clamp-2 text-xs">
-                          <MessageListPreview preview={item.lastMessagePreview} />
-                        </p>
-                      </button>
+                        </ContextMenuContent>
+                      </ContextMenu>
                     </li>
                   );
                 })}
@@ -870,6 +969,17 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                       </DropdownMenuContent>
                     </DropdownMenu>
                   ) : null}
+
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-8"
+                    aria-label="Закрыть диалог"
+                    onClick={closeConversation}
+                  >
+                    <IconX className="size-4" />
+                  </Button>
                 </div>
               </div>
 
@@ -892,80 +1002,93 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                             const dissolving = deletingIds.has(msg.id);
                             return (
                               <MessageScrollerItem key={msg.id} id={msg.id}>
-                                <Message
-                                  align={mine ? "end" : "start"}
-                                  className={cn(dissolving && "animate-message-sand")}
-                                >
-                                  <MessageContent className="relative">
-                                    {mine && !dissolving ? (
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <Button
-                                            type="button"
-                                            size="icon"
-                                            variant="ghost"
-                                            className="text-muted-foreground absolute top-0 right-0 size-7 opacity-0 transition-opacity group-hover/message:opacity-100 data-[state=open]:opacity-100"
-                                            aria-label="Действия с сообщением"
+                                <ContextMenu>
+                                  <ContextMenuTrigger asChild disabled={dissolving}>
+                                    <Message
+                                      align={mine ? "end" : "start"}
+                                      className={cn(dissolving && "animate-message-sand")}
+                                    >
+                                      <MessageContent>
+                                        <MessageHeader>{msg.authorName}</MessageHeader>
+                                        {hasBody ? (
+                                          <Bubble variant={mine ? "default" : "secondary"}>
+                                            <BubbleContent className="whitespace-pre-wrap">
+                                              {msg.body}
+                                            </BubbleContent>
+                                          </Bubble>
+                                        ) : null}
+                                        {attachments.length > 0 ? (
+                                          <div
+                                            className={cn("flex flex-col gap-2", hasBody && "mt-0.5")}
                                           >
-                                            <IconDotsVertical className="size-3.5" />
-                                          </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="w-44">
-                                          <DropdownMenuItem
-                                            className="text-destructive focus:text-destructive gap-2"
-                                            onSelect={() => void deleteMessage(msg.id)}
-                                          >
-                                            <IconTrash className="size-4" />
-                                            Удалить
-                                          </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
-                                    ) : null}
-                                    <MessageHeader>{msg.authorName}</MessageHeader>
+                                            {attachments.map((att) => {
+                                              const image = isImageMime(att.mimeType);
+                                              return (
+                                                <a
+                                                  key={att.id}
+                                                  href={`/api/messenger/attachments/${att.id}`}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                >
+                                                  <Attachment
+                                                    size="sm"
+                                                    className="bg-muted/80 border-border/60"
+                                                  >
+                                                    <AttachmentMedia>
+                                                      {image ? (
+                                                        <IconPhoto className="size-4" />
+                                                      ) : (
+                                                        <IconFile className="size-4" />
+                                                      )}
+                                                    </AttachmentMedia>
+                                                    <AttachmentContent>
+                                                      <AttachmentTitle>{att.fileName}</AttachmentTitle>
+                                                    </AttachmentContent>
+                                                  </Attachment>
+                                                </a>
+                                              );
+                                            })}
+                                          </div>
+                                        ) : null}
+                                        <MessageFooter className="gap-1.5">
+                                          <span>{formatTime(msg.createdAt)}</span>
+                                          {mine ? <MessageReceipt receipt={msg.receipt} /> : null}
+                                        </MessageFooter>
+                                      </MessageContent>
+                                    </Message>
+                                  </ContextMenuTrigger>
+                                  <ContextMenuContent className="w-44">
                                     {hasBody ? (
-                                      <Bubble variant={mine ? "default" : "secondary"}>
-                                        <BubbleContent className="whitespace-pre-wrap">
-                                          {msg.body}
-                                        </BubbleContent>
-                                      </Bubble>
+                                      <ContextMenuItem
+                                        className="gap-2"
+                                        onSelect={() => void copyMessageText(msg.body)}
+                                      >
+                                        <IconCopy className="size-4" />
+                                        Копировать
+                                      </ContextMenuItem>
+                                    ) : attachments[0] ? (
+                                      <ContextMenuItem
+                                        className="gap-2"
+                                        onSelect={() =>
+                                          void copyMessageText(attachments[0]!.fileName)
+                                        }
+                                      >
+                                        <IconCopy className="size-4" />
+                                        Копировать имя файла
+                                      </ContextMenuItem>
                                     ) : null}
-                                    {attachments.length > 0 ? (
-                                      <div className={cn("flex flex-col gap-2", hasBody && "mt-0.5")}>
-                                        {attachments.map((att) => {
-                                          const image = isImageMime(att.mimeType);
-                                          return (
-                                            <a
-                                              key={att.id}
-                                              href={`/api/messenger/attachments/${att.id}`}
-                                              target="_blank"
-                                              rel="noreferrer"
-                                            >
-                                              <Attachment
-                                                size="sm"
-                                                className="bg-muted/80 border-border/60"
-                                              >
-                                                <AttachmentMedia>
-                                                  {image ? (
-                                                    <IconPhoto className="size-4" />
-                                                  ) : (
-                                                    <IconFile className="size-4" />
-                                                  )}
-                                                </AttachmentMedia>
-                                                <AttachmentContent>
-                                                  <AttachmentTitle>{att.fileName}</AttachmentTitle>
-                                                </AttachmentContent>
-                                              </Attachment>
-                                            </a>
-                                          );
-                                        })}
-                                      </div>
+                                    {mine ? (
+                                      <ContextMenuItem
+                                        variant="destructive"
+                                        className="gap-2"
+                                        onSelect={() => void deleteMessage(msg.id)}
+                                      >
+                                        <IconTrash className="size-4" />
+                                        Удалить
+                                      </ContextMenuItem>
                                     ) : null}
-                                    <MessageFooter className="gap-1.5">
-                                      <span>{formatTime(msg.createdAt)}</span>
-                                      {mine ? <MessageReceipt receipt={msg.receipt} /> : null}
-                                    </MessageFooter>
-                                  </MessageContent>
-                                </Message>
+                                  </ContextMenuContent>
+                                </ContextMenu>
                               </MessageScrollerItem>
                             );
                           })}
