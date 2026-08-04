@@ -11,6 +11,7 @@ import {
   messengerArchives,
   messengerConversations,
   messengerMessages,
+  messengerPins,
   messengerReads,
   partners,
   partnerSites,
@@ -80,6 +81,7 @@ function mapConversation(
     partnerAvatarUrl?: string | null;
     lastMessagePreview?: LastMessagePreview | null;
     unreadCount?: number;
+    pinned?: boolean;
   } = {}
 ) {
   const unreadCount = Math.max(0, extra.unreadCount ?? 0);
@@ -90,6 +92,7 @@ function mapConversation(
     partnerName: extra.partnerName ?? null,
     partnerAvatarUrl: extra.partnerAvatarUrl ?? null,
     title: row.title,
+    description: row.description ?? null,
     requestNumber: row.requestNumber,
     projectId: row.projectId,
     projectName: extra.projectName ?? null,
@@ -99,6 +102,7 @@ function mapConversation(
     lastMessagePreview: extra.lastMessagePreview ?? null,
     unread: unreadCount > 0,
     unreadCount,
+    pinned: Boolean(extra.pinned),
     createdAt: row.createdAt.toISOString()
   };
 }
@@ -248,8 +252,17 @@ export class MessengerService {
     const conversationIds = scoped.map((r) => r.conversation.id);
     const unreadCountMap = new Map<string, number>();
     const previewMap = new Map<string, LastMessagePreview | null>();
+    const pinnedIds = new Set<string>();
 
     if (conversationIds.length > 0) {
+      const pinRows = await db
+        .select({ conversationId: messengerPins.conversationId })
+        .from(messengerPins)
+        .where(
+          and(eq(messengerPins.userId, actor.sub), inArray(messengerPins.conversationId, conversationIds))
+        );
+      for (const pin of pinRows) pinnedIds.add(pin.conversationId);
+
       // Доставлено уже при опросе списка (страница мессенджера открыта)
       await db
         .update(messengerMessages)
@@ -328,8 +341,16 @@ export class MessengerService {
         projectName,
         partnerAvatarUrl: partnerAvatarFromSiteConfig(siteConfig),
         lastMessagePreview: previewMap.get(conversation.id) ?? null,
-        unreadCount: unreadCountMap.get(conversation.id) ?? 0
+        unreadCount: unreadCountMap.get(conversation.id) ?? 0,
+        pinned: pinnedIds.has(conversation.id)
       });
+    });
+
+    mapped.sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      const at = a.lastMessageAt ?? a.createdAt;
+      const bt = b.lastMessageAt ?? b.createdAt;
+      return bt.localeCompare(at);
     });
 
     if (!q) return mapped;
@@ -654,14 +675,18 @@ export class MessengerService {
     return { ok: true as const, conversationId: message.conversationId };
   }
 
-  async createChannel(actor: Actor, input: { title: string }) {
+  async createChannel(actor: Actor, input: { title: string; description: string }) {
     if (!isCompany(actor)) {
       throw new Error("Каналы создаёт завод");
     }
 
     const title = input.title.trim().replace(/\s+/g, " ");
+    const description = input.description.trim().replace(/\s+/g, " ");
     if (title.length < 2) {
       throw new Error("Укажите название канала");
+    }
+    if (description.length < 2) {
+      throw new Error("Укажите описание канала");
     }
 
     const [existing] = await db
@@ -680,6 +705,7 @@ export class MessengerService {
       type: "channel",
       partnerId: null,
       title,
+      description,
       requestNumber: null,
       projectId: null,
       status: null,
@@ -774,6 +800,34 @@ export class MessengerService {
     }
 
     return { ok: true as const, archived };
+  }
+
+  async setPin(actor: Actor, conversationId: string, pinned: boolean) {
+    const conversation = await this.requireConversation(conversationId);
+    await this.assertCanAccess(actor, conversation);
+
+    const [existing] = await db
+      .select()
+      .from(messengerPins)
+      .where(
+        and(eq(messengerPins.conversationId, conversationId), eq(messengerPins.userId, actor.sub))
+      )
+      .limit(1);
+
+    if (pinned) {
+      if (!existing) {
+        await db.insert(messengerPins).values({
+          id: randomUUID(),
+          conversationId,
+          userId: actor.sub,
+          pinnedAt: new Date()
+        });
+      }
+    } else if (existing) {
+      await db.delete(messengerPins).where(eq(messengerPins.id, existing.id));
+    }
+
+    return { ok: true as const, pinned };
   }
 
   async archiveCount(actor: Actor) {

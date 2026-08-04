@@ -120,6 +120,13 @@
       "when": 1786700000000,
       "tag": "0016_messenger_archives",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786800000000,
+      "tag": "0017_messenger_pins_channel_description",
+      "breakpoints": true
     }
   ]
 }

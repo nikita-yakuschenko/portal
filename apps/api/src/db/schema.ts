@@ -302,6 +302,7 @@ export const messengerConversations = pgTable(
     type: messengerConversationTypeEnum("type").notNull(),
     partnerId: text("partner_id").references(() => partners.id, { onDelete: "cascade" }),
     title: text("title").notNull().default(""),
+    description: text("description"),
     requestNumber: text("request_number"),
     projectId: text("project_id").references(() => catalogProjects.id, { onDelete: "set null" }),
     status: messengerRequestStatusEnum("status"),
@@ -384,6 +385,27 @@ export const messengerArchives = pgTable(
   },
   (table) => ({
     conversationUserIdx: uniqueIndex("messenger_archives_conversation_user_idx").on(
+      table.conversationId,
+      table.userId
+    )
+  })
+);
+
+/** Закрепление диалога — персонально для пользователя */
+export const messengerPins = pgTable(
+  "messenger_pins",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => messengerConversations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    pinnedAt: timestamp("pinned_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    conversationUserIdx: uniqueIndex("messenger_pins_conversation_user_idx").on(
       table.conversationId,
       table.userId
     )

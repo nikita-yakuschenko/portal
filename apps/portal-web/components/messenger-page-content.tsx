@@ -15,6 +15,8 @@ import {
   IconHash,
   IconMessage,
   IconPhoto,
+  IconPin,
+  IconPinnedOff,
   IconPlus,
   IconSearch,
   IconTicket,
@@ -87,6 +89,7 @@ type Conversation = {
   partnerName: string | null;
   partnerAvatarUrl?: string | null;
   title: string;
+  description?: string | null;
   requestNumber: string | null;
   projectId: string | null;
   projectName: string | null;
@@ -98,6 +101,7 @@ type Conversation = {
     | null;
   unread: boolean;
   unreadCount: number;
+  pinned?: boolean;
   createdAt: string;
 };
 
@@ -328,6 +332,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   const [creatingRequest, setCreatingRequest] = useState(false);
   const [channelOpen, setChannelOpen] = useState(false);
   const [channelTitle, setChannelTitle] = useState("");
+  const [channelDescription, setChannelDescription] = useState("");
   const [creatingChannel, setCreatingChannel] = useState(false);
   const [archiveMode, setArchiveMode] = useState(false);
   const [archiveCount, setArchiveCount] = useState(0);
@@ -523,6 +528,22 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       toast.error(err instanceof Error ? err.message : "Не удалось изменить архив");
     } finally {
       setArchiving(false);
+    }
+  }
+
+  async function togglePin(conversationId: string, pinned: boolean) {
+    try {
+      await apiFetch(`/api/messenger/conversations/${conversationId}/pin`, {
+        method: "POST",
+        body: JSON.stringify({ pinned })
+      });
+      setConversations((prev) =>
+        prev.map((c) => (c.id === conversationId ? { ...c, pinned } : c))
+      );
+      toast.success(pinned ? "Закреплено" : "Откреплено");
+      await loadList();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось закрепить");
     }
   }
 
@@ -728,10 +749,14 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     try {
       const created = await apiFetch<Conversation>("/api/messenger/channels", {
         method: "POST",
-        body: JSON.stringify({ title: channelTitle.trim() })
+        body: JSON.stringify({
+          title: channelTitle.trim(),
+          description: channelDescription.trim()
+        })
       });
       setChannelOpen(false);
       setChannelTitle("");
+      setChannelDescription("");
       toast.success("Канал создан");
       openConversation(created.id, "channel");
       await loadList();
@@ -899,6 +924,9 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                                 {conversationTitle(item, audience)}
                               </span>
                               <div className="flex shrink-0 items-center gap-1.5">
+                                {item.pinned ? (
+                                  <IconPin className="text-muted-foreground size-3.5 shrink-0" />
+                                ) : null}
                                 <span className="text-muted-foreground text-xs tabular-nums">
                                   {formatTime(item.lastMessageAt ?? item.createdAt)}
                                 </span>
@@ -928,23 +956,29 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                             </div>
                           </button>
                         </ContextMenuTrigger>
-                        <ContextMenuContent className="w-48">
-                          <ContextMenuItem
-                            className="gap-2"
-                            onSelect={() => openConversation(item.id, item.type)}
-                          >
-                            <IconMessage className="size-4" />
-                            Открыть
-                          </ContextMenuItem>
+                        <ContextMenuContent>
                           {item.type === "dm" ? (
-                            <ContextMenuItem
-                              className="gap-2"
-                              disabled={archiving}
-                              onSelect={() => void toggleArchive(item.id, !archiveMode)}
-                            >
-                              <IconArchive className="size-4" />
-                              {archiveMode ? "Вернуть из архива" : "В архив"}
-                            </ContextMenuItem>
+                            <>
+                              <ContextMenuItem
+                                className="gap-2"
+                                onSelect={() => void togglePin(item.id, !item.pinned)}
+                              >
+                                {item.pinned ? (
+                                  <IconPinnedOff className="size-4" />
+                                ) : (
+                                  <IconPin className="size-4" />
+                                )}
+                                {item.pinned ? "Открепить" : "Закрепить"}
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                className="gap-2"
+                                disabled={archiving}
+                                onSelect={() => void toggleArchive(item.id, !archiveMode)}
+                              >
+                                <IconArchive className="size-4" />
+                                {archiveMode ? "Вернуть из архива" : "В архив"}
+                              </ContextMenuItem>
+                            </>
                           ) : null}
                           {item.type === "request" &&
                           !archiveMode &&
@@ -955,6 +989,16 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                             >
                               <IconTicket className="size-4" />
                               Закрыть обращение
+                            </ContextMenuItem>
+                          ) : null}
+                          {item.type === "request" || item.type === "channel" ? (
+                            <ContextMenuItem
+                              className="gap-2"
+                              disabled={archiving}
+                              onSelect={() => void toggleArchive(item.id, !archiveMode)}
+                            >
+                              <IconArchive className="size-4" />
+                              {archiveMode ? "Вернуть из архива" : "В архив"}
                             </ContextMenuItem>
                           ) : null}
                           {selected ? (
@@ -1024,6 +1068,9 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                     </p>
                   ) : (
                     <div className="text-muted-foreground flex min-h-4 flex-wrap items-center gap-2 text-xs">
+                      {active?.type === "channel" && active.description ? (
+                        <span className="line-clamp-2">{active.description}</span>
+                      ) : null}
                       {active?.type === "request" && active.projectId ? (
                         <Link
                           href={
@@ -1175,7 +1222,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                                       </MessageContent>
                                     </Message>
                                   </ContextMenuTrigger>
-                                  <ContextMenuContent className="w-44">
+                                  <ContextMenuContent>
                                     {hasBody ? (
                                       <ContextMenuItem
                                         className="gap-2"
@@ -1375,24 +1422,30 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
               Канал виден всем дилерам. Писать в него могут только сотрудники завода.
             </DialogDescription>
           </DialogHeader>
-          <Input
-            placeholder="Название канала"
-            value={channelTitle}
-            onChange={(e) => setChannelTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && channelTitle.trim().length >= 2) {
-                e.preventDefault();
-                void createChannel();
-              }
-            }}
-          />
+          <div className="space-y-3">
+            <Input
+              placeholder="Название канала"
+              value={channelTitle}
+              onChange={(e) => setChannelTitle(e.target.value)}
+            />
+            <Textarea
+              placeholder="Описание — видно под названием в шапке"
+              rows={3}
+              value={channelDescription}
+              onChange={(e) => setChannelDescription(e.target.value)}
+            />
+          </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setChannelOpen(false)}>
               Отмена
             </Button>
             <Button
               type="button"
-              disabled={creatingChannel || channelTitle.trim().length < 2}
+              disabled={
+                creatingChannel ||
+                channelTitle.trim().length < 2 ||
+                channelDescription.trim().length < 2
+              }
               onClick={() => void createChannel()}
             >
               Создать

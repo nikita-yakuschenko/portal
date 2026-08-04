@@ -75,7 +75,12 @@ const messengerCreateRequestSchema = z.object({
 });
 
 const messengerCreateChannelSchema = z.object({
-  title: z.string().min(2).max(120)
+  title: z.string().min(2).max(120),
+  description: z.string().min(2).max(500)
+});
+
+const messengerPinSchema = z.object({
+  pinned: z.boolean()
 });
 
 const messengerUpdateRequestSchema = z.object({
@@ -1472,6 +1477,33 @@ export async function buildApp() {
     }
   });
 
+  app.post("/api/messenger/conversations/:id/pin", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+
+    const parsed = messengerPinSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    try {
+      return await messengerService.setPin(
+        getAuthUser(request)!,
+        (request.params as { id: string }).id,
+        parsed.data.pinned
+      );
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось закрепить диалог"
+      });
+    }
+  });
+
   app.get("/api/messenger/archive-count", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, [
       "company_admin",
@@ -1598,7 +1630,8 @@ export async function buildApp() {
 
     try {
       return await messengerService.createChannel(getAuthUser(request)!, {
-        title: parsed.data.title
+        title: parsed.data.title,
+        description: parsed.data.description
       });
     } catch (error) {
       return reply.status(400).send({
