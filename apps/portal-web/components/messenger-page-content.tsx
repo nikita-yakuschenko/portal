@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  IconCheck,
+  IconChecks,
   IconHash,
   IconMessage,
   IconPaperclip,
@@ -51,6 +53,7 @@ import {
   AttachmentTitle
 } from "@/components/ui/attachment";
 import { apiFetch } from "@/lib/api";
+import { emitPortalEvent, PORTAL_EVENT } from "@/lib/portal-events";
 import { cn } from "@/lib/utils";
 
 export type MessengerAudience = "company" | "partner";
@@ -68,6 +71,7 @@ type Conversation = {
   lastMessageAt: string | null;
   lastMessagePreview: string | null;
   unread: boolean;
+  unreadCount: number;
   createdAt: string;
 };
 
@@ -79,6 +83,8 @@ type ChatMessage = {
   authorRole: string;
   body: string;
   createdAt: string;
+  deliveredAt?: string | null;
+  receipt?: "sent" | "delivered" | "read" | null;
   attachments: Array<{
     id: string;
     fileName: string;
@@ -121,6 +127,30 @@ function conversationTitle(item: Conversation, audience: MessengerAudience) {
       : "Чат с заводом";
   }
   return item.title || "Канал";
+}
+
+function MessageReceipt({ receipt }: { receipt?: ChatMessage["receipt"] }) {
+  if (!receipt) return null;
+  const read = receipt === "read";
+  const Icon = receipt === "sent" ? IconCheck : IconChecks;
+  return (
+    <Icon
+      className={cn("size-3.5 shrink-0", read ? "text-sky-400" : "text-muted-foreground/80")}
+      aria-label={receipt === "sent" ? "Отправлено" : receipt === "delivered" ? "Доставлено" : "Прочитано"}
+    />
+  );
+}
+
+function UnreadBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <Badge
+      variant="default"
+      className="h-5 min-w-5 justify-center rounded-full px-1.5 text-[10px] tabular-nums"
+    >
+      {count > 99 ? "99+" : count}
+    </Badge>
+  );
 }
 
 /** Inbox мессенджера: чаты / запросы / каналы */
@@ -178,9 +208,20 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       const rows = await apiFetch<ChatMessage[]>(
         `/api/messenger/conversations/${conversationId}/messages`
       );
-      setMessages(rows);
+      setMessages((prev) => {
+        if (
+          silent &&
+          prev.length === rows.length &&
+          prev.every((m, i) => m.id === rows[i]?.id && m.receipt === rows[i]?.receipt)
+        ) {
+          return prev;
+        }
+        return rows;
+      });
       setConversations((prev) =>
-        prev.map((c) => (c.id === conversationId ? { ...c, unread: false } : c))
+        prev.map((c) =>
+          c.id === conversationId ? { ...c, unread: false, unreadCount: 0 } : c
+        )
       );
     } catch (err) {
       if (!silent) {
@@ -221,13 +262,34 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     void loadMessages(activeId);
   }, [activeId, loadMessages]);
 
-  // Polling списка и активного треда
+  const conversationsRef = useRef(conversations);
+  conversationsRef.current = conversations;
+
+  // Живое обновление: список + активный тред + колокольчик
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      void loadList();
-      if (activeId) void loadMessages(activeId, true);
-    }, 8000);
-    return () => window.clearInterval(timer);
+    const tick = () => {
+      void (async () => {
+        const prevById = new Map(conversationsRef.current.map((c) => [c.id, c]));
+        const rows = await loadList();
+        const grew = rows.some((row) => {
+          const prev = prevById.get(row.id);
+          return (
+            !prev ||
+            (row.lastMessageAt && row.lastMessageAt !== prev.lastMessageAt) ||
+            (row.unreadCount ?? 0) > (prev.unreadCount ?? 0)
+          );
+        });
+        if (grew) emitPortalEvent(PORTAL_EVENT.messengerActivity);
+        if (activeId) await loadMessages(activeId, true);
+      })();
+    };
+    const timer = window.setInterval(tick, 2500);
+    const onFocus = () => tick();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [activeId, loadList, loadMessages]);
 
   async function sendMessage() {
@@ -242,6 +304,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       );
       setMessages((prev) => [...prev, created]);
       setDraft("");
+      emitPortalEvent(PORTAL_EVENT.notificationsRefresh);
       void loadList();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось отправить");
@@ -262,7 +325,12 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       });
       setRequestOpen(false);
       setRequestForm({ title: "", body: "" });
-      toast.success(`Запрос ${created.requestNumber} создан`);
+      toast.success(
+        created.requestNumber
+          ? `Запрос ${created.requestNumber} создан`
+          : "Запрос создан"
+      );
+      emitPortalEvent(PORTAL_EVENT.notificationsRefresh);
       setTab("request");
       setActiveId(created.id);
       await loadList();
@@ -299,6 +367,14 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     );
   }, [filtered, q]);
 
+  const unreadByTab = useMemo(() => {
+    const counts: Record<TabKey, number> = { dm: 0, request: 0, channel: 0 };
+    for (const item of conversations) {
+      counts[item.type] += item.unreadCount ?? 0;
+    }
+    return counts;
+  }, [conversations]);
+
   return (
     <>
       <PageAlert message={error} variant="destructive" />
@@ -306,24 +382,24 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       <Card className="grid h-[min(78vh,820px)] grid-cols-1 overflow-hidden py-0 md:grid-cols-[minmax(280px,340px)_1fr]">
         <div className="flex min-h-0 flex-col border-b md:border-r md:border-b-0">
           <div className="flex flex-col gap-3 border-b p-4">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="font-semibold">Мессенджер</h2>
+            <div className="flex items-center gap-2">
+              <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="min-w-0 flex-1">
+                <TabsList className="grid w-full grid-cols-3">
+                  {(Object.keys(TAB_LABELS) as TabKey[]).map((key) => (
+                    <TabsTrigger key={key} value={key} className="gap-1.5 text-xs sm:text-sm">
+                      {TAB_LABELS[key]}
+                      <UnreadBadge count={unreadByTab[key]} />
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
               {!isCompany ? (
                 <Button type="button" size="sm" variant="outline" onClick={() => setRequestOpen(true)}>
                   <IconPlus className="size-4" />
-                  Запрос
+                  <span className="hidden sm:inline">Запрос</span>
                 </Button>
               ) : null}
             </div>
-            <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
-              <TabsList className="grid w-full grid-cols-3">
-                {(Object.keys(TAB_LABELS) as TabKey[]).map((key) => (
-                  <TabsTrigger key={key} value={key} className="text-xs sm:text-sm">
-                    {TAB_LABELS[key]}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
             <div className="relative">
               <IconSearch className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
               <Input
@@ -370,12 +446,20 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                         )}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <span className={cn("line-clamp-1 text-sm font-medium", item.unread && "font-semibold")}>
+                          <span
+                            className={cn(
+                              "line-clamp-1 text-sm",
+                              (item.unreadCount ?? 0) > 0 ? "font-semibold" : "font-medium"
+                            )}
+                          >
                             {conversationTitle(item, audience)}
                           </span>
-                          <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                            {formatTime(item.lastMessageAt ?? item.createdAt)}
-                          </span>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <span className="text-muted-foreground text-xs tabular-nums">
+                              {formatTime(item.lastMessageAt ?? item.createdAt)}
+                            </span>
+                            <UnreadBadge count={item.unreadCount ?? 0} />
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           {item.type === "request" && item.status ? (
@@ -499,7 +583,10 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                                         ) : null}
                                       </BubbleContent>
                                     </Bubble>
-                                    <MessageFooter>{formatTime(msg.createdAt)}</MessageFooter>
+                                    <MessageFooter className="gap-1.5">
+                                      <span>{formatTime(msg.createdAt)}</span>
+                                      {mine ? <MessageReceipt receipt={msg.receipt} /> : null}
+                                    </MessageFooter>
                                   </MessageContent>
                                 </Message>
                               </MessageScrollerItem>

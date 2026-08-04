@@ -52,8 +52,17 @@ export function NotificationsBell({ listHref }: NotificationsBellProps) {
 
   useEffect(() => {
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 45_000);
-    return () => window.clearInterval(timer);
+    const timer = window.setInterval(() => void refresh(), 8_000);
+    const onRefresh = () => void refresh();
+    window.addEventListener("b2b:notifications-refresh", onRefresh);
+    window.addEventListener("b2b:messenger-activity", onRefresh);
+    window.addEventListener("focus", onRefresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("b2b:notifications-refresh", onRefresh);
+      window.removeEventListener("b2b:messenger-activity", onRefresh);
+      window.removeEventListener("focus", onRefresh);
+    };
   }, [refresh]);
 
   async function markRead(item: AppNotification) {

@@ -2,7 +2,7 @@ import { mkdir, writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-import { and, desc, eq, lt, or, sql, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, ne, or, sql, inArray } from "drizzle-orm";
 
 import { db } from "../../db/client.js";
 import {
@@ -49,9 +49,10 @@ function mapConversation(
     partnerName?: string | null;
     projectName?: string | null;
     lastMessagePreview?: string | null;
-    unread?: boolean;
+    unreadCount?: number;
   } = {}
 ) {
+  const unreadCount = Math.max(0, extra.unreadCount ?? 0);
   return {
     id: row.id,
     type: row.type,
@@ -65,7 +66,8 @@ function mapConversation(
     createdByUserId: row.createdByUserId,
     lastMessageAt: row.lastMessageAt?.toISOString() ?? null,
     lastMessagePreview: extra.lastMessagePreview ?? null,
-    unread: Boolean(extra.unread),
+    unread: unreadCount > 0,
+    unreadCount,
     createdAt: row.createdAt.toISOString()
   };
 }
@@ -196,32 +198,65 @@ export class MessengerService {
       .where(eq(messengerReads.userId, actor.sub));
     const readMap = new Map(reads.map((r) => [r.conversationId, r.lastReadAt]));
 
-    const lastPreviews = await Promise.all(
-      rows.map(async ({ conversation }) => {
-        const [last] = await db
-          .select({ body: messengerMessages.body })
-          .from(messengerMessages)
-          .where(eq(messengerMessages.conversationId, conversation.id))
-          .orderBy(desc(messengerMessages.createdAt))
-          .limit(1);
-        return [conversation.id, last?.body ?? null] as const;
-      })
-    );
-    const previewMap = new Map(lastPreviews);
+    const conversationIds = rows.map((r) => r.conversation.id);
+    const unreadCountMap = new Map<string, number>();
+    const previewMap = new Map<string, string | null>();
+
+    if (conversationIds.length > 0) {
+      // Доставлено уже при опросе списка (страница мессенджера открыта)
+      await db
+        .update(messengerMessages)
+        .set({ deliveredAt: new Date() })
+        .where(
+          and(
+            inArray(messengerMessages.conversationId, conversationIds),
+            ne(messengerMessages.authorUserId, actor.sub),
+            isNull(messengerMessages.deliveredAt)
+          )
+        );
+
+      const lastPreviews = await Promise.all(
+        conversationIds.map(async (id) => {
+          const [last] = await db
+            .select({ body: messengerMessages.body })
+            .from(messengerMessages)
+            .where(eq(messengerMessages.conversationId, id))
+            .orderBy(desc(messengerMessages.createdAt))
+            .limit(1);
+          return [id, last?.body ?? null] as const;
+        })
+      );
+      for (const [id, body] of lastPreviews) {
+        previewMap.set(id, body);
+      }
+
+      await Promise.all(
+        conversationIds.map(async (id) => {
+          const lastRead = readMap.get(id);
+          const conditions = [
+            eq(messengerMessages.conversationId, id),
+            ne(messengerMessages.authorUserId, actor.sub)
+          ];
+          if (lastRead) {
+            conditions.push(gt(messengerMessages.createdAt, lastRead));
+          }
+          const [countRow] = await db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(messengerMessages)
+            .where(and(...conditions));
+          unreadCountMap.set(id, countRow?.count ?? 0);
+        })
+      );
+    }
 
     const q = filters?.q?.trim().toLowerCase();
     const mapped = rows.map(({ conversation, partnerName, projectName }) => {
-      const lastRead = readMap.get(conversation.id);
-      const unread = Boolean(
-        conversation.lastMessageAt && (!lastRead || conversation.lastMessageAt > lastRead)
-      );
+      const preview = previewMap.get(conversation.id);
       return mapConversation(conversation, {
         partnerName,
         projectName,
-        lastMessagePreview: previewMap.get(conversation.id)
-          ? previewText(previewMap.get(conversation.id)!)
-          : null,
-        unread
+        lastMessagePreview: preview ? previewText(preview) : null,
+        unreadCount: unreadCountMap.get(conversation.id) ?? 0
       });
     });
 
@@ -273,6 +308,18 @@ export class MessengerService {
       conditions.push(lt(messengerMessages.createdAt, new Date(opts.before)));
     }
 
+    // Доставлено: собеседник открыл/поллит тред — помечаем чужие недоставленные
+    await db
+      .update(messengerMessages)
+      .set({ deliveredAt: new Date() })
+      .where(
+        and(
+          eq(messengerMessages.conversationId, conversationId),
+          ne(messengerMessages.authorUserId, actor.sub),
+          isNull(messengerMessages.deliveredAt)
+        )
+      );
+
     const rows = await db
       .select({
         message: messengerMessages,
@@ -301,25 +348,91 @@ export class MessengerService {
       byMessage.set(att.messageId, list);
     }
 
+    const counterpartReadAt = await this.counterpartMaxReadAt(actor, conversation);
     await this.markRead(actor.sub, conversationId);
 
     return rows
-      .map(({ message, authorName, authorRole }) => ({
-        id: message.id,
-        conversationId: message.conversationId,
-        authorUserId: message.authorUserId,
-        authorName,
-        authorRole,
-        body: message.body,
-        createdAt: message.createdAt.toISOString(),
-        attachments: (byMessage.get(message.id) ?? []).map((att) => ({
-          id: att.id,
-          fileName: att.fileName,
-          mimeType: att.mimeType,
-          byteSize: att.byteSize
-        }))
-      }))
+      .map(({ message, authorName, authorRole }) => {
+        const mine = message.authorUserId === actor.sub;
+        let receipt: "sent" | "delivered" | "read" | null = null;
+        if (mine) {
+          if (counterpartReadAt && counterpartReadAt >= message.createdAt) {
+            receipt = "read";
+          } else if (message.deliveredAt) {
+            receipt = "delivered";
+          } else {
+            receipt = "sent";
+          }
+        }
+        return {
+          id: message.id,
+          conversationId: message.conversationId,
+          authorUserId: message.authorUserId,
+          authorName,
+          authorRole,
+          body: message.body,
+          createdAt: message.createdAt.toISOString(),
+          deliveredAt: message.deliveredAt?.toISOString() ?? null,
+          receipt,
+          attachments: (byMessage.get(message.id) ?? []).map((att) => ({
+            id: att.id,
+            fileName: att.fileName,
+            mimeType: att.mimeType,
+            byteSize: att.byteSize
+          }))
+        };
+      })
       .reverse();
+  }
+
+  /** Макс. lastReadAt у «другой стороны» диалога — для галочек прочитано */
+  private async counterpartMaxReadAt(
+    actor: Actor,
+    conversation: typeof messengerConversations.$inferSelect
+  ): Promise<Date | null> {
+    if (conversation.type === "channel") {
+      // Для канала: прочитано, если хотя бы один партнёр открыл
+      if (!isCompany(actor)) return null;
+      const [row] = await db
+        .select({ maxRead: sql<Date | null>`max(${messengerReads.lastReadAt})` })
+        .from(messengerReads)
+        .innerJoin(users, eq(messengerReads.userId, users.id))
+        .where(
+          and(
+            eq(messengerReads.conversationId, conversation.id),
+            sql`${users.partnerId} is not null`
+          )
+        );
+      return row?.maxRead ? new Date(row.maxRead) : null;
+    }
+
+    if (!conversation.partnerId) return null;
+
+    if (isCompany(actor)) {
+      const [row] = await db
+        .select({ maxRead: sql<Date | null>`max(${messengerReads.lastReadAt})` })
+        .from(messengerReads)
+        .innerJoin(users, eq(messengerReads.userId, users.id))
+        .where(
+          and(
+            eq(messengerReads.conversationId, conversation.id),
+            eq(users.partnerId, conversation.partnerId)
+          )
+        );
+      return row?.maxRead ? new Date(row.maxRead) : null;
+    }
+
+    const [row] = await db
+      .select({ maxRead: sql<Date | null>`max(${messengerReads.lastReadAt})` })
+      .from(messengerReads)
+      .innerJoin(users, eq(messengerReads.userId, users.id))
+      .where(
+        and(
+          eq(messengerReads.conversationId, conversation.id),
+          isNull(users.partnerId)
+        )
+      );
+    return row?.maxRead ? new Date(row.maxRead) : null;
   }
 
   async postMessage(
@@ -358,7 +471,6 @@ export class MessengerService {
       .where(eq(messengerConversations.id, conversationId));
 
     await this.markRead(actor.sub, conversationId);
-    await this.notifyNewMessage(actor, conversation, body || "Вложение");
 
     return {
       id: messageId,
@@ -368,6 +480,8 @@ export class MessengerService {
       authorRole: actor.role,
       body,
       createdAt: now.toISOString(),
+      deliveredAt: null,
+      receipt: "sent" as const,
       attachments: savedAttachments
     };
   }
@@ -422,9 +536,6 @@ export class MessengerService {
     });
 
     await this.markRead(actor.sub, conversationId);
-
-    const conversation = await this.requireConversation(conversationId);
-    await this.notifyNewRequest(actor, conversation, body);
 
     return this.getConversation(actor, conversationId);
   }
