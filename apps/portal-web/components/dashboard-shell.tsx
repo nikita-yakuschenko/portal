@@ -1,7 +1,6 @@
 "use client";
 
 import { AppSidebar, type NavigationItem } from "@/components/app-sidebar";
-import { ModeToggle } from "@/components/mode-toggle";
 import { NotificationsBell } from "@/components/notifications-bell";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -96,22 +95,23 @@ export function DashboardShell(props: {
 
         <header
           className={[
-            "bg-background sticky top-0 z-30 flex min-h-16 shrink-0 flex-wrap items-center gap-2 border-b px-4 py-3",
+            "bg-background sticky top-0 z-30 flex min-h-16 shrink-0 items-center gap-2 border-b px-4 py-3",
             isPartnerCabinet ? "" : "md:rounded-t-xl"
           ].join(" ")}
         >
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
-          <NotificationsBell
-            listHref={isPartnerCabinet ? "/partner/notifications" : "/company/notifications"}
+          <SidebarTrigger className="-ml-1 shrink-0" />
+          <Separator
+            orientation="vertical"
+            className="mr-1 data-[orientation=vertical]:h-4"
           />
           {props.breadcrumbs ?? (
-            <h1 className="truncate text-base font-medium">{sectionTitle}</h1>
+            <h1 className="min-w-0 flex-1 truncate text-base font-medium">{sectionTitle}</h1>
           )}
-          <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             {props.headerActions}
-            {/* Тема — в Настройках партнёра; для HQ оставляем быстрый переключатель */}
-            {!isPartnerCabinet ? <ModeToggle /> : null}
+            <NotificationsBell
+              listHref={isPartnerCabinet ? "/partner/notifications" : "/company/notifications"}
+            />
           </div>
         </header>
 

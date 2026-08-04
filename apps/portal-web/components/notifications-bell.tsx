@@ -85,8 +85,14 @@ export function NotificationsBell({ listHref }: NotificationsBellProps) {
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="icon" className="relative" aria-label="Уведомления">
-          <IconBell className="size-5" />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="relative size-9 shrink-0"
+          aria-label="Уведомления"
+        >
+          <IconBell className="size-5" stroke={1.75} />
           {unread > 0 ? (
             <Badge
               variant="destructive"
@@ -97,7 +103,7 @@ export function NotificationsBell({ listHref }: NotificationsBellProps) {
           ) : null}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-80 sm:w-96">
+      <DropdownMenuContent align="end" className="w-80 sm:w-96">
         <DropdownMenuLabel className="flex items-center justify-between gap-2">
           <span>Уведомления</span>
           {unread > 0 ? (
