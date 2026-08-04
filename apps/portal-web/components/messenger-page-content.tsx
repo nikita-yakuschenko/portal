@@ -57,12 +57,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  Message,
-  MessageContent,
-  MessageFooter,
-  MessageHeader
-} from "@/components/ui/message";
+import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
 import {
   MessageScroller,
   MessageScrollerContent,
@@ -149,6 +144,7 @@ function parseTab(raw: string | null): TabKey {
   return "dm";
 }
 
+const GROUP_WINDOW_MS = 60_000;
 const MAX_ATTACHMENTS = 10;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MEDIA_ACCEPT = "image/*,video/*,audio/*";
@@ -265,7 +261,13 @@ function MessageListPreview({ preview }: { preview: Conversation["lastMessagePre
   return <span className="text-muted-foreground truncate">{meta.text}</span>;
 }
 
-function MessageReceipt({ receipt }: { receipt?: ChatMessage["receipt"] }) {
+function MessageReceipt({
+  receipt,
+  onPrimary = false
+}: {
+  receipt?: ChatMessage["receipt"];
+  onPrimary?: boolean;
+}) {
   if (!receipt) return null;
   const read = receipt === "read";
   const Icon = receipt === "sent" ? IconCheck : IconChecks;
@@ -273,9 +275,48 @@ function MessageReceipt({ receipt }: { receipt?: ChatMessage["receipt"] }) {
     receipt === "sent" ? "Отправлено" : receipt === "delivered" ? "Доставлено" : "Прочитано";
   return (
     <Icon
-      className={cn("size-3.5 shrink-0", read ? "text-sky-400" : "text-muted-foreground/80")}
+      className={cn(
+        "size-3.5 shrink-0",
+        read
+          ? "text-sky-400"
+          : onPrimary
+            ? "text-primary-foreground/70"
+            : "text-muted-foreground/80"
+      )}
       aria-label={label}
     />
+  );
+}
+
+/** Время, просмотры и галочки — внутри облачка, как в мессенджерах */
+function MessageMeta({
+  message,
+  mine,
+  onPrimary
+}: {
+  message: ChatMessage;
+  mine: boolean;
+  onPrimary: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "ml-1.5 inline-flex shrink-0 items-center gap-1 self-end text-[11px] leading-none",
+        onPrimary ? "text-primary-foreground/75" : "text-muted-foreground"
+      )}
+    >
+      {typeof message.viewCount === "number" ? (
+        <span
+          className="inline-flex items-center gap-0.5 tabular-nums"
+          title="Просмотры публикации"
+        >
+          <IconEye className="size-3.5" />
+          {message.viewCount}
+        </span>
+      ) : null}
+      <span className="tabular-nums">{formatTime(message.createdAt)}</span>
+      {mine ? <MessageReceipt receipt={message.receipt} onPrimary={onPrimary} /> : null}
+    </span>
   );
 }
 
@@ -1310,13 +1351,25 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                     <MessageScroller className="h-full">
                       <MessageScrollerViewport className="p-4">
                         <MessageScrollerContent className="gap-4">
-                          {messages.map((msg) => {
+                          {messages.map((msg, index) => {
                             const mine = meId != null && msg.authorUserId === meId;
                             const attachments = msg.attachments ?? [];
                             const hasBody = Boolean(msg.body?.trim());
                             const dissolving = deletingIds.has(msg.id);
+                            const prev = index > 0 ? messages[index - 1] : undefined;
+                            // Подряд идущие сообщения одного автора в пределах минуты — одна группа
+                            const grouped =
+                              prev != null &&
+                              prev.authorUserId === msg.authorUserId &&
+                              new Date(msg.createdAt).getTime() -
+                                new Date(prev.createdAt).getTime() <
+                                GROUP_WINDOW_MS;
                             return (
-                              <MessageScrollerItem key={msg.id} id={msg.id}>
+                              <MessageScrollerItem
+                                key={msg.id}
+                                id={msg.id}
+                                className={cn(grouped && "-mt-3")}
+                              >
                                 <ContextMenu>
                                   <ContextMenuTrigger asChild disabled={dissolving}>
                                     <Message
@@ -1324,13 +1377,20 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                                       className={cn(dissolving && "animate-message-sand")}
                                     >
                                       <MessageContent>
-                                        {active?.type !== "channel" ? (
+                                        {active?.type !== "channel" && !grouped ? (
                                           <MessageHeader>{msg.authorName}</MessageHeader>
                                         ) : null}
                                         {hasBody ? (
                                           <Bubble variant={mine ? "default" : "secondary"}>
-                                            <BubbleContent className="whitespace-pre-wrap">
-                                              {msg.body}
+                                            <BubbleContent className="flex items-end gap-1">
+                                              <span className="min-w-0 whitespace-pre-wrap">
+                                                {msg.body}
+                                              </span>
+                                              <MessageMeta
+                                                message={msg}
+                                                mine={mine}
+                                                onPrimary={mine}
+                                              />
                                             </BubbleContent>
                                           </Bubble>
                                         ) : null}
@@ -1342,8 +1402,11 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                                               hasBody && "mt-0.5"
                                             )}
                                           >
-                                            {attachments.map((att) => {
+                                            {attachments.map((att, attIndex) => {
                                               const image = isImageMime(att.mimeType);
+                                              // Без текста время и статус показываем у последнего файла
+                                              const showMeta =
+                                                !hasBody && attIndex === attachments.length - 1;
                                               return (
                                                 <a
                                                   key={att.id}
@@ -1365,25 +1428,19 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                                                     <AttachmentContent>
                                                       <AttachmentTitle>{att.fileName}</AttachmentTitle>
                                                     </AttachmentContent>
+                                                    {showMeta ? (
+                                                      <MessageMeta
+                                                        message={msg}
+                                                        mine={mine}
+                                                        onPrimary={false}
+                                                      />
+                                                    ) : null}
                                                   </Attachment>
                                                 </a>
                                               );
                                             })}
                                           </div>
                                         ) : null}
-                                        <MessageFooter className="gap-1.5">
-                                          <span>{formatTime(msg.createdAt)}</span>
-                                          {typeof msg.viewCount === "number" ? (
-                                            <span
-                                              className="inline-flex items-center gap-0.5 tabular-nums"
-                                              title="Просмотры публикации"
-                                            >
-                                              <IconEye className="size-3.5" />
-                                              {msg.viewCount}
-                                            </span>
-                                          ) : null}
-                                          {mine ? <MessageReceipt receipt={msg.receipt} /> : null}
-                                        </MessageFooter>
                                       </MessageContent>
                                     </Message>
                                   </ContextMenuTrigger>
