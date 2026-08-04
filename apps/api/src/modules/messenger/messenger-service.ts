@@ -13,6 +13,7 @@ import {
   messengerMessages,
   messengerReads,
   partners,
+  partnerSites,
   users
 } from "../../db/schema.js";
 
@@ -58,6 +59,14 @@ function isMediaMime(mimeType: string) {
   );
 }
 
+function partnerAvatarFromSiteConfig(config: unknown): string | null {
+  if (!config || typeof config !== "object") return null;
+  const row = config as Record<string, unknown>;
+  const mobile = typeof row.logoMobileDataUrl === "string" ? row.logoMobileDataUrl.trim() : "";
+  const full = typeof row.logoDataUrl === "string" ? row.logoDataUrl.trim() : "";
+  return mobile || full || null;
+}
+
 type LastMessagePreview = {
   kind: "text" | "media" | "file";
   text: string;
@@ -68,6 +77,7 @@ function mapConversation(
   extra: {
     partnerName?: string | null;
     projectName?: string | null;
+    partnerAvatarUrl?: string | null;
     lastMessagePreview?: LastMessagePreview | null;
     unreadCount?: number;
   } = {}
@@ -78,6 +88,7 @@ function mapConversation(
     type: row.type,
     partnerId: row.partnerId,
     partnerName: extra.partnerName ?? null,
+    partnerAvatarUrl: extra.partnerAvatarUrl ?? null,
     title: row.title,
     requestNumber: row.requestNumber,
     projectId: row.projectId,
@@ -177,6 +188,9 @@ export class MessengerService {
     if (conversation.type === "channel" && !isCompany(actor)) {
       throw new Error("В канал могут писать только сотрудники завода");
     }
+    if (conversation.type === "request" && conversation.status === "closed") {
+      throw new Error("Обращение закрыто");
+    }
   }
 
   async listConversations(
@@ -210,10 +224,12 @@ export class MessengerService {
       .select({
         conversation: messengerConversations,
         partnerName: partners.companyName,
-        projectName: catalogProjects.name
+        projectName: catalogProjects.name,
+        siteConfig: partnerSites.config
       })
       .from(messengerConversations)
       .leftJoin(partners, eq(messengerConversations.partnerId, partners.id))
+      .leftJoin(partnerSites, eq(partnerSites.partnerId, messengerConversations.partnerId))
       .leftJoin(catalogProjects, eq(messengerConversations.projectId, catalogProjects.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(sql`coalesce(${messengerConversations.lastMessageAt}, ${messengerConversations.createdAt})`));
@@ -306,10 +322,11 @@ export class MessengerService {
     }
 
     const q = filters?.q?.trim().toLowerCase();
-    const mapped = scoped.map(({ conversation, partnerName, projectName }) => {
+    const mapped = scoped.map(({ conversation, partnerName, projectName, siteConfig }) => {
       return mapConversation(conversation, {
         partnerName,
         projectName,
+        partnerAvatarUrl: partnerAvatarFromSiteConfig(siteConfig),
         lastMessagePreview: previewMap.get(conversation.id) ?? null,
         unreadCount: unreadCountMap.get(conversation.id) ?? 0
       });
@@ -337,10 +354,12 @@ export class MessengerService {
       .select({
         conversation: messengerConversations,
         partnerName: partners.companyName,
-        projectName: catalogProjects.name
+        projectName: catalogProjects.name,
+        siteConfig: partnerSites.config
       })
       .from(messengerConversations)
       .leftJoin(partners, eq(messengerConversations.partnerId, partners.id))
+      .leftJoin(partnerSites, eq(partnerSites.partnerId, messengerConversations.partnerId))
       .leftJoin(catalogProjects, eq(messengerConversations.projectId, catalogProjects.id))
       .where(eq(messengerConversations.id, conversationId))
       .limit(1);
@@ -349,7 +368,8 @@ export class MessengerService {
     await this.assertCanAccess(actor, row.conversation);
     return mapConversation(row.conversation, {
       partnerName: row.partnerName,
-      projectName: row.projectName
+      projectName: row.projectName,
+      partnerAvatarUrl: partnerAvatarFromSiteConfig(row.siteConfig)
     });
   }
 

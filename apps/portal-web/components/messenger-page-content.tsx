@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 
 import { PageAlert } from "@/components/page-alert";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
@@ -84,6 +85,7 @@ type Conversation = {
   type: "dm" | "request" | "channel";
   partnerId: string | null;
   partnerName: string | null;
+  partnerAvatarUrl?: string | null;
   title: string;
   requestNumber: string | null;
   projectId: string | null;
@@ -171,6 +173,43 @@ function conversationTitle(item: Conversation, audience: MessengerAudience) {
       : "Чат с заводом";
   }
   return item.title || "Канал";
+}
+
+function dealerInitials(name: string | null | undefined) {
+  if (!name?.trim()) return "?";
+  return name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function ListDealerAvatar({
+  audience,
+  item
+}: {
+  audience: MessengerAudience;
+  item: Conversation;
+}) {
+  if (item.type !== "dm") return null;
+
+  const label =
+    audience === "company" ? item.partnerName || item.title || "Дилер" : "Завод";
+  const src =
+    audience === "company"
+      ? item.partnerAvatarUrl?.trim() || null
+      : "/logo.svg";
+
+  return (
+    <Avatar size="default" className="bg-muted size-10 rounded-lg">
+      {src ? <AvatarImage src={src} alt={label} className="object-contain p-1" /> : null}
+      <AvatarFallback className="rounded-lg text-[11px] font-medium">
+        {dealerInitials(label)}
+      </AvatarFallback>
+    </Avatar>
+  );
 }
 
 function isImageMime(mimeType: string) {
@@ -307,7 +346,10 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     [conversations, tab]
   );
 
-  const canWrite = Boolean(active) && (active?.type !== "channel" || isCompany);
+  const canWrite =
+    Boolean(active) &&
+    (active?.type !== "channel" || isCompany) &&
+    !(active?.type === "request" && active.status === "closed");
 
   function writeMessengerUrl(nextTab: TabKey, nextId: string | null) {
     const params = new URLSearchParams();
@@ -836,10 +878,12 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                             type="button"
                             onClick={() => openConversation(item.id, item.type)}
                             className={cn(
-                              "hover:bg-muted/60 flex w-full flex-col gap-1 px-4 py-3 text-left transition-colors",
+                              "hover:bg-muted/60 flex w-full items-start gap-3 px-4 py-3 text-left transition-colors",
                               selected && "bg-muted"
                             )}
                           >
+                            <ListDealerAvatar audience={audience} item={item} />
+                            <div className="flex min-w-0 flex-1 flex-col gap-1">
                             <div className="flex items-start justify-between gap-2">
                               <span
                                 className={cn(
@@ -876,6 +920,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                             <p className="line-clamp-2 text-xs">
                               <MessageListPreview preview={item.lastMessagePreview} />
                             </p>
+                            </div>
                           </button>
                         </ContextMenuTrigger>
                         <ContextMenuContent className="w-48">
@@ -1265,6 +1310,10 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                       <IconArrowUp className="size-4" />
                     </Button>
                   </div>
+                </div>
+              ) : active?.type === "request" && active.status === "closed" ? (
+                <div className="text-muted-foreground flex min-h-[3.75rem] items-center justify-center border-t px-3 py-2 text-center text-sm">
+                  Обращение закрыто — писать нельзя
                 </div>
               ) : (
                 <div className="min-h-[3.75rem] border-t" />
