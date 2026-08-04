@@ -1023,7 +1023,6 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                           >
                             <ListDealerAvatar audience={audience} item={item} />
                             <div className="flex min-w-0 flex-1 flex-col gap-1">
-                            <div className="flex items-start justify-between gap-2">
                               <span
                                 className={cn(
                                   "line-clamp-1 text-sm",
@@ -1032,36 +1031,37 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                               >
                                 {conversationTitle(item, audience)}
                               </span>
-                              <div className="flex shrink-0 items-center gap-1.5">
+                              <div className="flex items-center gap-2">
+                                {isGlobalSearch ? (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {TAB_LABELS[item.type]}
+                                  </Badge>
+                                ) : null}
+                                {item.type === "request" && item.status ? (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    {STATUS_LABELS[item.status] ?? item.status}
+                                  </Badge>
+                                ) : null}
+                                {item.projectName ? (
+                                  <span className="text-muted-foreground line-clamp-1 text-xs">
+                                    {item.projectName}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="line-clamp-2 text-xs">
+                                <MessageListPreview preview={item.lastMessagePreview} />
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 flex-col items-end gap-1.5">
+                              <div className="flex items-center gap-1.5">
                                 {item.pinned ? (
                                   <IconPin className="text-muted-foreground size-3.5 shrink-0" />
                                 ) : null}
                                 <span className="text-muted-foreground text-xs tabular-nums">
                                   {formatTime(item.lastMessageAt ?? item.createdAt)}
                                 </span>
-                                <UnreadBadge count={item.unreadCount ?? 0} />
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {isGlobalSearch ? (
-                                <Badge variant="outline" className="text-[10px]">
-                                  {TAB_LABELS[item.type]}
-                                </Badge>
-                              ) : null}
-                              {item.type === "request" && item.status ? (
-                                <Badge variant="secondary" className="text-[10px]">
-                                  {STATUS_LABELS[item.status] ?? item.status}
-                                </Badge>
-                              ) : null}
-                              {item.projectName ? (
-                                <span className="text-muted-foreground line-clamp-1 text-xs">
-                                  {item.projectName}
-                                </span>
-                              ) : null}
-                            </div>
-                            <p className="line-clamp-2 text-xs">
-                              <MessageListPreview preview={item.lastMessagePreview} />
-                            </p>
+                              <UnreadBadge count={item.unreadCount ?? 0} />
                             </div>
                           </button>
                         </ContextMenuTrigger>
