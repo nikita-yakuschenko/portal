@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { TablerIcon } from "@tabler/icons-react";
 
+import { AdaptiveBrandMark } from "@/components/adaptive-brand-mark";
 import { NavUser } from "@/components/nav-user";
 import {
   Sidebar,
@@ -66,17 +67,15 @@ export function AppSidebar({
             <SidebarMenuButton size="lg" asChild>
               <Link href={brandHref}>
                 {logo ? (
-                  <img
+                  <AdaptiveBrandMark
                     src={logo}
-                    alt=""
-                    className="size-8 shrink-0 rounded-lg object-contain"
+                    className="size-8 shrink-0 rounded-lg"
                   />
                 ) : plainBrandMark ? (
-                  // logo.svg светлый (#F6EEE3): на light — в силуэт, на dark — как есть
-                  <img
+                  <AdaptiveBrandMark
                     src="/logo.svg"
-                    alt=""
-                    className="size-8 shrink-0 brightness-0 dark:brightness-100"
+                    toneHint="light"
+                    className="size-8 shrink-0"
                   />
                 ) : (
                   <div className="bg-muted text-muted-foreground flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg text-xs font-semibold">
