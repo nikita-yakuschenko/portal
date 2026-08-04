@@ -13,7 +13,13 @@ import { DashboardShell } from "@/components/dashboard-shell";
 import { PageAlert } from "@/components/page-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card";
 import {
   Empty,
   EmptyDescription,
@@ -123,18 +129,11 @@ export default function CompanyCatalogPage() {
       <PageAlert message={error} variant="destructive" />
 
       <Card>
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
-          <CardTitle className="flex items-baseline gap-1.5">
-            <span>Проекты</span>
-            <span className="inline-flex h-5 min-w-[2.75rem] items-center tabular-nums">
-              {loading ? (
-                <Skeleton className="h-4 w-8" />
-              ) : (
-                <span>({projects.length})</span>
-              )}
-            </span>
-          </CardTitle>
-          <CatalogViewToggle value={view} onChange={changeView} />
+        <CardHeader>
+          <CardTitle>Проекты</CardTitle>
+          <CardAction>
+            <CatalogViewToggle value={view} onChange={changeView} />
+          </CardAction>
         </CardHeader>
         <CardContent>
           {loading ? (
