@@ -333,6 +333,27 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     writeMessengerUrl(tab, null);
   }
 
+  useEffect(() => {
+    if (!activeId || requestOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest(
+          '[role="dialog"], [data-radix-menu-content], [data-slot="dropdown-menu-content"], [data-slot="context-menu-content"]'
+        )
+      ) {
+        return;
+      }
+      event.preventDefault();
+      closeConversation();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // closeConversation замыкает актуальный tab
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId, requestOpen, tab]);
+
   const loadList = useCallback(async () => {
     try {
       const rows = await apiFetch<Conversation[]>(
