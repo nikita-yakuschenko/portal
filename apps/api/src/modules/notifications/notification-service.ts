@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, notLike, sql } from "drizzle-orm";
 
 import { db } from "../../db/client.js";
 import { notifications, users } from "../../db/schema.js";
@@ -21,6 +21,15 @@ export type NotifyInput = {
   excludeUserId?: string | undefined;
 };
 
+/** Колокольчик — только системные события, не чат */
+function isSystemNotificationType(type: string) {
+  return !type.startsWith("messenger.");
+}
+
+function systemOnly(userId: string) {
+  return and(eq(notifications.userId, userId), notLike(notifications.type, "messenger.%"));
+}
+
 function mapNotification(row: typeof notifications.$inferSelect) {
   return {
     id: row.id,
@@ -40,6 +49,9 @@ function mapNotification(row: typeof notifications.$inferSelect) {
 
 export class NotificationService {
   async notifyUsers(userIds: string[], input: NotifyInput) {
+    if (!isSystemNotificationType(input.type)) {
+      return 0;
+    }
     const unique = [...new Set(userIds)].filter((id) => id && id !== input.excludeUserId);
     if (unique.length === 0) return 0;
 
@@ -92,8 +104,8 @@ export class NotificationService {
   async listForUser(userId: string, opts?: { unreadOnly?: boolean; limit?: number }) {
     const limit = Math.min(Math.max(opts?.limit ?? 30, 1), 100);
     const where = opts?.unreadOnly
-      ? and(eq(notifications.userId, userId), isNull(notifications.readAt))
-      : eq(notifications.userId, userId);
+      ? and(systemOnly(userId), isNull(notifications.readAt))
+      : systemOnly(userId);
 
     const rows = await db
       .select()
@@ -109,7 +121,7 @@ export class NotificationService {
     const [row] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(notifications)
-      .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+      .where(and(systemOnly(userId), isNull(notifications.readAt)));
     return row?.count ?? 0;
   }
 
@@ -134,7 +146,7 @@ export class NotificationService {
     await db
       .update(notifications)
       .set({ readAt: new Date() })
-      .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+      .where(and(systemOnly(userId), isNull(notifications.readAt)));
     return { ok: true as const };
   }
 }

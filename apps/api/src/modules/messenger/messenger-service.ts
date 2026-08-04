@@ -14,7 +14,6 @@ import {
   partners,
   users
 } from "../../db/schema.js";
-import { notificationService } from "../notifications/notification-service.js";
 
 const NEWS_CHANNEL_TITLE = "Новости и анонсы";
 const UPLOAD_ROOT = path.resolve(process.cwd(), "uploads", "messenger");
@@ -656,105 +655,6 @@ export class MessengerService {
       conversationId,
       userId,
       lastReadAt: new Date()
-    });
-  }
-
-  private async notifyNewMessage(
-    actor: Actor,
-    conversation: typeof messengerConversations.$inferSelect,
-    preview: string
-  ) {
-    const title =
-      conversation.type === "channel"
-        ? conversation.title || "Канал"
-        : conversation.type === "request"
-          ? conversation.requestNumber || "Запрос"
-          : "Сообщение в чате";
-
-    // Получатель: если пишет партнёр — завод; если завод в dm/request — партнёр; канал — все партнёры
-    if (conversation.type === "channel") {
-      const partnerUsers = await db
-        .select({ id: users.id, partnerId: users.partnerId })
-        .from(users)
-        .where(and(eq(users.isActive, true), sql`${users.partnerId} is not null`));
-
-      const byPartner = new Map<string, string[]>();
-      for (const u of partnerUsers) {
-        if (!u.partnerId) continue;
-        const list = byPartner.get(u.partnerId) ?? [];
-        list.push(u.id);
-        byPartner.set(u.partnerId, list);
-      }
-
-      for (const [partnerId, userIds] of byPartner) {
-        await notificationService.notifyUsers(userIds, {
-          audience: "partner",
-          partnerId,
-          type: "messenger.message",
-          title,
-          body: previewText(preview),
-          entityType: "messenger_conversation",
-          entityId: conversation.id,
-          actionUrl: `/partner/messenger?c=${conversation.id}`,
-          excludeUserId: actor.sub
-        });
-      }
-      return;
-    }
-
-    if (isCompany(actor) && conversation.partnerId) {
-      await notificationService.notifyPartnerUsers(conversation.partnerId, {
-        type: "messenger.message",
-        title,
-        body: previewText(preview),
-        entityType: "messenger_conversation",
-        entityId: conversation.id,
-        actionUrl: `/partner/messenger?c=${conversation.id}`,
-        excludeUserId: actor.sub
-      });
-      return;
-    }
-
-    await notificationService.notifyCompanyUsers({
-      type: "messenger.message",
-      title,
-      body: previewText(preview),
-      partnerId: conversation.partnerId,
-      entityType: "messenger_conversation",
-      entityId: conversation.id,
-      actionUrl: `/company/messenger?c=${conversation.id}`,
-      excludeUserId: actor.sub
-    });
-  }
-
-  private async notifyNewRequest(
-    actor: Actor,
-    conversation: typeof messengerConversations.$inferSelect,
-    preview: string
-  ) {
-    const title = `Новый запрос ${conversation.requestNumber}`;
-    if (isCompany(actor) && conversation.partnerId) {
-      await notificationService.notifyPartnerUsers(conversation.partnerId, {
-        type: "messenger.request",
-        title,
-        body: previewText(preview),
-        entityType: "messenger_conversation",
-        entityId: conversation.id,
-        actionUrl: `/partner/messenger?c=${conversation.id}`,
-        excludeUserId: actor.sub
-      });
-      return;
-    }
-
-    await notificationService.notifyCompanyUsers({
-      type: "messenger.request",
-      title,
-      body: previewText(preview),
-      partnerId: conversation.partnerId,
-      entityType: "messenger_conversation",
-      entityId: conversation.id,
-      actionUrl: `/company/messenger?c=${conversation.id}`,
-      excludeUserId: actor.sub
     });
   }
 }

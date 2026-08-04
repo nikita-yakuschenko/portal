@@ -53,7 +53,6 @@ import {
   AttachmentTitle
 } from "@/components/ui/attachment";
 import { apiFetch } from "@/lib/api";
-import { emitPortalEvent, PORTAL_EVENT } from "@/lib/portal-events";
 import { cn } from "@/lib/utils";
 
 export type MessengerAudience = "company" | "partner";
@@ -262,25 +261,16 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     void loadMessages(activeId);
   }, [activeId, loadMessages]);
 
-  const conversationsRef = useRef(conversations);
-  conversationsRef.current = conversations;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
 
-  // Живое обновление: список + активный тред + колокольчик
+  // Живое обновление: список + активный тред
   useEffect(() => {
     const tick = () => {
       void (async () => {
-        const prevById = new Map(conversationsRef.current.map((c) => [c.id, c]));
-        const rows = await loadList();
-        const grew = rows.some((row) => {
-          const prev = prevById.get(row.id);
-          return (
-            !prev ||
-            (row.lastMessageAt && row.lastMessageAt !== prev.lastMessageAt) ||
-            (row.unreadCount ?? 0) > (prev.unreadCount ?? 0)
-          );
-        });
-        if (grew) emitPortalEvent(PORTAL_EVENT.messengerActivity);
-        if (activeId) await loadMessages(activeId, true);
+        await loadList();
+        const id = activeIdRef.current;
+        if (id) await loadMessages(id, true);
       })();
     };
     const timer = window.setInterval(tick, 2500);
@@ -290,7 +280,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
     };
-  }, [activeId, loadList, loadMessages]);
+  }, [loadList, loadMessages]);
 
   async function sendMessage() {
     if (!activeId || !canWrite) return;
@@ -304,7 +294,6 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       );
       setMessages((prev) => [...prev, created]);
       setDraft("");
-      emitPortalEvent(PORTAL_EVENT.notificationsRefresh);
       void loadList();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось отправить");
@@ -330,7 +319,6 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
           ? `Запрос ${created.requestNumber} создан`
           : "Запрос создан"
       );
-      emitPortalEvent(PORTAL_EVENT.notificationsRefresh);
       setTab("request");
       setActiveId(created.id);
       await loadList();

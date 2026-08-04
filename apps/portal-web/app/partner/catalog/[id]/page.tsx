@@ -48,7 +48,6 @@ import {
   technologyLabel
 } from "@/lib/catalog-display";
 import { formatRub } from "@/lib/partner-pricing";
-import { emitPortalEvent, PORTAL_EVENT } from "@/lib/portal-events";
 import { floorPlanLabel } from "@/lib/floor-plan";
 import { cn } from "@/lib/utils";
 import { PartnerProjectPricingPanel } from "@/components/partner-project-pricing-panel";
@@ -278,7 +277,6 @@ export default function PartnerCatalogProjectPage() {
       );
       setForm((prev) => ({ ...prev, message: "" }));
       setInquiryOpen(false);
-      emitPortalEvent(PORTAL_EVENT.notificationsRefresh);
       toast.success(
         created.requestNumber
           ? `Запрос ${created.requestNumber} создан`
