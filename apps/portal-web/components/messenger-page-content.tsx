@@ -185,7 +185,7 @@ function TypingDots() {
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          className="bg-muted-foreground/80 size-1 animate-bounce rounded-full"
+          className="bg-primary size-1 animate-bounce rounded-full"
           style={{ animationDelay: `${i * 120}ms` }}
         />
       ))}
@@ -544,15 +544,19 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
 
   const searchFiltered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return filtered;
-    return filtered.filter((item) =>
+    // Поиск индексирует все типы; без запроса — только активный таб
+    const pool = needle ? conversations : filtered;
+    if (!needle) return pool;
+    return pool.filter((item) =>
       [item.title, item.requestNumber, item.partnerName, item.projectName, item.lastMessagePreview]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
         .includes(needle)
     );
-  }, [filtered, q]);
+  }, [conversations, filtered, q]);
+
+  const isGlobalSearch = q.trim().length > 0;
 
   const unreadByTab = useMemo(() => {
     const counts: Record<TabKey, number> = { dm: 0, request: 0, channel: 0 };
@@ -570,16 +574,15 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
         <div className="flex min-h-0 flex-col border-b md:border-r md:border-b-0">
           <div className="flex flex-col gap-3 border-b p-4">
             <div className="flex items-center gap-2">
-              <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="min-w-0 flex-1">
-                <TabsList className="grid w-full grid-cols-3">
-                  {(Object.keys(TAB_LABELS) as TabKey[]).map((key) => (
-                    <TabsTrigger key={key} value={key} className="gap-1.5 text-xs sm:text-sm">
-                      {TAB_LABELS[key]}
-                      <UnreadBadge count={unreadByTab[key]} />
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
+              <div className="relative min-w-0 flex-1">
+                <IconSearch className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Поиск по чатам, запросам и каналам…"
+                  className="pl-8"
+                />
+              </div>
               {!isCompany ? (
                 <Button type="button" size="sm" variant="outline" onClick={() => setRequestOpen(true)}>
                   <IconPlus className="size-4" />
@@ -587,15 +590,16 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                 </Button>
               ) : null}
             </div>
-            <div className="relative">
-              <IconSearch className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Поиск…"
-                className="pl-8"
-              />
-            </div>
+            <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
+              <TabsList className="grid w-full grid-cols-3">
+                {(Object.keys(TAB_LABELS) as TabKey[]).map((key) => (
+                  <TabsTrigger key={key} value={key} className="gap-1.5 text-xs sm:text-sm">
+                    {TAB_LABELS[key]}
+                    <UnreadBadge count={unreadByTab[key]} />
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -628,6 +632,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                       <button
                         type="button"
                         onClick={() => {
+                          setTab(item.type);
                           setActiveId(item.id);
                           window.history.replaceState(null, "", `${basePath}?c=${item.id}`);
                         }}
@@ -653,6 +658,11 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          {isGlobalSearch ? (
+                            <Badge variant="outline" className="text-[10px]">
+                              {TAB_LABELS[item.type]}
+                            </Badge>
+                          ) : null}
                           {item.type === "request" && item.status ? (
                             <Badge variant="secondary" className="text-[10px]">
                               {STATUS_LABELS[item.status] ?? item.status}
@@ -703,27 +713,34 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                   <h3 className="truncate font-semibold">
                     {active ? conversationTitle(active, audience) : "…"}
                   </h3>
-                  <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
-                    {active?.type === "request" && active.projectId ? (
-                      <Link
-                        href={
-                          isCompany
-                            ? `/company/catalog/${active.projectId}`
-                            : `/partner/catalog/${active.projectId}`
-                        }
-                        className="hover:text-foreground underline-offset-2 hover:underline"
-                      >
-                        {active.projectName || "Проект"}
-                      </Link>
-                    ) : null}
-                    {active?.type === "request" && active.status ? (
-                      <Badge variant="outline">{STATUS_LABELS[active.status]}</Badge>
-                    ) : null}
-                    {active?.type === "channel" ? (
-                      <span>Только чтение для дилеров</span>
-                    ) : null}
-                    {archiveMode ? <Badge variant="secondary">Архив</Badge> : null}
-                  </div>
+                  {typers.length > 0 ? (
+                    <p className="text-primary flex min-h-4 items-center gap-1.5 text-xs font-medium">
+                      <TypingDots />
+                      <span className="truncate">{typingLabel(typers)}…</span>
+                    </p>
+                  ) : (
+                    <div className="text-muted-foreground flex min-h-4 flex-wrap items-center gap-2 text-xs">
+                      {active?.type === "request" && active.projectId ? (
+                        <Link
+                          href={
+                            isCompany
+                              ? `/company/catalog/${active.projectId}`
+                              : `/partner/catalog/${active.projectId}`
+                          }
+                          className="hover:text-foreground underline-offset-2 hover:underline"
+                        >
+                          {active.projectName || "Проект"}
+                        </Link>
+                      ) : null}
+                      {active?.type === "request" && active.status ? (
+                        <Badge variant="outline">{STATUS_LABELS[active.status]}</Badge>
+                      ) : null}
+                      {active?.type === "channel" ? (
+                        <span>Только чтение для дилеров</span>
+                      ) : null}
+                      {archiveMode ? <Badge variant="secondary">Архив</Badge> : null}
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {activeId ? (
@@ -822,18 +839,9 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
               </div>
 
               {canWrite ? (
-                <div className="border-t px-3 pt-2 pb-3">
-                  <div className="text-muted-foreground mb-1.5 flex h-5 items-center gap-2 px-1 text-xs">
-                    {typers.length > 0 ? (
-                      <>
-                        <TypingDots />
-                        <span className="truncate">{typingLabel(typers)}…</span>
-                      </>
-                    ) : null}
-                  </div>
-
+                <div className="border-t px-3 py-3">
                   {pendingFiles.length > 0 ? (
-                    <div className="mb-2 flex flex-wrap gap-2 px-1">
+                    <div className="mb-2 flex flex-wrap gap-2">
                       {pendingFiles.map((file) => (
                         <div
                           key={file.id}
@@ -856,7 +864,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                     </div>
                   ) : null}
 
-                  <div className="bg-muted flex items-end gap-1 rounded-3xl p-1.5">
+                  <div className="flex items-end gap-2">
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -873,7 +881,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                         <Button
                           type="button"
                           size="icon"
-                          variant="secondary"
+                          variant="ghost"
                           className="size-9 shrink-0 rounded-full"
                           aria-label="Добавить вложение"
                           disabled={pendingFiles.length >= MAX_ATTACHMENTS}
@@ -904,7 +912,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                       onChange={(e) => onDraftChange(e.target.value)}
                       placeholder="Напишите сообщение…"
                       rows={1}
-                      className="max-h-32 min-h-9 flex-1 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
+                      className="bg-muted max-h-32 min-h-9 flex-1 resize-none rounded-2xl border-0 px-3 py-2 shadow-none focus-visible:ring-0"
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();
