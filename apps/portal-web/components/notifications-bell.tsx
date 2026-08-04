@@ -48,7 +48,7 @@ export function NotificationsBell({ listHref }: NotificationsBellProps) {
       ]);
       const seen = seenUnreadRef.current;
       if (seen !== null && countRes.count > seen) {
-        playPortalSound("notification");
+        void playPortalSound("notification");
       }
       seenUnreadRef.current = countRes.count;
       setUnread(countRes.count);

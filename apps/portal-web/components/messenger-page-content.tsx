@@ -446,7 +446,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
           const before = seenUnread.get(item.id);
           return before !== undefined && (item.unreadCount ?? 0) > before;
         });
-        if (grew) playPortalSound("message");
+        if (grew) void playPortalSound("message");
       }
       unreadSeenRef.current = new Map(list.map((item) => [item.id, item.unreadCount ?? 0]));
 
@@ -492,7 +492,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
         const hasIncoming = nextMessages.some(
           (m) => !seenIds.has(m.id) && m.authorUserId !== meIdRef.current
         );
-        if (hasIncoming) playPortalSound("message");
+        if (hasIncoming) void playPortalSound("message");
       }
       seenThreadIdRef.current = conversationId;
       seenMessageIdsRef.current = new Set(nextMessages.map((m) => m.id));

@@ -87,7 +87,7 @@ export function AppSidebar({
       // На самой странице мессенджера звук даёт мессенджер — здесь молчим
       const onMessengerPage = isMessengerHref(window.location.pathname);
       if (seen !== null && audible > seen && !onMessengerPage) {
-        playPortalSound("message");
+        void playPortalSound("message");
       }
       seenAudibleRef.current = audible;
       setMessengerUnread(count);

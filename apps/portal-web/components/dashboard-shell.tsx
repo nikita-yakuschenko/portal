@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { toast } from "sonner";
+
 import { AppSidebar, type NavigationItem } from "@/components/app-sidebar";
 import { NotificationsBell } from "@/components/notifications-bell";
 import { Separator } from "@/components/ui/separator";
@@ -10,6 +13,12 @@ import {
 } from "@/components/ui/sidebar";
 import { companyAccountMenu } from "@/lib/company-nav";
 import { partnerCabinetLabel } from "@/lib/partner-nav";
+import {
+  enablePortalSound,
+  initPortalSounds,
+  subscribePortalSound,
+  wasPortalSoundBlocked
+} from "@/lib/portal-sounds";
 
 const PARTNER_TEST_BANNER =
   "Партнёрский кабинет работает в тестовом и экспериментальном режиме · доступ к функционалу может прерываться · информация носит тестовый характер · релиз полноценного функционала запланирован на 01.09";
@@ -51,6 +60,23 @@ export function DashboardShell(props: {
   headerActions?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  // Звук готовим заранее, а о блокировке браузером говорим прямо — молча терять сигнал нельзя
+  useEffect(() => {
+    initPortalSounds();
+    let notified = false;
+    const sync = () => {
+      if (notified || !wasPortalSoundBlocked()) return;
+      notified = true;
+      toast.info("Браузер заблокировал звук уведомлений", {
+        description: "Уведомления приходят, но без сигнала. Включите звук в этой вкладке.",
+        duration: 15_000,
+        action: { label: "Включить", onClick: () => void enablePortalSound() }
+      });
+    };
+    sync();
+    return subscribePortalSound(sync);
+  }, []);
+
   const isPartnerCabinet =
     props.cabinetKind === "partner" || props.cabinetLabel === partnerCabinetLabel;
 
