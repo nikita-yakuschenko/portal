@@ -763,18 +763,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                     </Button>
                   ) : null}
 
-                  {active?.type === "request" && isCompany && !archiveMode && active.status === "closed" ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void updateStatus("open")}
-                    >
-                      Открыть снова
-                    </Button>
-                  ) : null}
-
-                  {activeId ? (
+                  {active?.type === "dm" && activeId ? (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
