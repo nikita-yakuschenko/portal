@@ -1141,17 +1141,6 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                     </Button>
                   ) : null}
 
-                  {isCompany && active?.type === "request" && active.status === "closed" ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={archiving}
-                      onClick={() => void reopenRequest()}
-                    >
-                      Открыть обращение
-                    </Button>
-                  ) : null}
-
                   {active?.type === "dm" && activeId ? (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -1412,21 +1401,23 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                   </div>
                 </div>
               ) : active?.type === "request" && active.status === "closed" ? (
-                <div className="flex min-h-[3.75rem] flex-col items-center justify-center gap-2 border-t px-3 py-2 text-center">
-                  <p className="text-muted-foreground text-sm">
-                    Обращение закрыто — писать нельзя
-                  </p>
-                  {isCompany ? (
+                isCompany ? (
+                  <div className="flex min-h-[3.75rem] items-center justify-center border-t px-3 py-2">
                     <Button
                       type="button"
                       size="sm"
+                      className="h-9 gap-1.5 rounded-full px-4 shadow-lg"
                       disabled={archiving}
                       onClick={() => void reopenRequest()}
                     >
                       Открыть обращение
                     </Button>
-                  ) : null}
-                </div>
+                  </div>
+                ) : (
+                  <div className="text-muted-foreground flex min-h-[3.75rem] items-center justify-center border-t px-3 py-2 text-center text-sm">
+                    Обращение закрыто — писать нельзя
+                  </div>
+                )
               ) : null}
             </>
           )}
