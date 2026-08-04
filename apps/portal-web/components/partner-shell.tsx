@@ -17,6 +17,8 @@ type PartnerShellProps = {
   title?: string;
   breadcrumbs?: React.ReactNode;
   headerActions?: React.ReactNode;
+  /** Мессенджер: без скролла окна кабинета */
+  lockViewport?: boolean;
   children: React.ReactNode;
 };
 
@@ -33,6 +35,7 @@ export function PartnerShell({
   title,
   breadcrumbs,
   headerActions,
+  lockViewport,
   children
 }: PartnerShellProps) {
   const [modules, setModules] = useState<PartnerModules>({ leadsEnabled: false });
@@ -89,6 +92,7 @@ export function PartnerShell({
       {...(title !== undefined ? { title } : {})}
       {...(breadcrumbs !== undefined ? { breadcrumbs } : {})}
       {...(headerActions !== undefined ? { headerActions } : {})}
+      {...(lockViewport ? { lockViewport: true } : {})}
     >
       {children}
     </DashboardShell>

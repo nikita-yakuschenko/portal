@@ -209,13 +209,14 @@ option {
   display: none;
 }
 
-/* Тонкий скролл мессенджера: 4px, без стрелок.
+/* Только для списка чатов и ленты сообщений (класс scrollbar-slim / viewport).
+   Глобальный скролл портала (html) не трогаем.
    На Windows Chromium нельзя задавать scrollbar-width вместе с ::-webkit-scrollbar —
-   иначе остаётся системный скролл со стрелками вверх/вниз. */
+   иначе остаётся системный жирный скролл со стрелками. */
 .scrollbar-slim::-webkit-scrollbar,
 [data-slot="message-scroller-viewport"]::-webkit-scrollbar {
-  width: 2px;
-  height: 2px;
+  width: 3px;
+  height: 3px;
 }
 
 .scrollbar-slim::-webkit-scrollbar-button,

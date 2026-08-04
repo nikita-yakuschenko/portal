@@ -12,6 +12,7 @@ export default function PartnerMessengerPage() {
     <PartnerShell
       currentPath="/partner/messenger"
       breadcrumbs={<MessengerSectionTitle />}
+      lockViewport
     >
       <div className="flex min-h-0 flex-1 flex-col">
         <Suspense fallback={<Skeleton className="min-h-0 w-full flex-1 rounded-xl" />}>
