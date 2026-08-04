@@ -369,6 +369,27 @@ export const messengerReads = pgTable(
   })
 );
 
+/** Архив диалога — персонально для пользователя */
+export const messengerArchives = pgTable(
+  "messenger_archives",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => messengerConversations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    conversationUserIdx: uniqueIndex("messenger_archives_conversation_user_idx").on(
+      table.conversationId,
+      table.userId
+    )
+  })
+);
+
 /** In-app inbox: адресат — user_id; бизнес-состояние (lock) живёт отдельно на partner_sites */
 export const notifications = pgTable(
   "notifications",

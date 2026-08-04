@@ -1353,7 +1353,7 @@ export async function buildApp() {
     ]);
     if (roleCheck) return roleCheck;
 
-    const query = request.query as { type?: string; q?: string };
+    const query = request.query as { type?: string; q?: string; archived?: string };
     const type =
       query.type === "dm" || query.type === "request" || query.type === "channel"
         ? query.type
@@ -1362,7 +1362,8 @@ export async function buildApp() {
     try {
       return await messengerService.listConversations(getAuthUser(request)!, {
         ...(type ? { type } : {}),
-        ...(query.q ? { q: query.q } : {})
+        ...(query.q ? { q: query.q } : {}),
+        ...(query.archived === "1" || query.archived === "true" ? { archived: true } : {})
       });
     } catch (error) {
       return reply.status(400).send({
@@ -1414,6 +1415,68 @@ export async function buildApp() {
     } catch (error) {
       return reply.status(400).send({
         message: error instanceof Error ? error.message : "Не удалось загрузить сообщения"
+      });
+    }
+  });
+
+  app.post("/api/messenger/conversations/:id/typing", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+
+    try {
+      return await messengerService.setTyping(
+        getAuthUser(request)!,
+        (request.params as { id: string }).id
+      );
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось обновить статус печати"
+      });
+    }
+  });
+
+  app.post("/api/messenger/conversations/:id/archive", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+
+    const body = (request.body ?? {}) as { archived?: boolean };
+    try {
+      return await messengerService.setArchive(
+        getAuthUser(request)!,
+        (request.params as { id: string }).id,
+        body.archived !== false
+      );
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось изменить архив"
+      });
+    }
+  });
+
+  app.get("/api/messenger/archive-count", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+    try {
+      const count = await messengerService.archiveCount(getAuthUser(request)!);
+      return { count };
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось получить архив"
       });
     }
   });

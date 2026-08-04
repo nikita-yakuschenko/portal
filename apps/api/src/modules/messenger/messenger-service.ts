@@ -8,6 +8,7 @@ import { db } from "../../db/client.js";
 import {
   catalogProjects,
   messengerAttachments,
+  messengerArchives,
   messengerConversations,
   messengerMessages,
   messengerReads,
@@ -17,7 +18,14 @@ import {
 
 const NEWS_CHANNEL_TITLE = "Новости и анонсы";
 const UPLOAD_ROOT = path.resolve(process.cwd(), "uploads", "messenger");
-const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_ATTACHMENTS_PER_MESSAGE = 10;
+const TYPING_TTL_MS = 4000;
+
+type TypingEntry = { userId: string; fullName: string; until: number };
+
+/** Эфемерный presence «печатает» (без WS) */
+const typingByConversation = new Map<string, Map<string, TypingEntry>>();
 
 type Actor = {
   sub: string;
@@ -160,11 +168,17 @@ export class MessengerService {
 
   async listConversations(
     actor: Actor,
-    filters?: { type?: "dm" | "request" | "channel"; q?: string }
+    filters?: { type?: "dm" | "request" | "channel"; q?: string; archived?: boolean }
   ) {
     if (actor.partnerId) {
       await this.ensureDm(actor.partnerId, actor.sub);
     }
+
+    const archivedRows = await db
+      .select({ conversationId: messengerArchives.conversationId })
+      .from(messengerArchives)
+      .where(eq(messengerArchives.userId, actor.sub));
+    const archivedIds = new Set(archivedRows.map((r) => r.conversationId));
 
     const conditions = [];
     if (isCompany(actor)) {
@@ -191,13 +205,18 @@ export class MessengerService {
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(sql`coalesce(${messengerConversations.lastMessageAt}, ${messengerConversations.createdAt})`));
 
+    const wantArchived = Boolean(filters?.archived);
+    const scoped = rows.filter(({ conversation }) =>
+      wantArchived ? archivedIds.has(conversation.id) : !archivedIds.has(conversation.id)
+    );
+
     const reads = await db
       .select()
       .from(messengerReads)
       .where(eq(messengerReads.userId, actor.sub));
     const readMap = new Map(reads.map((r) => [r.conversationId, r.lastReadAt]));
 
-    const conversationIds = rows.map((r) => r.conversation.id);
+    const conversationIds = scoped.map((r) => r.conversation.id);
     const unreadCountMap = new Map<string, number>();
     const previewMap = new Map<string, string | null>();
 
@@ -249,7 +268,7 @@ export class MessengerService {
     }
 
     const q = filters?.q?.trim().toLowerCase();
-    const mapped = rows.map(({ conversation, partnerName, projectName }) => {
+    const mapped = scoped.map(({ conversation, partnerName, projectName }) => {
       const preview = previewMap.get(conversation.id);
       return mapConversation(conversation, {
         partnerName,
@@ -350,7 +369,7 @@ export class MessengerService {
     const counterpartReadAt = await this.counterpartMaxReadAt(actor, conversation);
     await this.markRead(actor.sub, conversationId);
 
-    return rows
+    const messages = rows
       .map(({ message, authorName, authorRole }) => {
         const mine = message.authorUserId === actor.sub;
         let receipt: "sent" | "delivered" | "read" | null = null;
@@ -382,6 +401,48 @@ export class MessengerService {
         };
       })
       .reverse();
+
+    return {
+      messages,
+      typing: this.listTyping(conversationId, actor.sub)
+    };
+  }
+
+  async setTyping(actor: Actor, conversationId: string) {
+    const conversation = await this.requireConversation(conversationId);
+    await this.assertCanWrite(actor, conversation);
+    const bucket = typingByConversation.get(conversationId) ?? new Map<string, TypingEntry>();
+    bucket.set(actor.sub, {
+      userId: actor.sub,
+      fullName: actor.fullName,
+      until: Date.now() + TYPING_TTL_MS
+    });
+    typingByConversation.set(conversationId, bucket);
+    return { ok: true as const, typing: this.listTyping(conversationId, actor.sub) };
+  }
+
+  private listTyping(conversationId: string, excludeUserId: string) {
+    const bucket = typingByConversation.get(conversationId);
+    if (!bucket) return [] as Array<{ userId: string; fullName: string }>;
+    const now = Date.now();
+    const alive: Array<{ userId: string; fullName: string }> = [];
+    for (const [userId, entry] of bucket) {
+      if (entry.until < now) {
+        bucket.delete(userId);
+        continue;
+      }
+      if (userId === excludeUserId) continue;
+      alive.push({ userId: entry.userId, fullName: entry.fullName });
+    }
+    if (bucket.size === 0) typingByConversation.delete(conversationId);
+    return alive;
+  }
+
+  private clearTyping(userId: string, conversationId: string) {
+    const bucket = typingByConversation.get(conversationId);
+    if (!bucket) return;
+    bucket.delete(userId);
+    if (bucket.size === 0) typingByConversation.delete(conversationId);
   }
 
   /** Макс. lastReadAt у «другой стороны» диалога — для галочек прочитано */
@@ -447,6 +508,9 @@ export class MessengerService {
     if (!body && attachments.length === 0) {
       throw new Error("Пустое сообщение");
     }
+    if (attachments.length > MAX_ATTACHMENTS_PER_MESSAGE) {
+      throw new Error(`Не больше ${MAX_ATTACHMENTS_PER_MESSAGE} вложений в одном сообщении`);
+    }
 
     const messageId = randomUUID();
     const now = new Date();
@@ -470,6 +534,7 @@ export class MessengerService {
       .where(eq(messengerConversations.id, conversationId));
 
     await this.markRead(actor.sub, conversationId);
+    this.clearTyping(actor.sub, conversationId);
 
     return {
       id: messageId,
@@ -537,6 +602,60 @@ export class MessengerService {
     await this.markRead(actor.sub, conversationId);
 
     return this.getConversation(actor, conversationId);
+  }
+
+  async setArchive(actor: Actor, conversationId: string, archived: boolean) {
+    const conversation = await this.requireConversation(conversationId);
+    await this.assertCanAccess(actor, conversation);
+
+    const [existing] = await db
+      .select()
+      .from(messengerArchives)
+      .where(
+        and(
+          eq(messengerArchives.conversationId, conversationId),
+          eq(messengerArchives.userId, actor.sub)
+        )
+      )
+      .limit(1);
+
+    if (archived) {
+      if (!existing) {
+        await db.insert(messengerArchives).values({
+          id: randomUUID(),
+          conversationId,
+          userId: actor.sub,
+          archivedAt: new Date()
+        });
+      }
+    } else if (existing) {
+      await db.delete(messengerArchives).where(eq(messengerArchives.id, existing.id));
+    }
+
+    return { ok: true as const, archived };
+  }
+
+  async archiveCount(actor: Actor) {
+    if (actor.partnerId) {
+      await this.ensureDm(actor.partnerId, actor.sub);
+    }
+
+    const archivedRows = await db
+      .select({ conversationId: messengerArchives.conversationId })
+      .from(messengerArchives)
+      .where(eq(messengerArchives.userId, actor.sub));
+    if (archivedRows.length === 0) return 0;
+
+    const ids = archivedRows.map((r) => r.conversationId);
+    const visible = await db
+      .select({ id: messengerConversations.id, type: messengerConversations.type, partnerId: messengerConversations.partnerId })
+      .from(messengerConversations)
+      .where(inArray(messengerConversations.id, ids));
+
+    return visible.filter((c) => {
+      if (isCompany(actor)) return true;
+      return c.type === "channel" || c.partnerId === actor.partnerId;
+    }).length;
   }
 
   async updateRequestStatus(actor: Actor, conversationId: string, status: "open" | "in_progress" | "closed") {
@@ -609,7 +728,7 @@ export class MessengerService {
     const raw = Buffer.from(file.dataBase64.replace(/^data:[^;]+;base64,/, ""), "base64");
     if (raw.byteLength === 0) throw new Error("Пустой файл");
     if (raw.byteLength > MAX_ATTACHMENT_BYTES) {
-      throw new Error("Файл больше 8 МБ");
+      throw new Error("Файл больше 10 МБ");
     }
 
     const safeName = file.fileName.replace(/[^\w.\-а-яА-ЯёЁ ]+/gi, "_").slice(0, 120) || "file";
