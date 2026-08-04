@@ -841,22 +841,14 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       >
         <div className="flex min-h-0 flex-col border-b md:border-r md:border-b-0">
           <div className="flex flex-col gap-3 border-b p-4">
-            <div className="flex items-center gap-2">
-              <div className="relative min-w-0 flex-1">
-                <IconSearch className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-                <Input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Поиск по чатам, запросам и каналам…"
-                  className="pl-8"
-                />
-              </div>
-              {!isCompany ? (
-                <Button type="button" size="sm" variant="outline" onClick={() => setRequestOpen(true)}>
-                  <IconPlus className="size-4" />
-                  <span className="hidden sm:inline">Запрос</span>
-                </Button>
-              ) : null}
+            <div className="relative min-w-0">
+              <IconSearch className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Поиск по чатам, запросам и каналам…"
+                className="pl-8"
+              />
             </div>
             <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
               <TabsList className="grid w-full grid-cols-3">
@@ -895,7 +887,9 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
               <ul
                 className={cn(
                   "divide-y",
-                  isCompany && tab === "channel" && !archiveMode && "pb-16"
+                  ((isCompany && tab === "channel") || (!isCompany && tab === "request")) &&
+                    !archiveMode &&
+                    "pb-16"
                 )}
               >
                 {searchFiltered.map((item) => {
@@ -1028,6 +1022,20 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                 >
                   <IconPlus className="size-4" />
                   Создать канал
+                </Button>
+              </div>
+            ) : null}
+
+            {!isCompany && tab === "request" && !archiveMode ? (
+              <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center px-4">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="pointer-events-auto h-9 gap-1.5 rounded-full px-4 shadow-lg"
+                  onClick={() => setRequestOpen(true)}
+                >
+                  <IconPlus className="size-4" />
+                  Создать запрос
                 </Button>
               </div>
             ) : null}
