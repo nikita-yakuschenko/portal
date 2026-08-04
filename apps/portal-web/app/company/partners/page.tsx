@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { IconChevronRight, IconUsers } from "@tabler/icons-react";
 import { toast } from "sonner";
 
+import { CompanyPartnerApplicationsPanel } from "@/components/company-partner-applications-panel";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { PageAlert } from "@/components/page-alert";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +38,7 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiFetch } from "@/lib/api";
 import { companyCabinetLabel, companyNavigation } from "@/lib/company-nav";
 
@@ -64,7 +67,21 @@ const partnerStatusLabels: Record<string, string> = {
   suspended: "Приостановлен"
 };
 
-export default function CompanyPartnersPage() {
+const TABS = ["partners", "applications"] as const;
+type Tab = (typeof TABS)[number];
+
+function parseTab(value: string | null): Tab {
+  if (value && (TABS as readonly string[]).includes(value)) {
+    return value as Tab;
+  }
+  return "partners";
+}
+
+function CompanyPartnersContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab = parseTab(searchParams.get("tab"));
+
   const [partners, setPartners] = useState<Partner[]>([]);
   const [sites, setSites] = useState<SiteRow[]>([]);
   const [error, setError] = useState("");
@@ -113,6 +130,12 @@ export default function CompanyPartnersPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  function setTab(next: string) {
+    const value = parseTab(next);
+    const qs = value === "partners" ? "" : `?tab=${value}`;
+    router.replace(`/company/partners${qs}`);
+  }
 
   async function handleCreate() {
     if (!createForm.email.trim() || !createForm.companyName.trim()) {
@@ -174,107 +197,135 @@ export default function CompanyPartnersPage() {
 
   return (
     <DashboardShell
+      cabinetKind="company"
       cabinetLabel={companyCabinetLabel}
       currentPath="/company/partners"
       navigation={companyNavigation}
+      title="Партнёры"
     >
       <PageAlert message={error} variant="destructive" />
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
-          <CardTitle>Список партнёров</CardTitle>
-          <Button type="button" onClick={() => setCreateOpen(true)}>
-            Создать партнёра
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-3">
-              {[0, 1, 2].map((row) => (
-                <Skeleton key={row} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : partners.length === 0 ? (
-            <Empty className="border">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <IconUsers />
-                </EmptyMedia>
-                <EmptyTitle>Партнёров пока нет</EmptyTitle>
-                <EmptyDescription>
-                  Создайте партнёра вручную или одобрите заявку в разделе «Заявки».
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Компания</TableHead>
-                    <TableHead>Регион</TableHead>
-                    <TableHead>Статус</TableHead>
-                    <TableHead>Сайт</TableHead>
-                    <TableHead>Подключён</TableHead>
-                    <TableHead className="w-[1%]" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {partners.map((partner) => {
-                    const site = siteByPartner.get(partner.id);
-                    return (
-                      <TableRow key={partner.id} className="group">
-                        <TableCell>
-                          <Link
-                            href={`/company/partners/${partner.id}`}
-                            className="font-medium underline-offset-4 hover:underline"
-                          >
-                            {partner.companyName}
-                          </Link>
-                          <div className="text-muted-foreground text-xs">{partner.email}</div>
-                        </TableCell>
-                        <TableCell>{partner.region}</TableCell>
-                        <TableCell>
-                          <Badge variant={partner.status === "active" ? "default" : "secondary"}>
-                            {partnerStatusLabels[partner.status] ?? partner.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {!site ? (
-                            <span className="text-muted-foreground text-sm">—</span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1">
-                              <Badge variant={site.status === "published" ? "default" : "secondary"}>
-                                {site.status === "published" ? "Опубликован" : "Черновик"}
-                              </Badge>
-                              {site.publishLocked ? (
-                                <Badge variant="destructive">Заблок.</Badge>
-                              ) : null}
-                              {site.republishRequestStatus === "pending" ? (
-                                <Badge variant="outline">Запрос</Badge>
-                              ) : null}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {new Date(partner.createdAt).toLocaleDateString("ru-RU")}
-                        </TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="icon-sm" asChild title="Открыть карточку">
-                            <Link href={`/company/partners/${partner.id}`}>
-                              <IconChevronRight />
-                            </Link>
-                          </Button>
-                        </TableCell>
+      <Tabs value={tab} onValueChange={setTab} className="gap-4">
+        <TabsList>
+          <TabsTrigger value="partners">Партнёры</TabsTrigger>
+          <TabsTrigger value="applications">Заявки на подключение</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="partners" className="mt-0">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+              <CardTitle>Список партнёров</CardTitle>
+              <Button type="button" onClick={() => setCreateOpen(true)}>
+                Создать партнёра
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="space-y-3">
+                  {[0, 1, 2].map((row) => (
+                    <Skeleton key={row} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : partners.length === 0 ? (
+                <Empty className="border">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <IconUsers />
+                    </EmptyMedia>
+                    <EmptyTitle>Партнёров пока нет</EmptyTitle>
+                    <EmptyDescription>
+                      Создайте партнёра вручную или одобрите заявку во вкладке «Заявки на
+                      подключение».
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Компания</TableHead>
+                        <TableHead>Регион</TableHead>
+                        <TableHead>Статус</TableHead>
+                        <TableHead>Сайт</TableHead>
+                        <TableHead>Подключён</TableHead>
+                        <TableHead className="w-[1%]" />
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                    </TableHeader>
+                    <TableBody>
+                      {partners.map((partner) => {
+                        const site = siteByPartner.get(partner.id);
+                        return (
+                          <TableRow key={partner.id} className="group">
+                            <TableCell>
+                              <Link
+                                href={`/company/partners/${partner.id}`}
+                                className="font-medium underline-offset-4 hover:underline"
+                              >
+                                {partner.companyName}
+                              </Link>
+                              <div className="text-muted-foreground text-xs">{partner.email}</div>
+                            </TableCell>
+                            <TableCell>{partner.region}</TableCell>
+                            <TableCell>
+                              <Badge variant={partner.status === "active" ? "default" : "secondary"}>
+                                {partnerStatusLabels[partner.status] ?? partner.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {!site ? (
+                                <span className="text-muted-foreground text-sm">—</span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1">
+                                  <Badge
+                                    variant={site.status === "published" ? "default" : "secondary"}
+                                  >
+                                    {site.status === "published" ? "Опубликован" : "Черновик"}
+                                  </Badge>
+                                  {site.publishLocked ? (
+                                    <Badge variant="destructive">Заблок.</Badge>
+                                  ) : null}
+                                  {site.republishRequestStatus === "pending" ? (
+                                    <Badge variant="outline">Запрос</Badge>
+                                  ) : null}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground whitespace-nowrap">
+                              {new Date(partner.createdAt).toLocaleDateString("ru-RU")}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                asChild
+                                title="Открыть карточку"
+                              >
+                                <Link href={`/company/partners/${partner.id}`}>
+                                  <IconChevronRight />
+                                </Link>
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="applications" className="mt-0">
+          <CompanyPartnerApplicationsPanel
+            onChanged={() => {
+              setLoading(true);
+              void load();
+            }}
+          />
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={createOpen} onOpenChange={(open) => !saving && setCreateOpen(open)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
@@ -377,5 +428,26 @@ export default function CompanyPartnersPage() {
         </DialogContent>
       </Dialog>
     </DashboardShell>
+  );
+}
+
+export default function CompanyPartnersPage() {
+  return (
+    <Suspense
+      fallback={
+        <DashboardShell
+          cabinetKind="company"
+          cabinetLabel={companyCabinetLabel}
+          currentPath="/company/partners"
+          navigation={companyNavigation}
+          title="Партнёры"
+        >
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="mt-4 h-64 w-full" />
+        </DashboardShell>
+      }
+    >
+      <CompanyPartnersContent />
+    </Suspense>
   );
 }
