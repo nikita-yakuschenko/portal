@@ -58,8 +58,6 @@ export function DashboardShell(props: {
   breadcrumbs?: React.ReactNode;
   /** Контент справа в верхнем хедере */
   headerActions?: React.ReactNode;
-  /** Мессенджер и т.п.: окно не скроллится, скролл только внутри секций */
-  lockViewport?: boolean;
   children: React.ReactNode;
 }) {
   // Звук готовим заранее, а о блокировке браузером говорим прямо — молча терять сигнал нельзя
@@ -106,8 +104,7 @@ export function DashboardShell(props: {
     : undefined;
 
   return (
-    // Высота кабинета фиксирована по вьюпорту: скроллится контент, а не страница
-    <SidebarProvider className="h-svh overflow-hidden">
+    <SidebarProvider>
       <AppSidebar
         variant="inset"
         cabinetLabel={props.cabinetLabel}
@@ -144,12 +141,7 @@ export function DashboardShell(props: {
           </div>
         </header>
 
-        <div
-          className={[
-            "flex min-h-0 flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6",
-            props.lockViewport ? "overflow-hidden" : "overflow-y-auto"
-          ].join(" ")}
-        >
+        <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
           {props.children}
         </div>
       </SidebarInset>

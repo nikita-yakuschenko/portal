@@ -622,7 +622,7 @@ export default function PartnerCatalogProjectPage() {
             </Tabs>
           </div>
 
-          <aside className="min-w-0 xl:sticky xl:top-6 xl:self-start">
+          <aside className="min-w-0 xl:sticky xl:top-20 xl:self-start">
             <Card className="gap-0 overflow-hidden py-0">
               <div className="bg-muted relative aspect-[16/9] w-full overflow-hidden">
                 {activeAsset ? (
