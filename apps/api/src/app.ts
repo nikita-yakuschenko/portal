@@ -164,7 +164,12 @@ function getAuthUser(request: { user?: unknown }): JwtPayload | null {
 }
 
 export async function buildApp() {
-  const app = Fastify({ logger: true });
+  // Временно: вложения мессенджера уходят base64 в JSON (до S3).
+  // 10 × 10 МБ × ~4/3 + запас на JSON.
+  const app = Fastify({
+    logger: true,
+    bodyLimit: 150 * 1024 * 1024
+  });
   const portalService = new PortalService(new StoreTildaClient());
 
   await app.register(cors, {
@@ -1540,7 +1545,12 @@ export async function buildApp() {
   });
 
   app.patch("/api/messenger/requests/:id", async (request, reply) => {
-    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
     if (roleCheck) return roleCheck;
 
     const parsed = messengerUpdateRequestSchema.safeParse(request.body);

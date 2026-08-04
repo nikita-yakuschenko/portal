@@ -659,12 +659,19 @@ export class MessengerService {
   }
 
   async updateRequestStatus(actor: Actor, conversationId: string, status: "open" | "in_progress" | "closed") {
-    if (!isCompany(actor)) {
-      throw new Error("Статус запроса меняет завод");
-    }
     const conversation = await this.requireConversation(conversationId);
+    await this.assertCanAccess(actor, conversation);
     if (conversation.type !== "request") {
       throw new Error("Это не запрос");
+    }
+
+    if (!isCompany(actor)) {
+      if (status !== "closed") {
+        throw new Error("Дилер может только закрыть обращение");
+      }
+      if (conversation.partnerId !== actor.partnerId) {
+        throw new Error("Forbidden");
+      }
     }
 
     await db

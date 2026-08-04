@@ -9,6 +9,7 @@ import {
   IconArrowUp,
   IconCheck,
   IconChecks,
+  IconDotsVertical,
   IconFile,
   IconHash,
   IconMessage,
@@ -529,17 +530,22 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   }
 
   async function updateStatus(status: "open" | "in_progress" | "closed") {
-    if (!active || active.type !== "request" || !isCompany) return;
+    if (!active || active.type !== "request" || !activeId) return;
     try {
       const updated = await apiFetch<Conversation>(`/api/messenger/requests/${active.id}`, {
         method: "PATCH",
         body: JSON.stringify({ status })
       });
       setConversations((prev) => prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)));
-      toast.success("Статус обновлён");
+      toast.success(status === "closed" ? "Обращение закрыто" : "Статус обновлён");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось обновить статус");
     }
+  }
+
+  async function closeRequest() {
+    if (!active || active.type !== "request" || active.status === "closed") return;
+    await updateStatus("closed");
   }
 
   const searchFiltered = useMemo(() => {
@@ -685,11 +691,11 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
             )}
           </div>
 
-          <div className="border-t p-2">
+          <div className="flex min-h-[3.75rem] items-center border-t px-3 py-2">
             <Button
               type="button"
               variant={archiveMode ? "secondary" : "ghost"}
-              className="w-full justify-start gap-2"
+              className="h-9 w-full justify-start gap-2"
               onClick={() => setArchiveMode((v) => !v)}
             >
               {archiveMode ? <IconArrowLeft className="size-4" /> : <IconArchive className="size-4" />}
@@ -742,36 +748,54 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                     </div>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-1">
-                  {activeId ? (
+                <div className="flex flex-wrap items-center gap-1">
+                  {active?.type === "request" && !archiveMode && active.status !== "closed" ? (
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
                       disabled={archiving}
-                      onClick={() => void toggleArchive(activeId, !archiveMode)}
+                      onClick={() => void closeRequest()}
                     >
-                      <IconArchive className="size-4" />
-                      {archiveMode ? "Вернуть" : "В архив"}
+                      Закрыть обращение
                     </Button>
                   ) : null}
-                  {isCompany && active?.type === "request" ? (
-                    <>
-                      <Button type="button" size="sm" variant="outline" onClick={() => void updateStatus("open")}>
-                        Открыт
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void updateStatus("in_progress")}
-                      >
-                        В работе
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => void updateStatus("closed")}>
-                        Закрыт
-                      </Button>
-                    </>
+
+                  {active?.type === "request" && isCompany && !archiveMode && active.status === "closed" ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void updateStatus("open")}
+                    >
+                      Открыть снова
+                    </Button>
+                  ) : null}
+
+                  {activeId ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="size-8"
+                          aria-label="Действия"
+                          disabled={archiving}
+                        >
+                          <IconDotsVertical className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem
+                          className="gap-2"
+                          onSelect={() => void toggleArchive(activeId, !archiveMode)}
+                        >
+                          <IconArchive className="size-4" />
+                          {archiveMode ? "Вернуть из архива" : "В архив"}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   ) : null}
                 </div>
               </div>
@@ -839,7 +863,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
               </div>
 
               {canWrite ? (
-                <div className="border-t px-3 py-3">
+                <div className="flex min-h-[3.75rem] flex-col justify-center border-t px-3 py-2">
                   {pendingFiles.length > 0 ? (
                     <div className="mb-2 flex flex-wrap gap-2">
                       {pendingFiles.map((file) => (
@@ -864,7 +888,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                     </div>
                   ) : null}
 
-                  <div className="flex items-end gap-2">
+                  <div className="flex min-h-9 items-end gap-2">
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -933,7 +957,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                   </div>
                 </div>
               ) : (
-                <div className="text-muted-foreground border-t px-4 py-3 text-center text-sm">
+                <div className="text-muted-foreground flex min-h-[3.75rem] items-center justify-center border-t px-3 py-2 text-center text-sm">
                   Канал только для чтения
                 </div>
               )}
