@@ -783,7 +783,7 @@ export default function PartnerCatalogPage() {
           )}
         </div>
 
-        <aside className="relative w-full shrink-0 space-y-3 pt-6 lg:sticky lg:top-20 lg:w-72">
+        <aside className="relative w-full shrink-0 space-y-3 pt-6 lg:sticky lg:top-6 lg:w-72">
           <button
             type="button"
             onClick={resetFilters}

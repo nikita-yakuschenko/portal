@@ -78,7 +78,8 @@ export function DashboardShell(props: {
     : undefined;
 
   return (
-    <SidebarProvider>
+    // Высота кабинета фиксирована по вьюпорту: скроллится контент, а не страница
+    <SidebarProvider className="h-svh overflow-hidden">
       <AppSidebar
         variant="inset"
         cabinetLabel={props.cabinetLabel}
@@ -115,7 +116,7 @@ export function DashboardShell(props: {
           </div>
         </header>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:gap-6 md:p-6">
           {props.children}
         </div>
       </SidebarInset>
