@@ -441,13 +441,16 @@ export class MessengerService {
 
     return {
       messages,
-      typing: this.listTyping(conversationId, actor.sub)
+      typing: conversation.type === "channel" ? [] : this.listTyping(conversationId, actor.sub)
     };
   }
 
   async setTyping(actor: Actor, conversationId: string) {
     const conversation = await this.requireConversation(conversationId);
     await this.assertCanWrite(actor, conversation);
+    if (conversation.type === "channel") {
+      return { ok: true as const, typing: [] as Array<{ userId: string; fullName: string }> };
+    }
     const bucket = typingByConversation.get(conversationId) ?? new Map<string, TypingEntry>();
     bucket.set(actor.sub, {
       userId: actor.sub,
@@ -629,6 +632,43 @@ export class MessengerService {
       .where(eq(messengerConversations.id, message.conversationId));
 
     return { ok: true as const, conversationId: message.conversationId };
+  }
+
+  async createChannel(actor: Actor, input: { title: string }) {
+    if (!isCompany(actor)) {
+      throw new Error("Каналы создаёт завод");
+    }
+
+    const title = input.title.trim().replace(/\s+/g, " ");
+    if (title.length < 2) {
+      throw new Error("Укажите название канала");
+    }
+
+    const [existing] = await db
+      .select({ id: messengerConversations.id })
+      .from(messengerConversations)
+      .where(and(eq(messengerConversations.type, "channel"), eq(messengerConversations.title, title)))
+      .limit(1);
+    if (existing) {
+      throw new Error("Канал с таким названием уже есть");
+    }
+
+    const conversationId = randomUUID();
+    const now = new Date();
+    await db.insert(messengerConversations).values({
+      id: conversationId,
+      type: "channel",
+      partnerId: null,
+      title,
+      requestNumber: null,
+      projectId: null,
+      status: null,
+      createdByUserId: actor.sub,
+      lastMessageAt: null,
+      createdAt: now
+    });
+
+    return this.getConversation(actor, conversationId);
   }
 
   async createRequest(

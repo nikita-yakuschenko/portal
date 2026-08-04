@@ -286,6 +286,9 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestForm, setRequestForm] = useState({ title: "", body: "" });
   const [creatingRequest, setCreatingRequest] = useState(false);
+  const [channelOpen, setChannelOpen] = useState(false);
+  const [channelTitle, setChannelTitle] = useState("");
+  const [creatingChannel, setCreatingChannel] = useState(false);
   const [archiveMode, setArchiveMode] = useState(false);
   const [archiveCount, setArchiveCount] = useState(0);
   const [archiving, setArchiving] = useState(false);
@@ -334,7 +337,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   }
 
   useEffect(() => {
-    if (!activeId || requestOpen) return;
+    if (!activeId || requestOpen || channelOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       const target = event.target as HTMLElement | null;
@@ -352,7 +355,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     return () => window.removeEventListener("keydown", onKeyDown);
     // closeConversation замыкает актуальный tab
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId, requestOpen, tab]);
+  }, [activeId, requestOpen, channelOpen, tab]);
 
   const loadList = useCallback(async () => {
     try {
@@ -479,7 +482,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   }
 
   function pulseTyping() {
-    if (!activeId || !canWrite) return;
+    if (!activeId || !canWrite || active?.type === "channel") return;
     const now = Date.now();
     if (now - lastTypingSentRef.current < 1500) return;
     lastTypingSentRef.current = now;
@@ -672,6 +675,25 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       toast.error(err instanceof Error ? err.message : "Не удалось создать запрос");
     } finally {
       setCreatingRequest(false);
+    }
+  }
+
+  async function createChannel() {
+    setCreatingChannel(true);
+    try {
+      const created = await apiFetch<Conversation>("/api/messenger/channels", {
+        method: "POST",
+        body: JSON.stringify({ title: channelTitle.trim() })
+      });
+      setChannelOpen(false);
+      setChannelTitle("");
+      toast.success("Канал создан");
+      openConversation(created.id, "channel");
+      await loadList();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось создать канал");
+    } finally {
+      setCreatingChannel(false);
     }
   }
 
@@ -896,19 +918,34 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
             )}
           </div>
 
-          <div className="flex min-h-[3.75rem] items-center border-t px-3 py-2">
-            <Button
-              type="button"
-              variant={archiveMode ? "secondary" : "ghost"}
-              className="h-9 w-full justify-start gap-2"
-              onClick={() => setArchiveMode((v) => !v)}
-            >
-              {archiveMode ? <IconArrowLeft className="size-4" /> : <IconArchive className="size-4" />}
-              {archiveMode ? "К чатам" : "Архив"}
-              {!archiveMode && archiveCount > 0 ? (
-                <span className="text-muted-foreground ml-auto text-xs tabular-nums">{archiveCount}</span>
-              ) : null}
-            </Button>
+          <div className="border-t">
+            {isCompany && tab === "channel" && !archiveMode ? (
+              <div className="px-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 w-full justify-start gap-2"
+                  onClick={() => setChannelOpen(true)}
+                >
+                  <IconPlus className="size-4" />
+                  Создать канал
+                </Button>
+              </div>
+            ) : null}
+            <div className="flex min-h-[3.75rem] items-center px-3 py-2">
+              <Button
+                type="button"
+                variant={archiveMode ? "secondary" : "ghost"}
+                className="h-9 w-full justify-start gap-2"
+                onClick={() => setArchiveMode((v) => !v)}
+              >
+                {archiveMode ? <IconArrowLeft className="size-4" /> : <IconArchive className="size-4" />}
+                {archiveMode ? "К чатам" : "Архив"}
+                {!archiveMode && archiveCount > 0 ? (
+                  <span className="text-muted-foreground ml-auto text-xs tabular-nums">{archiveCount}</span>
+                ) : null}
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -924,7 +961,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                   <h3 className="truncate font-semibold">
                     {active ? conversationTitle(active, audience) : "…"}
                   </h3>
-                  {typers.length > 0 ? (
+                  {active?.type !== "channel" && typers.length > 0 ? (
                     <p className="text-primary flex min-h-4 items-center gap-1.5 text-xs font-medium">
                       <TypingDots />
                       <span className="truncate">{typingLabel(typers)}</span>
@@ -945,9 +982,6 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                       ) : null}
                       {active?.type === "request" && active.status ? (
                         <Badge variant="outline">{STATUS_LABELS[active.status]}</Badge>
-                      ) : null}
-                      {active?.type === "channel" ? (
-                        <span>Только чтение для дилеров</span>
                       ) : null}
                       {archiveMode ? <Badge variant="secondary">Архив</Badge> : null}
                     </div>
@@ -1031,7 +1065,9 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                                       className={cn(dissolving && "animate-message-sand")}
                                     >
                                       <MessageContent>
-                                        <MessageHeader>{msg.authorName}</MessageHeader>
+                                        {active?.type !== "channel" ? (
+                                          <MessageHeader>{msg.authorName}</MessageHeader>
+                                        ) : null}
                                         {hasBody ? (
                                           <Bubble variant={mine ? "default" : "secondary"}>
                                             <BubbleContent className="whitespace-pre-wrap">
@@ -1224,9 +1260,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                   </div>
                 </div>
               ) : (
-                <div className="text-muted-foreground flex min-h-[3.75rem] items-center justify-center border-t px-3 py-2 text-center text-sm">
-                  Канал только для чтения
-                </div>
+                <div className="min-h-[3.75rem] border-t" />
               )}
             </>
           )}
@@ -1266,6 +1300,40 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                 requestForm.body.trim().length < 2
               }
               onClick={() => void createRequest()}
+            >
+              Создать
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={channelOpen} onOpenChange={setChannelOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Новый канал</DialogTitle>
+            <DialogDescription>
+              Канал виден всем дилерам. Писать в него могут только сотрудники завода.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            placeholder="Название канала"
+            value={channelTitle}
+            onChange={(e) => setChannelTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && channelTitle.trim().length >= 2) {
+                e.preventDefault();
+                void createChannel();
+              }
+            }}
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setChannelOpen(false)}>
+              Отмена
+            </Button>
+            <Button
+              type="button"
+              disabled={creatingChannel || channelTitle.trim().length < 2}
+              onClick={() => void createChannel()}
             >
               Создать
             </Button>
