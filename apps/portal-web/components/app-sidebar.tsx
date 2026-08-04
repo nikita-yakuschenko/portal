@@ -28,12 +28,15 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   cabinetLabel: string;
   navigation: NavigationItem[];
   activeHref?: string | undefined;
+  /** Лого без цветного поля (кабинет завода) */
+  plainBrandMark?: boolean;
 };
 
 export function AppSidebar({
   cabinetLabel,
   navigation,
   activeHref,
+  plainBrandMark = false,
   ...props
 }: AppSidebarProps) {
   return (
@@ -43,9 +46,13 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
-                <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <img src="/logo.svg" alt="" className="size-5 brightness-0 invert" />
-                </div>
+                {plainBrandMark ? (
+                  <img src="/logo.svg" alt="" className="size-8 shrink-0" />
+                ) : (
+                  <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+                    <img src="/logo.svg" alt="" className="size-5 brightness-0 invert" />
+                  </div>
+                )}
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">Авангард Строй</span>
                   <span className="text-muted-foreground truncate text-xs">{cabinetLabel}</span>

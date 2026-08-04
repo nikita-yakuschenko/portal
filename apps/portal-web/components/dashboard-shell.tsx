@@ -64,6 +64,7 @@ export function DashboardShell(props: {
         cabinetLabel={props.cabinetLabel}
         navigation={props.navigation}
         activeHref={activeHref}
+        plainBrandMark={!isPartnerCabinet}
       />
       <SidebarInset className="min-w-0">
         {isPartnerCabinet ? <PartnerTestModeBanner /> : null}

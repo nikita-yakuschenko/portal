@@ -16,4 +16,4 @@ export const companyNavigation = [
   { title: "Уведомления", href: "/company/notifications", icon: IconBell }
 ];
 
-export const companyCabinetLabel = "Управление дилерской сетью";
+export const companyCabinetLabel = "Управление B2B-порталом";
