@@ -672,7 +672,8 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   }
 
   async function closeRequest(conversationId?: string) {
-    const id = conversationId ?? activeId;
+    const id = conversationId ?? activeId ?? undefined;
+    if (!id) return;
     const target = conversations.find((c) => c.id === id);
     if (!target || target.type !== "request" || target.status === "closed") return;
     await updateStatus("closed", id);
