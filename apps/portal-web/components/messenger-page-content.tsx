@@ -700,29 +700,33 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     }
   }
 
-  async function updateStatus(status: "open" | "in_progress" | "closed", conversationId?: string) {
-    const id = conversationId ?? activeId;
-    if (!id) return;
-    const target = conversations.find((c) => c.id === id);
-    if (!target || target.type !== "request") return;
-    try {
-      const updated = await apiFetch<Conversation>(`/api/messenger/requests/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status })
-      });
-      setConversations((prev) => prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)));
-      toast.success(status === "closed" ? "Обращение закрыто" : "Статус обновлён");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Не удалось обновить статус");
-    }
-  }
-
   async function closeRequest(conversationId?: string) {
     const id = conversationId ?? activeId ?? undefined;
     if (!id) return;
     const target = conversations.find((c) => c.id === id);
     if (!target || target.type !== "request" || target.status === "closed") return;
-    await updateStatus("closed", id);
+
+    setArchiving(true);
+    try {
+      const updated = await apiFetch<Conversation>(`/api/messenger/requests/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "closed" })
+      });
+      await apiFetch(`/api/messenger/conversations/${id}/archive`, {
+        method: "POST",
+        body: JSON.stringify({ archived: true })
+      });
+      setConversations((prev) => prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)));
+      toast.success("Обращение закрыто и отправлено в архив");
+      await loadList();
+      if (activeId === id && !archiveMode) {
+        closeConversation();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось закрыть обращение");
+    } finally {
+      setArchiving(false);
+    }
   }
 
   async function copyMessageText(text: string) {
