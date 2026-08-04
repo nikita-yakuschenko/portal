@@ -1019,7 +1019,11 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                                         ) : null}
                                         {attachments.length > 0 ? (
                                           <div
-                                            className={cn("flex flex-col gap-2", hasBody && "mt-0.5")}
+                                            data-slot="message-attachments"
+                                            className={cn(
+                                              "flex max-w-[80%] flex-col gap-2",
+                                              hasBody && "mt-0.5"
+                                            )}
                                           >
                                             {attachments.map((att) => {
                                               const image = isImageMime(att.mimeType);
