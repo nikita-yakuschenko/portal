@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { IconBell } from "@tabler/icons-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { apiFetch } from "@/lib/api";
+import { playPortalSound } from "@/lib/portal-sounds";
 import { cn } from "@/lib/utils";
 
 export type AppNotification = {
@@ -36,6 +37,8 @@ export function NotificationsBell({ listHref }: NotificationsBellProps) {
   const [items, setItems] = useState<AppNotification[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
+  // null — первая загрузка, на ней не звучим
+  const seenUnreadRef = useRef<number | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -43,6 +46,11 @@ export function NotificationsBell({ listHref }: NotificationsBellProps) {
         apiFetch<{ count: number }>("/api/notifications/unread-count"),
         apiFetch<AppNotification[]>("/api/notifications?limit=8")
       ]);
+      const seen = seenUnreadRef.current;
+      if (seen !== null && countRes.count > seen) {
+        playPortalSound("notification");
+      }
+      seenUnreadRef.current = countRes.count;
       setUnread(countRes.count);
       setItems(list);
     } catch {

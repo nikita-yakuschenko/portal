@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { TablerIcon } from "@tabler/icons-react";
 
 import { AdaptiveBrandMark } from "@/components/adaptive-brand-mark";
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { apiFetch } from "@/lib/api";
 import { PORTAL_EVENT } from "@/lib/portal-events";
+import { playPortalSound } from "@/lib/portal-sounds";
 
 export type NavigationItem = {
   title: string;
@@ -70,12 +71,22 @@ export function AppSidebar({
   const logo = brandLogoSrc?.trim() || null;
   const hasMessenger = navigation.some((item) => isMessengerHref(item.href));
   const [messengerUnread, setMessengerUnread] = useState(0);
+  // null — первая загрузка, на ней не звучим
+  const seenUnreadRef = useRef<number | null>(null);
 
   const refreshMessengerUnread = useCallback(async () => {
     if (!hasMessenger) return;
     try {
       const res = await apiFetch<{ count: number }>("/api/messenger/unread-count");
-      setMessengerUnread(res.count ?? 0);
+      const count = res.count ?? 0;
+      const seen = seenUnreadRef.current;
+      // На самой странице мессенджера звук даёт мессенджер — здесь молчим
+      const onMessengerPage = isMessengerHref(window.location.pathname);
+      if (seen !== null && count > seen && !onMessengerPage) {
+        playPortalSound("message");
+      }
+      seenUnreadRef.current = count;
+      setMessengerUnread(count);
     } catch {
       /* сессия/сеть — бейдж молчит */
     }

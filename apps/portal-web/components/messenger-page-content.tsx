@@ -7,10 +7,13 @@ import {
   IconArchive,
   IconArrowLeft,
   IconArrowUp,
+  IconBell,
+  IconBellOff,
   IconCheck,
   IconChecks,
   IconCopy,
   IconDotsVertical,
+  IconEye,
   IconFile,
   IconHash,
   IconMessage,
@@ -77,7 +80,14 @@ import {
   AttachmentTitle
 } from "@/components/ui/attachment";
 import { apiFetch } from "@/lib/api";
+import { setMessengerArchiveMode } from "@/lib/messenger-view";
 import { emitPortalEvent, PORTAL_EVENT } from "@/lib/portal-events";
+import {
+  isPortalSoundMuted,
+  playPortalSound,
+  PORTAL_SOUND_MUTED_CHANGED,
+  setPortalSoundMuted
+} from "@/lib/portal-sounds";
 import { cn } from "@/lib/utils";
 
 export type MessengerAudience = "company" | "partner";
@@ -116,6 +126,8 @@ type ChatMessage = {
   createdAt: string;
   deliveredAt?: string | null;
   receipt?: "sent" | "delivered" | "read" | null;
+  /** Просмотры публикации в канале — приходит только администратору портала */
+  viewCount?: number | null;
   attachments: Array<{
     id: string;
     fileName: string;
@@ -338,9 +350,20 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   const [archiveMode, setArchiveMode] = useState(false);
   const [archiveCount, setArchiveCount] = useState(0);
   const [archiving, setArchiving] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(false);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(() => new Set());
   const deletingIdsRef = useRef(deletingIds);
   deletingIdsRef.current = deletingIds;
+
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+  const meIdRef = useRef(meId);
+  meIdRef.current = meId;
+
+  // Слепки для звука: сколько непрочитанных было в списке и какие сообщения уже видели
+  const unreadSeenRef = useRef<Map<string, number> | null>(null);
+  const seenMessageIdsRef = useRef<Set<string>>(new Set());
+  const seenThreadIdRef = useRef<string | null>(null);
 
   const active = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
@@ -411,9 +434,22 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       const rows = await apiFetch<Conversation[]>(
         `/api/messenger/conversations${archiveMode ? "?archived=1" : ""}`
       );
-      setConversations(Array.isArray(rows) ? rows : []);
+      const list = Array.isArray(rows) ? rows : [];
+      setConversations(list);
       setError("");
       emitPortalEvent(PORTAL_EVENT.messengerActivity);
+
+      // Звук нового сообщения по неактивным диалогам (активный озвучит loadMessages)
+      const seenUnread = unreadSeenRef.current;
+      if (seenUnread) {
+        const grew = list.some((item) => {
+          if (item.id === activeIdRef.current) return false;
+          const before = seenUnread.get(item.id);
+          return before !== undefined && (item.unreadCount ?? 0) > before;
+        });
+        if (grew) playPortalSound("message");
+      }
+      unreadSeenRef.current = new Map(list.map((item) => [item.id, item.unreadCount ?? 0]));
 
       try {
         const archiveRes = await apiFetch<{ count: number }>("/api/messenger/archive-count");
@@ -422,7 +458,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
         setArchiveCount(0);
       }
 
-      return Array.isArray(rows) ? rows : [];
+      return list;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить диалоги");
       setConversations([]);
@@ -450,6 +486,18 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
           ? payload.typing
           : [];
 
+      // Звук только на чужие сообщения, пришедшие в уже открытый тред
+      const sameThread = seenThreadIdRef.current === conversationId;
+      if (silent && sameThread) {
+        const seenIds = seenMessageIdsRef.current;
+        const hasIncoming = nextMessages.some(
+          (m) => !seenIds.has(m.id) && m.authorUserId !== meIdRef.current
+        );
+        if (hasIncoming) playPortalSound("message");
+      }
+      seenThreadIdRef.current = conversationId;
+      seenMessageIdsRef.current = new Set(nextMessages.map((m) => m.id));
+
       setMessages((prev) => {
         const deleting = deletingIdsRef.current;
         if (deleting.size > 0) {
@@ -466,7 +514,10 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
           silent &&
           prev.length === nextMessages.length &&
           prev.every(
-            (m, i) => m.id === nextMessages[i]?.id && m.receipt === nextMessages[i]?.receipt
+            (m, i) =>
+              m.id === nextMessages[i]?.id &&
+              m.receipt === nextMessages[i]?.receipt &&
+              m.viewCount === nextMessages[i]?.viewCount
           )
         ) {
           return prev;
@@ -502,6 +553,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       return;
     }
     setListLoading(true);
+    unreadSeenRef.current = null;
     void (async () => {
       const rows = await loadList();
       setActiveId((current) => {
@@ -697,8 +749,23 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     void loadMessages(activeId);
   }, [activeId, loadMessages]);
 
-  const activeIdRef = useRef(activeId);
-  activeIdRef.current = activeId;
+  // Заголовок раздела в шапке зависит от режима архива
+  useEffect(() => {
+    setMessengerArchiveMode(archiveMode);
+  }, [archiveMode]);
+
+  useEffect(() => () => setMessengerArchiveMode(false), []);
+
+  useEffect(() => {
+    const sync = () => setSoundMuted(isPortalSoundMuted());
+    sync();
+    window.addEventListener(PORTAL_SOUND_MUTED_CHANGED, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(PORTAL_SOUND_MUTED_CHANGED, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
 
   useEffect(() => {
     const tick = () => {
@@ -872,14 +939,31 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       >
         <div className="flex min-h-0 flex-col border-b md:border-r md:border-b-0">
           <div className="flex flex-col gap-3 border-b p-4">
-            <div className="relative min-w-0">
-              <IconSearch className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Поиск по чатам, запросам и каналам…"
-                className="pl-8"
-              />
+            <div className="flex items-center gap-2">
+              <div className="relative min-w-0 flex-1">
+                <IconSearch className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Поиск по чатам, запросам и каналам…"
+                  className="pl-8"
+                />
+              </div>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-9 shrink-0"
+                aria-label={soundMuted ? "Включить звук уведомлений" : "Отключить звук уведомлений"}
+                title={soundMuted ? "Звук уведомлений выключен" : "Звук уведомлений включён"}
+                onClick={() => setPortalSoundMuted(!soundMuted)}
+              >
+                {soundMuted ? (
+                  <IconBellOff className="size-4" />
+                ) : (
+                  <IconBell className="size-4" />
+                )}
+              </Button>
             </div>
             <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
               <TabsList className="grid w-full grid-cols-3">
@@ -1262,6 +1346,15 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                                         ) : null}
                                         <MessageFooter className="gap-1.5">
                                           <span>{formatTime(msg.createdAt)}</span>
+                                          {typeof msg.viewCount === "number" ? (
+                                            <span
+                                              className="inline-flex items-center gap-0.5 tabular-nums"
+                                              title="Просмотры публикации"
+                                            >
+                                              <IconEye className="size-3.5" />
+                                              {msg.viewCount}
+                                            </span>
+                                          ) : null}
                                           {mine ? <MessageReceipt receipt={msg.receipt} /> : null}
                                         </MessageFooter>
                                       </MessageContent>

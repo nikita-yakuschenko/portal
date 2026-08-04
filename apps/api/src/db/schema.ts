@@ -391,6 +391,27 @@ export const messengerArchives = pgTable(
   })
 );
 
+/** Просмотры публикации в канале — по одному на пользователя */
+export const messengerMessageViews = pgTable(
+  "messenger_message_views",
+  {
+    id: text("id").primaryKey(),
+    messageId: text("message_id")
+      .notNull()
+      .references(() => messengerMessages.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    viewedAt: timestamp("viewed_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    messageUserIdx: uniqueIndex("messenger_message_views_message_user_idx").on(
+      table.messageId,
+      table.userId
+    )
+  })
+);
+
 /** Закрепление диалога — персонально для пользователя */
 export const messengerPins = pgTable(
   "messenger_pins",

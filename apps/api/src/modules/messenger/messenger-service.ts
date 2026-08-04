@@ -11,6 +11,7 @@ import {
   messengerArchives,
   messengerConversations,
   messengerMessages,
+  messengerMessageViews,
   messengerPins,
   messengerReads,
   partners,
@@ -452,7 +453,16 @@ export class MessengerService {
     }
 
     const counterpartReadAt = await this.counterpartMaxReadAt(actor, conversation);
-    await this.markRead(actor.sub, conversationId);
+    const previousReadAt = await this.markRead(actor.sub, conversationId);
+
+    const viewCounts =
+      conversation.type === "channel"
+        ? await this.trackChannelViews(
+            actor,
+            rows.map((r) => r.message),
+            previousReadAt
+          )
+        : null;
 
     const messages = rows
       .map(({ message, authorName, authorRole }) => {
@@ -477,6 +487,7 @@ export class MessengerService {
           createdAt: message.createdAt.toISOString(),
           deliveredAt: message.deliveredAt?.toISOString() ?? null,
           receipt,
+          viewCount: viewCounts ? (viewCounts.get(message.id) ?? 0) : null,
           attachments: (byMessage.get(message.id) ?? []).map((att) => ({
             id: att.id,
             fileName: att.fileName,
@@ -491,6 +502,52 @@ export class MessengerService {
       messages,
       typing: conversation.type === "channel" ? [] : this.listTyping(conversationId, actor.sub)
     };
+  }
+
+  /** Просмотры публикаций канала: фиксируем чужие, счётчик отдаём админу портала */
+  private async trackChannelViews(
+    actor: Actor,
+    messages: Array<typeof messengerMessages.$inferSelect>,
+    previousReadAt: Date | null
+  ): Promise<Map<string, number> | null> {
+    if (messages.length === 0) return null;
+
+    // Пишем только то, что пользователь видит впервые — иначе поллинг долбит БД
+    const fresh = messages.filter(
+      (m) =>
+        m.authorUserId !== actor.sub &&
+        (!previousReadAt || m.createdAt > previousReadAt)
+    );
+    if (fresh.length > 0) {
+      await db
+        .insert(messengerMessageViews)
+        .values(
+          fresh.map((m) => ({
+            id: randomUUID(),
+            messageId: m.id,
+            userId: actor.sub
+          }))
+        )
+        .onConflictDoNothing();
+    }
+
+    if (actor.role !== "company_admin") return null;
+
+    const rows = await db
+      .select({
+        messageId: messengerMessageViews.messageId,
+        views: sql<number>`count(*)::int`
+      })
+      .from(messengerMessageViews)
+      .where(
+        inArray(
+          messengerMessageViews.messageId,
+          messages.map((m) => m.id)
+        )
+      )
+      .groupBy(messengerMessageViews.messageId);
+
+    return new Map(rows.map((row) => [row.messageId, Number(row.views)]));
   }
 
   async setTyping(actor: Actor, conversationId: string) {
@@ -1018,7 +1075,8 @@ export class MessengerService {
     };
   }
 
-  private async markRead(userId: string, conversationId: string) {
+  /** Двигает позицию чтения и возвращает предыдущую (null — читает впервые) */
+  private async markRead(userId: string, conversationId: string): Promise<Date | null> {
     const [existing] = await db
       .select()
       .from(messengerReads)
@@ -1030,7 +1088,7 @@ export class MessengerService {
         .update(messengerReads)
         .set({ lastReadAt: new Date() })
         .where(eq(messengerReads.id, existing.id));
-      return;
+      return existing.lastReadAt;
     }
 
     await db.insert(messengerReads).values({
@@ -1039,6 +1097,7 @@ export class MessengerService {
       userId,
       lastReadAt: new Date()
     });
+    return null;
   }
 }
 
