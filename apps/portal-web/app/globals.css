@@ -218,6 +218,18 @@ html {
   scroll-behavior: smooth;
 }
 
+body {
+  scrollbar-gutter: stable;
+}
+
+/* react-remove-scroll (Dialog/Select): не дублируем компенсацию поверх gutter */
+html[data-scroll-locked],
+body[data-scroll-locked],
+html body[data-scroll-locked] {
+  margin-right: 0 !important;
+  padding-right: 0 !important;
+}
+
 html::-webkit-scrollbar {
   width: 6px;
   height: 6px;
