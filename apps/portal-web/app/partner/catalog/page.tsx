@@ -506,60 +506,68 @@ export default function PartnerCatalogPage() {
     <PartnerShell currentPath="/partner/catalog">
       <PageAlert message={error} variant="destructive" />
 
+      <div className="flex flex-wrap items-center gap-2">
+        {selectedCount > 0 ? (
+          <>
+            <Button
+              type="button"
+              disabled={bulkSaving}
+              onClick={() => void applyBulkPublish(true)}
+            >
+              {bulkSaving ? <Spinner /> : <IconCircleCheck />}
+              Опубликовать
+              <span className="tabular-nums">{selectedCount}</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={bulkSaving}
+              onClick={() => void applyBulkPublish(false)}
+            >
+              {bulkSaving ? <Spinner /> : <IconEyeOff />}
+              Снять с публикации
+              <span className="tabular-nums">{selectedCount}</span>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={bulkSaving}
+              onClick={() => setSelected(new Set())}
+            >
+              <IconX />
+              Снять выбор
+            </Button>
+          </>
+        ) : null}
+
+        {orderSaving ? (
+          <p className="text-muted-foreground text-sm">Сохранение порядка…</p>
+        ) : !canReorder && hasActiveFilters ? (
+          <p className="text-muted-foreground text-sm">
+            Сбросьте фильтры, чтобы менять порядок проектов
+          </p>
+        ) : null}
+
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            type="button"
+            onClick={resetFilters}
+            disabled={!hasActiveFilters}
+            aria-hidden={!hasActiveFilters}
+            tabIndex={hasActiveFilters ? 0 : -1}
+            className={cn(
+              "text-primary text-sm font-medium underline-offset-4 transition hover:underline disabled:pointer-events-none",
+              !hasActiveFilters && "invisible"
+            )}
+          >
+            Сбросить фильтры
+          </button>
+          <CatalogViewToggle value={viewMode} onChange={changeViewMode} />
+        </div>
+      </div>
+
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <div className="min-w-0 flex-1 space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {selectedCount > 0 ? (
-              <>
-                <Button
-                  type="button"
-                  disabled={bulkSaving}
-                  onClick={() => void applyBulkPublish(true)}
-                >
-                  {bulkSaving ? <Spinner /> : <IconCircleCheck />}
-                  Опубликовать
-                  <span className="tabular-nums">{selectedCount}</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={bulkSaving}
-                  onClick={() => void applyBulkPublish(false)}
-                >
-                  {bulkSaving ? <Spinner /> : <IconEyeOff />}
-                  Снять с публикации
-                  <span className="tabular-nums">{selectedCount}</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={bulkSaving}
-                  onClick={() => setSelected(new Set())}
-                >
-                  <IconX />
-                  Снять выбор
-                </Button>
-              </>
-            ) : null}
-
-            {canReorder ? (
-              <p className="text-muted-foreground text-sm">
-                Перетащите проекты за ручку — так задаётся порядок на сайте
-                {orderSaving ? " · сохранение…" : null}
-              </p>
-            ) : hasActiveFilters ? (
-              <p className="text-muted-foreground text-sm">
-                Сбросьте фильтры, чтобы менять порядок проектов
-              </p>
-            ) : null}
-
-            <CatalogViewToggle
-              value={viewMode}
-              onChange={changeViewMode}
-              className="ml-auto"
-            />
-          </div>
-
           {loading ? (
             viewMode === "cards" ? (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -783,21 +791,7 @@ export default function PartnerCatalogPage() {
           )}
         </div>
 
-        <aside className="relative w-full shrink-0 space-y-3 pt-6 lg:sticky lg:top-6 lg:w-72">
-          <button
-            type="button"
-            onClick={resetFilters}
-            disabled={!hasActiveFilters}
-            aria-hidden={!hasActiveFilters}
-            tabIndex={hasActiveFilters ? 0 : -1}
-            className={cn(
-              "text-primary absolute top-0 right-0 text-sm font-medium underline-offset-4 transition hover:underline disabled:pointer-events-none",
-              !hasActiveFilters && "invisible"
-            )}
-          >
-            Сбросить фильтры
-          </button>
-
+        <aside className="w-full shrink-0 space-y-3 lg:sticky lg:top-6 lg:w-72">
           <FilterControlShell
             active={Boolean(query.trim())}
             className="h-9 w-full min-w-0"
