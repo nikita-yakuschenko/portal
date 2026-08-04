@@ -52,17 +52,40 @@ const VIEW_KEY = "avgst.company.catalog.view";
 function loadView(): CatalogViewMode {
   try {
     const raw = localStorage.getItem(VIEW_KEY);
-    return raw === "cards" || raw === "table" ? raw : "table";
+    return raw === "cards" || raw === "table" ? raw : "cards";
   } catch {
-    return "table";
+    return "cards";
   }
+}
+
+function CatalogCardSkeleton() {
+  return (
+    <Card className="grid grid-rows-[auto_1fr] gap-0 overflow-hidden py-0">
+      <div className="relative w-full shrink-0 pt-[56.25%]">
+        <Skeleton className="absolute inset-0 rounded-none" />
+      </div>
+      <div className="flex flex-col gap-3 p-4">
+        <div className="space-y-1.5">
+          <div className="flex items-start justify-between gap-3">
+            <Skeleton className="h-5 w-[55%]" />
+            <Skeleton className="h-5 w-24 shrink-0 rounded-full" />
+          </div>
+          <Skeleton className="h-4 w-[45%]" />
+        </div>
+        <div className="space-y-1.5">
+          <Skeleton className="h-3 w-10" />
+          <Skeleton className="h-5 w-32" />
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 export default function CompanyCatalogPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<CatalogViewMode>("table");
+  const [view, setView] = useState<CatalogViewMode>("cards");
 
   useEffect(() => {
     setView(loadView());
@@ -91,32 +114,74 @@ export default function CompanyCatalogPage() {
 
   return (
     <DashboardShell
+      cabinetKind="company"
       cabinetLabel={companyCabinetLabel}
       currentPath="/company/catalog"
       navigation={companyNavigation}
+      title="Каталог"
     >
       <PageAlert message={error} variant="destructive" />
 
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
-          <CardTitle>Проекты{loading ? "" : ` (${projects.length})`}</CardTitle>
-          {!loading && projects.length > 0 ? (
-            <CatalogViewToggle value={view} onChange={changeView} />
-          ) : null}
+          <CardTitle className="flex items-baseline gap-1.5">
+            <span>Проекты</span>
+            <span className="inline-flex h-5 min-w-[2.75rem] items-center tabular-nums">
+              {loading ? (
+                <Skeleton className="h-4 w-8" />
+              ) : (
+                <span>({projects.length})</span>
+              )}
+            </span>
+          </CardTitle>
+          <CatalogViewToggle value={view} onChange={changeView} />
         </CardHeader>
         <CardContent>
           {loading ? (
             view === "cards" ? (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {[0, 1, 2, 3, 4, 5].map((row) => (
-                  <Skeleton key={row} className="aspect-video w-full rounded-xl" />
+                  <CatalogCardSkeleton key={row} />
                 ))}
               </div>
             ) : (
-              <div className="space-y-3">
-                {[0, 1, 2, 3].map((row) => (
-                  <Skeleton key={row} className="h-12 w-full" />
-                ))}
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Проект</TableHead>
+                      <TableHead>Площадь</TableHead>
+                      <TableHead>Этажи</TableHead>
+                      <TableHead>Заводская цена</TableHead>
+                      <TableHead>Статус</TableHead>
+                      <TableHead className="text-right">Действия</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {[0, 1, 2, 3, 4, 5].map((row) => (
+                      <TableRow key={row}>
+                        <TableCell>
+                          <Skeleton className="h-4 w-36" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-4 w-14" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-4 w-8" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-4 w-24" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-5 w-16 rounded-full" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Skeleton className="ml-auto h-8 w-20" />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             )
           ) : projects.length === 0 ? (
