@@ -845,7 +845,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
             </Tabs>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="relative min-h-0 flex-1 overflow-y-auto">
             {listLoading ? (
               <div className="space-y-3 p-4">
                 {[0, 1, 2, 3, 4].map((i) => (
@@ -867,7 +867,12 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                 <p>{archiveMode ? "Архив пуст" : "Пока пусто"}</p>
               </div>
             ) : (
-              <ul className="divide-y">
+              <ul
+                className={cn(
+                  "divide-y",
+                  isCompany && tab === "channel" && !archiveMode && "pb-16"
+                )}
+              >
                 {searchFiltered.map((item) => {
                   const selected = item.id === activeId;
                   return (
@@ -968,15 +973,13 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                 })}
               </ul>
             )}
-          </div>
 
-          <div className="border-t">
             {isCompany && tab === "channel" && !archiveMode ? (
-              <div className="px-3 pt-2">
+              <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center px-4">
                 <Button
                   type="button"
-                  variant="outline"
-                  className="h-9 w-full justify-start gap-2"
+                  size="sm"
+                  className="pointer-events-auto h-9 gap-1.5 rounded-full px-4 shadow-lg"
                   onClick={() => setChannelOpen(true)}
                 >
                   <IconPlus className="size-4" />
@@ -984,20 +987,21 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                 </Button>
               </div>
             ) : null}
-            <div className="flex min-h-[3.75rem] items-center px-3 py-2">
-              <Button
-                type="button"
-                variant={archiveMode ? "secondary" : "ghost"}
-                className="h-9 w-full justify-start gap-2"
-                onClick={() => setArchiveMode((v) => !v)}
-              >
-                {archiveMode ? <IconArrowLeft className="size-4" /> : <IconArchive className="size-4" />}
-                {archiveMode ? "К чатам" : "Архив"}
-                {!archiveMode && archiveCount > 0 ? (
-                  <span className="text-muted-foreground ml-auto text-xs tabular-nums">{archiveCount}</span>
-                ) : null}
-              </Button>
-            </div>
+          </div>
+
+          <div className="flex min-h-[3.75rem] items-center border-t px-3 py-2">
+            <Button
+              type="button"
+              variant={archiveMode ? "secondary" : "ghost"}
+              className="h-9 w-full justify-start gap-2"
+              onClick={() => setArchiveMode((v) => !v)}
+            >
+              {archiveMode ? <IconArrowLeft className="size-4" /> : <IconArchive className="size-4" />}
+              {archiveMode ? "К чатам" : "Архив"}
+              {!archiveMode && archiveCount > 0 ? (
+                <span className="text-muted-foreground ml-auto text-xs tabular-nums">{archiveCount}</span>
+              ) : null}
+            </Button>
           </div>
         </div>
 
