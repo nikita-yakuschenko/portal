@@ -1374,9 +1374,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                 <div className="text-muted-foreground flex min-h-[3.75rem] items-center justify-center border-t px-3 py-2 text-center text-sm">
                   Обращение закрыто — писать нельзя
                 </div>
-              ) : (
-                <div className="min-h-[3.75rem] border-t" />
-              )}
+              ) : null}
             </>
           )}
         </div>
