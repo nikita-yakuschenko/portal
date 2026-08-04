@@ -9,9 +9,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function PartnerMessengerPage() {
   return (
     <PartnerShell currentPath="/partner/messenger" title="Мессенджер">
-      <Suspense fallback={<Skeleton className="h-[min(78vh,820px)] w-full rounded-xl" />}>
-        <MessengerPageContent audience="partner" />
-      </Suspense>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <Suspense fallback={<Skeleton className="min-h-0 w-full flex-1 rounded-xl" />}>
+          <MessengerPageContent audience="partner" />
+        </Suspense>
+      </div>
     </PartnerShell>
   );
 }

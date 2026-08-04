@@ -90,7 +90,7 @@ export function DashboardShell(props: {
         brandLogoSrc={props.brandLogoSrc ?? null}
         brandHref={props.brandHref ?? (isPartnerCabinet ? "/partner" : "/")}
       />
-      <SidebarInset className="min-w-0">
+      <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
         {isPartnerCabinet ? <PartnerTestModeBanner /> : null}
 
         <header
@@ -115,7 +115,9 @@ export function DashboardShell(props: {
           </div>
         </header>
 
-        <div className="flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">{props.children}</div>
+        <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
+          {props.children}
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  IconArchive,
+  IconArrowLeft,
   IconArrowUp,
   IconCheck,
   IconChecks,
@@ -223,6 +225,9 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestForm, setRequestForm] = useState({ title: "", body: "" });
   const [creatingRequest, setCreatingRequest] = useState(false);
+  const [archiveMode, setArchiveMode] = useState(false);
+  const [archiveCount, setArchiveCount] = useState(0);
+  const [archiving, setArchiving] = useState(false);
 
   const isCompany = audience === "company";
   const basePath = isCompany ? "/company/messenger" : "/partner/messenger";
@@ -241,8 +246,14 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
 
   const loadList = useCallback(async () => {
     try {
-      const rows = await apiFetch<Conversation[]>("/api/messenger/conversations");
+      const [rows, archiveRes] = await Promise.all([
+        apiFetch<Conversation[]>(
+          `/api/messenger/conversations${archiveMode ? "?archived=1" : ""}`
+        ),
+        apiFetch<{ count: number }>("/api/messenger/archive-count")
+      ]);
       setConversations(rows);
+      setArchiveCount(archiveRes.count);
       setError("");
       return rows;
     } catch (err) {
@@ -251,7 +262,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     } finally {
       setListLoading(false);
     }
-  }, []);
+  }, [archiveMode]);
 
   const loadMessages = useCallback(async (conversationId: string, silent = false) => {
     if (!silent) setThreadLoading(true);
@@ -291,6 +302,42 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
     setPendingFiles([]);
     setDraft("");
   }, [activeId]);
+
+  const archiveBootstrapped = useRef(false);
+  useEffect(() => {
+    if (!archiveBootstrapped.current) {
+      archiveBootstrapped.current = true;
+      return;
+    }
+    setListLoading(true);
+    void (async () => {
+      const rows = await loadList();
+      setActiveId((current) =>
+        current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? null
+      );
+    })();
+  }, [archiveMode, loadList]);
+
+  async function toggleArchive(conversationId: string, archived: boolean) {
+    setArchiving(true);
+    try {
+      await apiFetch(`/api/messenger/conversations/${conversationId}/archive`, {
+        method: "POST",
+        body: JSON.stringify({ archived })
+      });
+      toast.success(archived ? "В архиве" : "Убрано из архива");
+      const rows = await loadList();
+      if (archived) {
+        setActiveId((current) =>
+          current === conversationId ? rows[0]?.id ?? null : current
+        );
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось изменить архив");
+    } finally {
+      setArchiving(false);
+    }
+  }
 
   function pulseTyping() {
     if (!activeId || !canWrite) return;
@@ -499,10 +546,10 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   }, [conversations]);
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageAlert message={error} variant="destructive" />
 
-      <Card className="grid h-[min(78vh,820px)] grid-cols-1 gap-0 overflow-hidden py-0 md:grid-cols-[minmax(280px,340px)_1fr]">
+      <Card className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden py-0 md:grid-cols-[minmax(280px,340px)_1fr]">
         <div className="flex min-h-0 flex-col border-b md:border-r md:border-b-0">
           <div className="flex flex-col gap-3 border-b p-4">
             <div className="flex items-center gap-2">
@@ -546,10 +593,14 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
               </div>
             ) : searchFiltered.length === 0 ? (
               <div className="text-muted-foreground flex flex-col items-center gap-2 p-8 text-center text-sm">
-                {tab === "dm" ? <IconMessage className="size-8 opacity-50" /> : null}
-                {tab === "request" ? <IconTicket className="size-8 opacity-50" /> : null}
-                {tab === "channel" ? <IconHash className="size-8 opacity-50" /> : null}
-                <p>Пока пусто</p>
+                {archiveMode ? (
+                  <IconArchive className="size-8 opacity-50" />
+                ) : tab === "dm" ? (
+                  <IconMessage className="size-8 opacity-50" />
+                ) : null}
+                {!archiveMode && tab === "request" ? <IconTicket className="size-8 opacity-50" /> : null}
+                {!archiveMode && tab === "channel" ? <IconHash className="size-8 opacity-50" /> : null}
+                <p>{archiveMode ? "Архив пуст" : "Пока пусто"}</p>
               </div>
             ) : (
               <ul className="divide-y">
@@ -606,6 +657,21 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
               </ul>
             )}
           </div>
+
+          <div className="border-t p-2">
+            <Button
+              type="button"
+              variant={archiveMode ? "secondary" : "ghost"}
+              className="w-full justify-start gap-2"
+              onClick={() => setArchiveMode((v) => !v)}
+            >
+              {archiveMode ? <IconArrowLeft className="size-4" /> : <IconArchive className="size-4" />}
+              {archiveMode ? "К чатам" : "Архив"}
+              {!archiveMode && archiveCount > 0 ? (
+                <span className="text-muted-foreground ml-auto text-xs tabular-nums">{archiveCount}</span>
+              ) : null}
+            </Button>
+          </div>
         </div>
 
         <div className="flex min-h-0 min-w-0 flex-col">
@@ -639,26 +705,41 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                     {active?.type === "channel" ? (
                       <span>Только чтение для дилеров</span>
                     ) : null}
+                    {archiveMode ? <Badge variant="secondary">Архив</Badge> : null}
                   </div>
                 </div>
-                {isCompany && active?.type === "request" ? (
-                  <div className="flex flex-wrap gap-1">
-                    <Button type="button" size="sm" variant="outline" onClick={() => void updateStatus("open")}>
-                      Открыт
-                    </Button>
+                <div className="flex flex-wrap gap-1">
+                  {activeId ? (
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={() => void updateStatus("in_progress")}
+                      disabled={archiving}
+                      onClick={() => void toggleArchive(activeId, !archiveMode)}
                     >
-                      В работе
+                      <IconArchive className="size-4" />
+                      {archiveMode ? "Вернуть" : "В архив"}
                     </Button>
-                    <Button type="button" size="sm" variant="outline" onClick={() => void updateStatus("closed")}>
-                      Закрыт
-                    </Button>
-                  </div>
-                ) : null}
+                  ) : null}
+                  {isCompany && active?.type === "request" ? (
+                    <>
+                      <Button type="button" size="sm" variant="outline" onClick={() => void updateStatus("open")}>
+                        Открыт
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void updateStatus("in_progress")}
+                      >
+                        В работе
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => void updateStatus("closed")}>
+                        Закрыт
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
               </div>
 
               <div className="min-h-0 flex-1">
@@ -874,6 +955,6 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }
