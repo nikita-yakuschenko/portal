@@ -11,7 +11,7 @@ import {
 import type { NavigationItem } from "@/components/app-sidebar";
 import type { PartnerModules } from "@/lib/partner-modules";
 
-export const partnerCabinetLabel = "Партнёрский кабинет";
+export const partnerCabinetLabel = "Дилер";
 
 /** Базовая навигация без опциональных модулей */
 const BASE_NAV: NavigationItem[] = [

@@ -33,8 +33,16 @@ function PartnerTestModeBanner() {
 export function DashboardShell(props: {
   /** Подпись кабинета под названием бренда в сайдбаре */
   cabinetLabel: string;
+  /** Явный тип кабинета — не завязываемся только на текст подписи */
+  cabinetKind?: "company" | "partner";
   currentPath: string;
   navigation: NavigationItem[];
+  /** Заголовок бренда в сайдбаре (по умолчанию AVGST / Партнёр) */
+  brandTitle?: string;
+  /** Логотип партнёра (сокращённая версия) */
+  brandLogoSrc?: string | null;
+  /** Ссылка с логотипа/названия */
+  brandHref?: string;
   /** Заголовок хедера; по умолчанию — title активного пункта навигации */
   title?: string;
   /** Классические breadcrumbs вместо заголовка */
@@ -55,7 +63,8 @@ export function DashboardShell(props: {
     props.navigation.find((item) => item.href === props.currentPath)?.title ??
     "";
 
-  const isPartnerCabinet = props.cabinetLabel === partnerCabinetLabel;
+  const isPartnerCabinet =
+    props.cabinetKind === "partner" || props.cabinetLabel === partnerCabinetLabel;
 
   return (
     <SidebarProvider>
@@ -65,6 +74,9 @@ export function DashboardShell(props: {
         navigation={props.navigation}
         activeHref={activeHref}
         plainBrandMark={!isPartnerCabinet}
+        brandTitle={props.brandTitle ?? (isPartnerCabinet ? "Партнёр" : "Авангард Строй")}
+        brandLogoSrc={props.brandLogoSrc ?? null}
+        brandHref={props.brandHref ?? (isPartnerCabinet ? "/partner" : "/")}
       />
       <SidebarInset className="min-w-0">
         {isPartnerCabinet ? <PartnerTestModeBanner /> : null}
