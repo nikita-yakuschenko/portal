@@ -391,6 +391,27 @@ export const messengerArchives = pgTable(
   })
 );
 
+/** Отключённый звук диалога — персонально для пользователя */
+export const messengerMutes = pgTable(
+  "messenger_mutes",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => messengerConversations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    mutedAt: timestamp("muted_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    conversationUserIdx: uniqueIndex("messenger_mutes_conversation_user_idx").on(
+      table.conversationId,
+      table.userId
+    )
+  })
+);
+
 /** Просмотры публикации в канале — по одному на пользователя */
 export const messengerMessageViews = pgTable(
   "messenger_message_views",

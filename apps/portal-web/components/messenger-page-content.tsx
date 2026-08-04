@@ -82,12 +82,7 @@ import {
 import { apiFetch } from "@/lib/api";
 import { setMessengerArchiveMode } from "@/lib/messenger-view";
 import { emitPortalEvent, PORTAL_EVENT } from "@/lib/portal-events";
-import {
-  isPortalSoundMuted,
-  playPortalSound,
-  PORTAL_SOUND_MUTED_CHANGED,
-  setPortalSoundMuted
-} from "@/lib/portal-sounds";
+import { playPortalSound } from "@/lib/portal-sounds";
 import { cn } from "@/lib/utils";
 
 export type MessengerAudience = "company" | "partner";
@@ -113,6 +108,8 @@ type Conversation = {
   unread: boolean;
   unreadCount: number;
   pinned?: boolean;
+  /** Звук уведомлений этого диалога отключён пользователем */
+  muted?: boolean;
   createdAt: string;
 };
 
@@ -350,7 +347,6 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   const [archiveMode, setArchiveMode] = useState(false);
   const [archiveCount, setArchiveCount] = useState(0);
   const [archiving, setArchiving] = useState(false);
-  const [soundMuted, setSoundMuted] = useState(false);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(() => new Set());
   const deletingIdsRef = useRef(deletingIds);
   deletingIdsRef.current = deletingIds;
@@ -364,6 +360,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   const unreadSeenRef = useRef<Map<string, number> | null>(null);
   const seenMessageIdsRef = useRef<Set<string>>(new Set());
   const seenThreadIdRef = useRef<string | null>(null);
+  const mutedIdsRef = useRef<Set<string>>(new Set());
 
   const active = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
@@ -439,11 +436,13 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       setError("");
       emitPortalEvent(PORTAL_EVENT.messengerActivity);
 
+      mutedIdsRef.current = new Set(list.filter((item) => item.muted).map((item) => item.id));
+
       // Звук нового сообщения по неактивным диалогам (активный озвучит loadMessages)
       const seenUnread = unreadSeenRef.current;
       if (seenUnread) {
         const grew = list.some((item) => {
-          if (item.id === activeIdRef.current) return false;
+          if (item.id === activeIdRef.current || item.muted) return false;
           const before = seenUnread.get(item.id);
           return before !== undefined && (item.unreadCount ?? 0) > before;
         });
@@ -486,9 +485,9 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
           ? payload.typing
           : [];
 
-      // Звук только на чужие сообщения, пришедшие в уже открытый тред
+      // Звук только на чужие сообщения, пришедшие в уже открытый тред без mute
       const sameThread = seenThreadIdRef.current === conversationId;
-      if (silent && sameThread) {
+      if (silent && sameThread && !mutedIdsRef.current.has(conversationId)) {
         const seenIds = seenMessageIdsRef.current;
         const hasIncoming = nextMessages.some(
           (m) => !seenIds.has(m.id) && m.authorUserId !== meIdRef.current
@@ -597,6 +596,26 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       await loadList();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось закрепить");
+    }
+  }
+
+  async function toggleMute(conversationId: string, muted: boolean) {
+    try {
+      await apiFetch(`/api/messenger/conversations/${conversationId}/mute`, {
+        method: "POST",
+        body: JSON.stringify({ muted })
+      });
+      setConversations((prev) =>
+        prev.map((c) => (c.id === conversationId ? { ...c, muted } : c))
+      );
+      if (muted) {
+        mutedIdsRef.current.add(conversationId);
+      } else {
+        mutedIdsRef.current.delete(conversationId);
+      }
+      toast.success(muted ? "Уведомления отключены" : "Уведомления включены");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось изменить звук");
     }
   }
 
@@ -755,17 +774,6 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   }, [archiveMode]);
 
   useEffect(() => () => setMessengerArchiveMode(false), []);
-
-  useEffect(() => {
-    const sync = () => setSoundMuted(isPortalSoundMuted());
-    sync();
-    window.addEventListener(PORTAL_SOUND_MUTED_CHANGED, sync);
-    window.addEventListener("storage", sync);
-    return () => {
-      window.removeEventListener(PORTAL_SOUND_MUTED_CHANGED, sync);
-      window.removeEventListener("storage", sync);
-    };
-  }, []);
 
   useEffect(() => {
     const tick = () => {
@@ -939,31 +947,14 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       >
         <div className="flex min-h-0 flex-col border-b md:border-r md:border-b-0">
           <div className="flex flex-col gap-3 border-b p-4">
-            <div className="flex items-center gap-2">
-              <div className="relative min-w-0 flex-1">
-                <IconSearch className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-                <Input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Поиск по чатам, запросам и каналам…"
-                  className="pl-8"
-                />
-              </div>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="size-9 shrink-0"
-                aria-label={soundMuted ? "Включить звук уведомлений" : "Отключить звук уведомлений"}
-                title={soundMuted ? "Звук уведомлений выключен" : "Звук уведомлений включён"}
-                onClick={() => setPortalSoundMuted(!soundMuted)}
-              >
-                {soundMuted ? (
-                  <IconBellOff className="size-4" />
-                ) : (
-                  <IconBell className="size-4" />
-                )}
-              </Button>
+            <div className="relative min-w-0">
+              <IconSearch className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Поиск по чатам, запросам и каналам…"
+                className="pl-8"
+              />
             </div>
             <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
               <TabsList className="grid w-full grid-cols-3">
@@ -1054,6 +1045,9 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                             </div>
                             <div className="flex shrink-0 flex-col items-end gap-1.5">
                               <div className="flex items-center gap-1.5">
+                                {item.muted ? (
+                                  <IconBellOff className="text-muted-foreground size-3.5 shrink-0" />
+                                ) : null}
                                 {item.pinned ? (
                                   <IconPin className="text-muted-foreground size-3.5 shrink-0" />
                                 ) : null}
@@ -1066,6 +1060,17 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                           </button>
                         </ContextMenuTrigger>
                         <ContextMenuContent>
+                          <ContextMenuItem
+                            className="gap-2"
+                            onSelect={() => void toggleMute(item.id, !item.muted)}
+                          >
+                            {item.muted ? (
+                              <IconBell className="size-4" />
+                            ) : (
+                              <IconBellOff className="size-4" />
+                            )}
+                            {item.muted ? "Включить уведомления" : "Отключить уведомления"}
+                          </ContextMenuItem>
                           {item.type === "dm" ? (
                             <>
                               <ContextMenuItem
@@ -1229,6 +1234,28 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
                       onClick={() => void closeRequest()}
                     >
                       Закрыть обращение
+                    </Button>
+                  ) : null}
+
+                  {activeId ? (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="size-8"
+                      aria-label={
+                        active?.muted ? "Включить уведомления чата" : "Отключить уведомления чата"
+                      }
+                      title={
+                        active?.muted ? "Уведомления отключены" : "Отключить уведомления"
+                      }
+                      onClick={() => void toggleMute(activeId, !active?.muted)}
+                    >
+                      {active?.muted ? (
+                        <IconBellOff className="size-4" />
+                      ) : (
+                        <IconBell className="size-4" />
+                      )}
                     </Button>
                   ) : null}
 

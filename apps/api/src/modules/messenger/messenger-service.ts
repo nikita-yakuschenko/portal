@@ -12,6 +12,7 @@ import {
   messengerConversations,
   messengerMessages,
   messengerMessageViews,
+  messengerMutes,
   messengerPins,
   messengerReads,
   partners,
@@ -84,6 +85,7 @@ function mapConversation(
     lastMessagePreview?: LastMessagePreview | null;
     unreadCount?: number;
     pinned?: boolean;
+    muted?: boolean;
   } = {}
 ) {
   const unreadCount = Math.max(0, extra.unreadCount ?? 0);
@@ -106,6 +108,7 @@ function mapConversation(
     unread: unreadCount > 0,
     unreadCount,
     pinned: Boolean(extra.pinned),
+    muted: Boolean(extra.muted),
     createdAt: row.createdAt.toISOString()
   };
 }
@@ -257,6 +260,7 @@ export class MessengerService {
     const unreadCountMap = new Map<string, number>();
     const previewMap = new Map<string, LastMessagePreview | null>();
     const pinnedIds = new Set<string>();
+    const mutedIds = new Set<string>();
 
     if (conversationIds.length > 0) {
       const pinRows = await db
@@ -266,6 +270,14 @@ export class MessengerService {
           and(eq(messengerPins.userId, actor.sub), inArray(messengerPins.conversationId, conversationIds))
         );
       for (const pin of pinRows) pinnedIds.add(pin.conversationId);
+
+      const muteRows = await db
+        .select({ conversationId: messengerMutes.conversationId })
+        .from(messengerMutes)
+        .where(
+          and(eq(messengerMutes.userId, actor.sub), inArray(messengerMutes.conversationId, conversationIds))
+        );
+      for (const mute of muteRows) mutedIds.add(mute.conversationId);
 
       // Доставлено уже при опросе списка (страница мессенджера открыта)
       await db
@@ -347,7 +359,8 @@ export class MessengerService {
         partnerAvatarUrl: partnerAvatarFromSiteConfig(siteConfig),
         lastMessagePreview: previewMap.get(conversation.id) ?? null,
         unreadCount: unreadCountMap.get(conversation.id) ?? 0,
-        pinned: pinnedIds.has(conversation.id)
+        pinned: pinnedIds.has(conversation.id),
+        muted: mutedIds.has(conversation.id)
       });
     });
 
@@ -894,6 +907,35 @@ export class MessengerService {
     return { ok: true as const, pinned };
   }
 
+  /** Звук диалога — персонально: партнёр и завод глушат свои копии независимо */
+  async setMute(actor: Actor, conversationId: string, muted: boolean) {
+    const conversation = await this.requireConversation(conversationId);
+    await this.assertCanAccess(actor, conversation);
+
+    const [existing] = await db
+      .select()
+      .from(messengerMutes)
+      .where(
+        and(eq(messengerMutes.conversationId, conversationId), eq(messengerMutes.userId, actor.sub))
+      )
+      .limit(1);
+
+    if (muted) {
+      if (!existing) {
+        await db.insert(messengerMutes).values({
+          id: randomUUID(),
+          conversationId,
+          userId: actor.sub,
+          mutedAt: new Date()
+        });
+      }
+    } else if (existing) {
+      await db.delete(messengerMutes).where(eq(messengerMutes.id, existing.id));
+    }
+
+    return { ok: true as const, muted };
+  }
+
   async archiveCount(actor: Actor) {
     if (actor.partnerId) {
       await this.ensureDm(actor.partnerId, actor.sub);
@@ -928,6 +970,12 @@ export class MessengerService {
       .where(eq(messengerArchives.userId, actor.sub));
     const archivedIds = new Set(archivedRows.map((r) => r.conversationId));
 
+    const mutedRows = await db
+      .select({ conversationId: messengerMutes.conversationId })
+      .from(messengerMutes)
+      .where(eq(messengerMutes.userId, actor.sub));
+    const mutedIds = new Set(mutedRows.map((r) => r.conversationId));
+
     const visibility = isCompany(actor)
       ? undefined
       : or(
@@ -943,7 +991,7 @@ export class MessengerService {
       .where(visibility);
 
     const conversationIds = rows.map((r) => r.id).filter((id) => !archivedIds.has(id));
-    if (conversationIds.length === 0) return 0;
+    if (conversationIds.length === 0) return { count: 0, audible: 0 };
 
     const reads = await db
       .select()
@@ -965,11 +1013,18 @@ export class MessengerService {
           .select({ count: sql<number>`count(*)::int` })
           .from(messengerMessages)
           .where(and(...conditions));
-        return countRow?.count ?? 0;
+        return { id, count: countRow?.count ?? 0 };
       })
     );
 
-    return counts.reduce((sum, n) => sum + n, 0);
+    // audible — без заглушённых диалогов: по нему клиент решает, играть ли звук
+    return counts.reduce(
+      (acc, row) => ({
+        count: acc.count + row.count,
+        audible: acc.audible + (mutedIds.has(row.id) ? 0 : row.count)
+      }),
+      { count: 0, audible: 0 }
+    );
   }
 
   async updateRequestStatus(actor: Actor, conversationId: string, status: "open" | "in_progress" | "closed") {

@@ -7,23 +7,10 @@ const SOUND_SRC = {
 
 export type PortalSound = keyof typeof SOUND_SRC;
 
-const MUTED_KEY = "avgst.sound.muted";
-export const PORTAL_SOUND_MUTED_CHANGED = "portal-sound-muted-changed";
-
 const cache = new Map<PortalSound, HTMLAudioElement>();
 
-export function isPortalSoundMuted() {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(MUTED_KEY) === "1";
-}
-
-export function setPortalSoundMuted(muted: boolean) {
-  window.localStorage.setItem(MUTED_KEY, muted ? "1" : "0");
-  window.dispatchEvent(new Event(PORTAL_SOUND_MUTED_CHANGED));
-}
-
 export function playPortalSound(sound: PortalSound) {
-  if (typeof window === "undefined" || isPortalSoundMuted()) return;
+  if (typeof window === "undefined") return;
 
   let audio = cache.get(sound);
   if (!audio) {

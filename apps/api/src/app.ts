@@ -83,6 +83,10 @@ const messengerPinSchema = z.object({
   pinned: z.boolean()
 });
 
+const messengerMuteSchema = z.object({
+  muted: z.boolean()
+});
+
 const messengerUpdateRequestSchema = z.object({
   status: z.enum(["open", "in_progress", "closed"])
 });
@@ -1504,6 +1508,33 @@ export async function buildApp() {
     }
   });
 
+  app.post("/api/messenger/conversations/:id/mute", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+
+    const parsed = messengerMuteSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    try {
+      return await messengerService.setMute(
+        getAuthUser(request)!,
+        (request.params as { id: string }).id,
+        parsed.data.muted
+      );
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось изменить звук диалога"
+      });
+    }
+  });
+
   app.get("/api/messenger/archive-count", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, [
       "company_admin",
@@ -1531,8 +1562,7 @@ export async function buildApp() {
     ]);
     if (roleCheck) return roleCheck;
     try {
-      const count = await messengerService.unreadTotal(getAuthUser(request)!);
-      return { count };
+      return await messengerService.unreadTotal(getAuthUser(request)!);
     } catch (error) {
       return reply.status(400).send({
         message: error instanceof Error ? error.message : "Не удалось получить непрочитанные"

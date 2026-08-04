@@ -72,20 +72,24 @@ export function AppSidebar({
   const hasMessenger = navigation.some((item) => isMessengerHref(item.href));
   const [messengerUnread, setMessengerUnread] = useState(0);
   // null — первая загрузка, на ней не звучим
-  const seenUnreadRef = useRef<number | null>(null);
+  const seenAudibleRef = useRef<number | null>(null);
 
   const refreshMessengerUnread = useCallback(async () => {
     if (!hasMessenger) return;
     try {
-      const res = await apiFetch<{ count: number }>("/api/messenger/unread-count");
+      const res = await apiFetch<{ count: number; audible?: number }>(
+        "/api/messenger/unread-count"
+      );
       const count = res.count ?? 0;
-      const seen = seenUnreadRef.current;
+      // audible не считает диалоги с отключёнными уведомлениями
+      const audible = res.audible ?? count;
+      const seen = seenAudibleRef.current;
       // На самой странице мессенджера звук даёт мессенджер — здесь молчим
       const onMessengerPage = isMessengerHref(window.location.pathname);
-      if (seen !== null && count > seen && !onMessengerPage) {
+      if (seen !== null && audible > seen && !onMessengerPage) {
         playPortalSound("message");
       }
-      seenUnreadRef.current = count;
+      seenAudibleRef.current = audible;
       setMessengerUnread(count);
     } catch {
       /* сессия/сеть — бейдж молчит */
