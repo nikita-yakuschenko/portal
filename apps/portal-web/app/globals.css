@@ -209,50 +209,75 @@ option {
   display: none;
 }
 
-/* Тонкий скролл мессенджера: 4px, без стрелок, прозрачный трек */
-.scrollbar-slim {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(17, 17, 17, 0.28) transparent;
+/* Тонкий скролл мессенджера: 4px, без стрелок.
+   На Windows Chromium нельзя задавать scrollbar-width вместе с ::-webkit-scrollbar —
+   иначе остаётся системный скролл со стрелками вверх/вниз. */
+.scrollbar-slim::-webkit-scrollbar,
+[data-slot="message-scroller-viewport"]::-webkit-scrollbar {
+  width: 2px;
+  height: 2px;
 }
 
-.scrollbar-slim::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-
-.scrollbar-slim::-webkit-scrollbar-button {
+.scrollbar-slim::-webkit-scrollbar-button,
+.scrollbar-slim::-webkit-scrollbar-button:start:decrement,
+.scrollbar-slim::-webkit-scrollbar-button:end:increment,
+.scrollbar-slim::-webkit-scrollbar-button:vertical:start:decrement,
+.scrollbar-slim::-webkit-scrollbar-button:vertical:end:increment,
+.scrollbar-slim::-webkit-scrollbar-button:horizontal:start:decrement,
+.scrollbar-slim::-webkit-scrollbar-button:horizontal:end:increment,
+[data-slot="message-scroller-viewport"]::-webkit-scrollbar-button,
+[data-slot="message-scroller-viewport"]::-webkit-scrollbar-button:start:decrement,
+[data-slot="message-scroller-viewport"]::-webkit-scrollbar-button:end:increment,
+[data-slot="message-scroller-viewport"]::-webkit-scrollbar-button:vertical:start:decrement,
+[data-slot="message-scroller-viewport"]::-webkit-scrollbar-button:vertical:end:increment {
   display: none;
   width: 0;
   height: 0;
 }
 
-.scrollbar-slim::-webkit-scrollbar-track {
+.scrollbar-slim::-webkit-scrollbar-track,
+[data-slot="message-scroller-viewport"]::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.scrollbar-slim::-webkit-scrollbar-thumb {
+.scrollbar-slim::-webkit-scrollbar-thumb,
+[data-slot="message-scroller-viewport"]::-webkit-scrollbar-thumb {
   background: rgba(17, 17, 17, 0.22);
   border-radius: 999px;
 }
 
-.scrollbar-slim::-webkit-scrollbar-thumb:hover {
+.scrollbar-slim::-webkit-scrollbar-thumb:hover,
+[data-slot="message-scroller-viewport"]::-webkit-scrollbar-thumb:hover {
   background: rgba(17, 17, 17, 0.38);
 }
 
-.scrollbar-slim::-webkit-scrollbar-corner {
+.scrollbar-slim::-webkit-scrollbar-corner,
+[data-slot="message-scroller-viewport"]::-webkit-scrollbar-corner {
   background: transparent;
 }
 
-.dark .scrollbar-slim {
-  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
-}
-
-.dark .scrollbar-slim::-webkit-scrollbar-thumb {
+.dark .scrollbar-slim::-webkit-scrollbar-thumb,
+.dark [data-slot="message-scroller-viewport"]::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.22);
 }
 
-.dark .scrollbar-slim::-webkit-scrollbar-thumb:hover {
+.dark .scrollbar-slim::-webkit-scrollbar-thumb:hover,
+.dark [data-slot="message-scroller-viewport"]::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.38);
+}
+
+/* Firefox: тонкий скролл без стрелок (стрелок там и так нет) */
+@supports not selector(::-webkit-scrollbar) {
+  .scrollbar-slim,
+  [data-slot="message-scroller-viewport"] {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(17, 17, 17, 0.28) transparent;
+  }
+
+  .dark .scrollbar-slim,
+  .dark [data-slot="message-scroller-viewport"] {
+    scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+  }
 }
 
 /* Деликатный скролл: тонкий, полупрозрачный, без серого трека.
