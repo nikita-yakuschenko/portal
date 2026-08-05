@@ -619,10 +619,12 @@ export class PortalService {
 
   /** Каталог для витрины дилера: заводской контент + розничные цены партнёра */
   async listPartnerStorefrontProjects(partnerId: string) {
-    const [projects, priceRows] = await Promise.all([
+    const [allProjects, priceRows] = await Promise.all([
       this.listCatalogProjects(),
       db.select().from(partnerProjectPrices).where(eq(partnerProjectPrices.partnerId, partnerId))
     ]);
+    // Скрытые HQ (active=false) не попадают в витрину и каталог партнёра
+    const projects = allProjects.filter((project) => project.active);
 
     const byProject = new Map(priceRows.map((row) => [row.projectId, row]));
 
@@ -671,7 +673,7 @@ export class PortalService {
     const project = await db.query.catalogProjects.findFirst({
       where: or(eq(catalogProjects.slug, key), eq(catalogProjects.id, key))
     });
-    if (!project) return null;
+    if (!project || !project.active) return null;
 
     const [assets, priceRows] = await Promise.all([
       db.select().from(catalogAssets).where(eq(catalogAssets.projectId, project.id)),
@@ -1014,6 +1016,52 @@ export class PortalService {
         .set({ floorNumber: null })
         .where(eq(catalogAssets.projectId, projectId));
     }
+
+    return this.getCatalogProject(projectId);
+  }
+
+  /** Ручная правка заводского прайса (домокомплект + сборка + допы) в кабинете HQ */
+  async updateFactoryOffer(
+    projectId: string,
+    patch: {
+      basePrice?: number | null | undefined;
+      assembly: Array<{ id: string; name: string; price: number }>;
+      extras: Array<{ id: string; name: string; price: number }>;
+    }
+  ) {
+    const existing = await db.query.catalogProjects.findFirst({
+      where: eq(catalogProjects.id, projectId)
+    });
+    if (!existing) {
+      return null;
+    }
+
+    const prev = normalizeFactoryOffer(existing.factoryOffer);
+    const nextOffer = normalizeFactoryOffer({
+      importedAt: prev?.importedAt || new Date().toISOString(),
+      sources: prev?.sources?.length ? prev.sources : ["manual"],
+      assembly: patch.assembly,
+      extras: patch.extras
+    });
+    if (!nextOffer) {
+      return null;
+    }
+
+    const syncOverrides = { ...normalizeSyncOverrides(existing.syncOverrides) };
+    const basePrice =
+      patch.basePrice !== undefined ? patch.basePrice : existing.basePrice;
+    if (patch.basePrice !== undefined) {
+      syncOverrides.basePrice = true;
+    }
+
+    await db
+      .update(catalogProjects)
+      .set({
+        factoryOffer: nextOffer,
+        ...(patch.basePrice !== undefined ? { basePrice } : {}),
+        syncOverrides
+      })
+      .where(eq(catalogProjects.id, projectId));
 
     return this.getCatalogProject(projectId);
   }

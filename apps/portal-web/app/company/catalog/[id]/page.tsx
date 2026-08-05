@@ -3,25 +3,26 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  IconChevronLeft,
-  IconExternalLink,
-  IconEye,
-  IconEyeOff,
-  IconPhoto,
-  IconStar,
-  IconStarFilled
-} from "@tabler/icons-react";
+import { IconEye, IconEyeOff, IconStar, IconStarFilled } from "@tabler/icons-react";
 import { toast } from "sonner";
 
+import { CompanyProjectSummaryCard } from "@/components/company-project-summary-card";
 import { DashboardShell } from "@/components/dashboard-shell";
-import { FactoryOfferPanel } from "@/components/factory-offer-panel";
+import {
+  FactoryPackagesPriceEditor,
+  type FactoryOfferLine
+} from "@/components/factory-offer-panel";
 import { PageAlert } from "@/components/page-alert";
 import { Badge } from "@/components/ui/badge";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator
+} from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -31,9 +32,9 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/api";
-import { TECHNOLOGY_LABELS, technologyBadgeCode, technologyBadgeVariant } from "@/lib/catalog-display";
 import { companyCabinetLabel, companyNavigation } from "@/lib/company-nav";
 import { cn } from "@/lib/utils";
 
@@ -81,11 +82,14 @@ type Project = {
   bedrooms: number | null;
   bathrooms: string | null;
   basePrice: number | null;
+  details?: {
+    dimensions?: { label?: string } | null;
+  } | null;
   factoryOffer?: {
     importedAt?: string;
     sources?: string[];
-    assembly: Array<{ id: string; name: string; price: number }>;
-    extras: Array<{ id: string; name: string; price: number }>;
+    assembly: FactoryOfferLine[];
+    extras: FactoryOfferLine[];
   } | null;
   projectUrl: string;
   active: boolean;
@@ -93,50 +97,25 @@ type Project = {
   assets: Asset[];
 };
 
-const OVERRIDE_FIELD_LABELS: Record<keyof SyncOverrides, string> = {
-  name: "Название",
-  description: "Описание",
-  technology: "Технология",
-  area: "Площадь, м²",
-  floors: "Этажи",
-  bedrooms: "Спальни",
-  bathrooms: "Санузлы",
-  basePrice: "Заводская цена",
-  active: "Статус"
-};
+const MEDIA_TABS: Array<{ id: string; title: string; types: AssetType[] }> = [
+  { id: "exterior", title: "Экстерьер", types: ["exterior"] },
+  { id: "interior", title: "Интерьер", types: ["interior"] },
+  { id: "floor_plan", title: "Планировка", types: ["floor_plan"] }
+];
 
-function FieldLabelWithOverride({
-  htmlFor,
-  field,
-  overrides,
-  onClear
-}: {
-  htmlFor: string;
-  field: keyof SyncOverrides;
-  overrides: SyncOverrides;
-  onClear: (field: keyof SyncOverrides) => void;
-}) {
-  const protectedBySync = overrides[field] === true;
+function Panel({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Label htmlFor={htmlFor}>{OVERRIDE_FIELD_LABELS[field]}</Label>
-      {protectedBySync ? (
-        <>
-          <Badge variant="outline" className="text-xs font-normal">
-            защищено от синка
-          </Badge>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-xs"
-            onClick={() => onClear(field)}
-          >
-            Сбросить
-          </Button>
-        </>
-      ) : null}
-    </div>
+    <div className={cn("bg-card rounded-xl border p-4 md:p-5", className)}>{children}</div>
+  );
+}
+
+function SyncDot({ on }: { on?: boolean | undefined }) {
+  if (!on) return null;
+  return (
+    <span
+      className="bg-amber-500/90 size-1.5 shrink-0 rounded-full"
+      title="Защищено от синка Tilda"
+    />
   );
 }
 
@@ -147,17 +126,16 @@ export default function CompanyCatalogProjectPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [clearingSync, setClearingSync] = useState(false);
+  const [savingDescription, setSavingDescription] = useState(false);
+  const [savingOffer, setSavingOffer] = useState(false);
   const [assetBusyId, setAssetBusyId] = useState<string | null>(null);
-  const [technology, setTechnology] = useState<"modular" | "panel_frame">("modular");
-  const [active, setActive] = useState(true);
 
   async function load() {
     try {
       const data = await apiFetch<Project>(`/api/company/catalog/projects/${id}`);
       setProject(data);
-      setTechnology(data.technology);
-      setActive(data.active);
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить проект");
@@ -172,43 +150,53 @@ export default function CompanyCatalogProjectPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on id
   }, [id]);
 
-  async function saveProject(event: React.FormEvent<HTMLFormElement>) {
+  async function saveDescription(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!project) return;
-
     const fd = new FormData(event.currentTarget);
-    const body = {
-      name: String(fd.get("name") || "").trim(),
-      description: String(fd.get("description") || ""),
-      technology,
-      area: fd.get("area") ? Number(fd.get("area")) : null,
-      floors: fd.get("floors") ? Number(fd.get("floors")) : null,
-      bedrooms: fd.get("bedrooms") ? Number(fd.get("bedrooms")) : null,
-      bathrooms: String(fd.get("bathrooms") || "").trim() || null,
-      basePrice: fd.get("basePrice") ? Number(fd.get("basePrice")) : null,
-      active
-    };
-
-    setSaving(true);
+    setSavingDescription(true);
     try {
       const updated = await apiFetch<Project>(`/api/company/catalog/projects/${id}`, {
         method: "PATCH",
-        body: JSON.stringify(body)
+        body: JSON.stringify({ description: String(fd.get("description") || "") })
       });
       setProject(updated);
-      setTechnology(updated.technology);
-      setActive(updated.active);
-      toast.success("Проект сохранён");
+      toast.success("Описание сохранено");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Не удалось сохранить");
+      toast.error(err instanceof Error ? err.message : "Не удалось сохранить описание");
     } finally {
-      setSaving(false);
+      setSavingDescription(false);
+    }
+  }
+
+  async function saveFactoryOffer(next: {
+    basePrice: number | null;
+    assembly: FactoryOfferLine[];
+    extras: FactoryOfferLine[];
+  }) {
+    setSavingOffer(true);
+    try {
+      const updated = await apiFetch<Project>(
+        `/api/company/catalog/projects/${id}/factory-offer`,
+        { method: "PUT", body: JSON.stringify(next) }
+      );
+      setProject(updated);
+      toast.success("Прайс сохранён");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось сохранить прайс");
+    } finally {
+      setSavingOffer(false);
     }
   }
 
   async function patchAsset(
     assetId: string,
-    body: { type?: AssetType; floorNumber?: number | null; isPrimary?: boolean; isHidden?: boolean }
+    body: {
+      type?: AssetType;
+      floorNumber?: number | null;
+      isPrimary?: boolean;
+      isHidden?: boolean;
+    }
   ) {
     setAssetBusyId(assetId);
     try {
@@ -225,411 +213,389 @@ export default function CompanyCatalogProjectPage() {
     }
   }
 
-  async function clearSyncOverrides(fields?: Array<keyof SyncOverrides>) {
+  async function clearSyncOverrides() {
     if (!project) return;
+    setClearingSync(true);
     try {
       const updated = await apiFetch<Project>(
         `/api/company/catalog/projects/${id}/clear-sync-overrides`,
-        {
-          method: "POST",
-          body: JSON.stringify(fields ? { fields } : {})
-        }
+        { method: "POST", body: JSON.stringify({}) }
       );
       setProject(updated);
-      setTechnology(updated.technology);
-      setActive(updated.active);
-      toast.success(fields ? "Защита поля сброшена" : "Защита от синка сброшена");
+      toast.success("Защита синхронизации сброшена");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось сбросить защиту");
+    } finally {
+      setClearingSync(false);
     }
   }
 
-  const overrides = project?.syncOverrides ?? {};
-  const hasAnyOverride = Object.values(overrides).some(Boolean);
+  const hasSyncOverrides = Object.values(project?.syncOverrides ?? {}).some(Boolean);
 
   return (
     <DashboardShell
+      cabinetKind="company"
       cabinetLabel={companyCabinetLabel}
-      currentPath="/company/catalog"
+      currentPath={`/company/catalog/${id}`}
       navigation={companyNavigation}
+      title={project?.name ?? "Проект"}
+      breadcrumbs={
+        <Breadcrumb>
+          <BreadcrumbList className="text-sm">
+            <BreadcrumbItem>
+              <BreadcrumbLink asChild>
+                <Link href="/company">Главная</Link>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbLink asChild>
+                <Link href="/company/catalog">Каталог</Link>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage className="max-w-[220px] truncate sm:max-w-md">
+                {project?.name ?? "Проект"}
+              </BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+      }
+      headerActions={
+        <div className="flex items-center gap-2">
+          {editMode ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!hasSyncOverrides || clearingSync}
+              onClick={() => void clearSyncOverrides()}
+            >
+              {clearingSync ? <Spinner /> : null}
+              Сбросить защиту синхронизации
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            onClick={() => setEditMode((value) => !value)}
+            disabled={!project}
+            variant={editMode ? "outline" : "default"}
+          >
+            {editMode ? "Готово" : "Редактировать"}
+          </Button>
+        </div>
+      }
     >
-      <div className="mb-4">
-        <Button variant="ghost" size="sm" asChild className="-ml-2">
-          <Link href="/company/catalog">
-            <IconChevronLeft />
-            К каталогу
-          </Link>
-        </Button>
-      </div>
-
       <PageAlert message={error} variant="destructive" />
 
       {loading ? (
-        <div className="space-y-4">
-          <Skeleton className="h-10 w-64" />
-          <Skeleton className="h-48 w-full" />
-          <Skeleton className="h-64 w-full" />
-        </div>
+        <Skeleton className="h-96 w-full" />
       ) : project ? (
-        <div className="space-y-8">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
-                <Badge variant={technologyBadgeVariant(project.technology)}>
-                  {technologyBadgeCode(project.technology)}
-                </Badge>
-                <Badge variant={project.active ? "default" : "secondary"}>
-                  {project.active ? "Активен" : "Скрыт"}
-                </Badge>
-              </div>
-              <a
-                href={project.projectUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-muted-foreground hover:text-primary inline-flex items-center gap-1.5 text-sm"
-              >
-                Открыть на сайте
-                <IconExternalLink className="size-3.5" />
-              </a>
-            </div>
+        <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-3">
+          {/* 2/3 — сводка + комплектация */}
+          <div className="min-w-0 space-y-4 xl:col-span-2">
+            <CompanyProjectSummaryCard
+              project={project}
+              editMode={editMode}
+              onUpdated={(next) => {
+                setProject((prev) => (prev ? { ...prev, ...next } : prev));
+              }}
+            />
+
+            <Tabs defaultValue="packages">
+              <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
+                <TabsTrigger value="packages">Комплектация</TabsTrigger>
+                <TabsTrigger value="docs" disabled title="Скоро">
+                  Документация
+                </TabsTrigger>
+                <TabsTrigger value="logistics" disabled title="Скоро">
+                  Логистика
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="packages" className="mt-0">
+                <Panel>
+                  <FactoryPackagesPriceEditor
+                    housePrice={project.basePrice}
+                    offer={project.factoryOffer}
+                    saving={savingOffer}
+                    onSave={(next) => void saveFactoryOffer(next)}
+                  />
+                </Panel>
+              </TabsContent>
+            </Tabs>
           </div>
 
-          <Card>
-            <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
-              <div className="space-y-1.5">
-                <CardTitle>Описание и характеристики</CardTitle>
-                <p className="text-muted-foreground text-sm">
-                  После ручного сохранения поле защищается от перезаписи синком Tilda.
-                </p>
-              </div>
-              {hasAnyOverride ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void clearSyncOverrides()}
-                >
-                  Сбросить всю защиту
-                </Button>
-              ) : null}
-            </CardHeader>
-            <CardContent>
-              <form
-                key={project.id}
-                className="grid gap-4 md:grid-cols-3"
-                onSubmit={saveProject}
-              >
-                <div className="space-y-1.5 md:col-span-2">
-                  <FieldLabelWithOverride
-                    htmlFor="name"
-                    field="name"
-                    overrides={overrides}
-                    onClear={(field) => void clearSyncOverrides([field])}
-                  />
-                  <Input id="name" name="name" defaultValue={project.name} required />
-                </div>
-                <div className="space-y-1.5">
-                  <FieldLabelWithOverride
-                    htmlFor="technology"
-                    field="technology"
-                    overrides={overrides}
-                    onClear={(field) => void clearSyncOverrides([field])}
-                  />
-                  <Select
-                    value={technology}
-                    onValueChange={(value) =>
-                      setTechnology(value as "modular" | "panel_frame")
-                    }
+          {/* 1/3 справа — весь блок «О проекте» */}
+          <aside className="min-w-0 xl:sticky xl:top-6 xl:self-start">
+            <Panel className="p-3 md:p-4">
+              <p className="mb-3 text-sm font-semibold">О проекте</p>
+              <Tabs defaultValue="description">
+                <TabsList className="scrollbar-none h-auto w-full flex-wrap justify-start gap-1">
+                  <TabsTrigger value="description" className="text-xs">
+                    Описание
+                  </TabsTrigger>
+                  {MEDIA_TABS.map((tab) => (
+                    <TabsTrigger key={tab.id} value={tab.id} className="text-xs">
+                      {tab.title}
+                      <span className="text-muted-foreground ml-1 tabular-nums">
+                        ({project.assets.filter((a) => tab.types.includes(a.type)).length})
+                      </span>
+                    </TabsTrigger>
+                  ))}
+                  <TabsTrigger value="other" className="text-xs">
+                    Прочее
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="description" className="mt-3">
+                  <form
+                    key={`desc-${project.id}`}
+                    className="space-y-3"
+                    onSubmit={saveDescription}
                   >
-                    <SelectTrigger id="technology" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="modular">{TECHNOLOGY_LABELS.modular}</SelectItem>
-                      <SelectItem value="panel_frame">{TECHNOLOGY_LABELS.panel_frame}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5 md:col-span-3">
-                  <FieldLabelWithOverride
-                    htmlFor="description"
-                    field="description"
-                    overrides={overrides}
-                    onClear={(field) => void clearSyncOverrides([field])}
-                  />
-                  <Textarea
-                    id="description"
-                    name="description"
-                    rows={6}
-                    defaultValue={project.description}
-                    className="min-h-32 font-mono text-sm"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <FieldLabelWithOverride
-                    htmlFor="area"
-                    field="area"
-                    overrides={overrides}
-                    onClear={(field) => void clearSyncOverrides([field])}
-                  />
-                  <Input
-                    id="area"
-                    name="area"
-                    type="number"
-                    min={1}
-                    defaultValue={project.area ?? ""}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <FieldLabelWithOverride
-                    htmlFor="floors"
-                    field="floors"
-                    overrides={overrides}
-                    onClear={(field) => void clearSyncOverrides([field])}
-                  />
-                  <Input
-                    id="floors"
-                    name="floors"
-                    type="number"
-                    min={1}
-                    defaultValue={project.floors ?? ""}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <FieldLabelWithOverride
-                    htmlFor="bedrooms"
-                    field="bedrooms"
-                    overrides={overrides}
-                    onClear={(field) => void clearSyncOverrides([field])}
-                  />
-                  <Input
-                    id="bedrooms"
-                    name="bedrooms"
-                    type="number"
-                    min={0}
-                    defaultValue={project.bedrooms ?? ""}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <FieldLabelWithOverride
-                    htmlFor="bathrooms"
-                    field="bathrooms"
-                    overrides={overrides}
-                    onClear={(field) => void clearSyncOverrides([field])}
-                  />
-                  <Input
-                    id="bathrooms"
-                    name="bathrooms"
-                    defaultValue={project.bathrooms ?? ""}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <FieldLabelWithOverride
-                    htmlFor="basePrice"
-                    field="basePrice"
-                    overrides={overrides}
-                    onClear={(field) => void clearSyncOverrides([field])}
-                  />
-                  <Input
-                    id="basePrice"
-                    name="basePrice"
-                    type="number"
-                    min={0}
-                    defaultValue={project.basePrice ?? ""}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <FieldLabelWithOverride
-                    htmlFor="active"
-                    field="active"
-                    overrides={overrides}
-                    onClear={(field) => void clearSyncOverrides([field])}
-                  />
-                  <Select
-                    value={active ? "true" : "false"}
-                    onValueChange={(value) => setActive(value === "true")}
-                  >
-                    <SelectTrigger id="active" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="true">Активен</SelectItem>
-                      <SelectItem value="false">Скрыт</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="md:col-span-3">
-                  <Button type="submit" disabled={saving}>
-                    {saving ? <Spinner /> : null}
-                    Сохранить
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">Описание</p>
+                      <SyncDot on={project.syncOverrides?.description} />
+                    </div>
+                    <Textarea
+                      name="description"
+                      rows={10}
+                      defaultValue={project.description}
+                      className="min-h-48 text-sm"
+                    />
+                    <Button type="submit" size="sm" disabled={savingDescription}>
+                      {savingDescription ? <Spinner /> : null}
+                      Сохранить
+                    </Button>
+                  </form>
+                </TabsContent>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Прайс завода</CardTitle>
-              <p className="text-muted-foreground text-sm">
-                Стоимость дома, сборка и допы для дилера из Excel. Это не опции покупателя на
-                сайте партнёра.
-              </p>
-            </CardHeader>
-            <CardContent>
-              <FactoryOfferPanel
-                basePrice={project.basePrice}
-                offer={project.factoryOffer}
-                emptyHint="Загрузите прайс кнопкой «Обновить цены» на странице каталога."
-              />
-            </CardContent>
-          </Card>
-
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <IconPhoto className="text-muted-foreground size-5" />
-              <h2 className="text-xl font-semibold">
-                Изображения
-                <span className="text-muted-foreground ml-2 text-base font-normal">
-                  ({project.assets.length})
-                </span>
-              </h2>
-            </div>
-            <p className="text-muted-foreground text-sm">
-              Категории влияют на блоки «Планировка / Экстерьеры / Интерьеры» на сайте партнёра.
-              Для планировок многоэтажных домов укажите этаж — на витрине появится подпись
-              «Планировка N-го этажа». Скрытые ассеты не показываются на витрине. Тип, этаж,
-              главный кадр и скрытие сохраняются при синхронизации с Tilda по URL изображения.
-            </p>
-            {project.assets.length === 0 ? (
-              <EmptyAssets />
-            ) : (
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                {project.assets.map((asset) => {
-                  const showFloorSelect =
-                    asset.type === "floor_plan" && (project.floors ?? 0) > 1;
-                  const floorOptions = Array.from(
-                    { length: Math.max(project.floors ?? 0, 0) },
-                    (_, i) => i + 1
-                  );
-
+                {MEDIA_TABS.map((tab) => {
+                  const assets = project.assets.filter((a) => tab.types.includes(a.type));
                   return (
-                  <Card key={asset.id} className={cn(asset.isHidden && "opacity-60")}>
-                    <CardContent className="space-y-2 p-3">
-                      <div className="bg-muted relative aspect-video overflow-hidden rounded-md border">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={asset.sourceUrl}
-                          alt=""
-                          className="size-full object-contain"
+                    <TabsContent key={tab.id} value={tab.id} className="mt-3">
+                      {assets.length === 0 ? (
+                        <p className="text-muted-foreground py-6 text-center text-sm">
+                          Пока пусто
+                        </p>
+                      ) : (
+                        <AssetGrid
+                          assets={assets}
+                          floors={project.floors}
+                          busyId={assetBusyId}
+                          onPatch={patchAsset}
+                          compact
                         />
-                        <div className="absolute top-2 left-2 flex flex-wrap gap-1">
-                          {asset.isPrimary ? <Badge>Главный</Badge> : null}
-                          {asset.isHidden ? <Badge variant="secondary">Скрыт</Badge> : null}
-                          {showFloorSelect && asset.floorNumber ? (
-                            <Badge variant="outline">{asset.floorNumber} эт.</Badge>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <Select
-                          value={asset.type}
-                          disabled={assetBusyId === asset.id}
-                          onValueChange={(value) =>
-                            void patchAsset(asset.id, { type: value as AssetType })
-                          }
-                        >
-                          <SelectTrigger size="sm" className="h-8 min-w-0 flex-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ASSET_TYPES.map((t) => (
-                              <SelectItem key={t.value} value={t.value}>
-                                {t.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type="button"
-                          variant={asset.isPrimary ? "default" : "outline"}
-                          size="sm"
-                          className="size-8 shrink-0 px-0"
-                          disabled={assetBusyId === asset.id || asset.isPrimary}
-                          title={asset.isPrimary ? "Главный" : "Сделать главным"}
-                          aria-label={asset.isPrimary ? "Главный" : "Сделать главным"}
-                          onClick={() => void patchAsset(asset.id, { isPrimary: true })}
-                        >
-                          {asset.isPrimary ? (
-                            <IconStarFilled className="size-4" />
-                          ) : (
-                            <IconStar className="size-4" />
-                          )}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="size-8 shrink-0 px-0"
-                          disabled={assetBusyId === asset.id}
-                          title={asset.isHidden ? "Показать" : "Скрыть"}
-                          aria-label={asset.isHidden ? "Показать" : "Скрыть"}
-                          onClick={() =>
-                            void patchAsset(asset.id, { isHidden: !asset.isHidden })
-                          }
-                        >
-                          {asset.isHidden ? (
-                            <IconEye className="size-4" />
-                          ) : (
-                            <IconEyeOff className="size-4" />
-                          )}
-                        </Button>
-                      </div>
-                      {showFloorSelect ? (
-                        <Select
-                          value={
-                            asset.floorNumber != null ? String(asset.floorNumber) : "unset"
-                          }
-                          disabled={assetBusyId === asset.id}
-                          onValueChange={(value) =>
-                            void patchAsset(asset.id, {
-                              floorNumber: value === "unset" ? null : Number(value)
-                            })
-                          }
-                        >
-                          <SelectTrigger size="sm" className="h-8 w-full">
-                            <SelectValue placeholder="Этаж планировки" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="unset">Этаж не указан</SelectItem>
-                            {floorOptions.map((floor) => (
-                              <SelectItem key={floor} value={String(floor)}>
-                                {floor}-й этаж
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : null}
-                    </CardContent>
-                  </Card>
+                      )}
+                    </TabsContent>
                   );
                 })}
-              </div>
-            )}
-          </div>
+
+                <TabsContent value="other" className="mt-3 space-y-4">
+                  {/* Не только картинки — любая прочая информация */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Служебное</p>
+                    <dl className="text-muted-foreground space-y-1.5 text-xs">
+                      <div className="flex justify-between gap-2">
+                        <dt>ID</dt>
+                        <dd className="text-foreground font-mono text-[11px] break-all">
+                          {project.id}
+                        </dd>
+                      </div>
+                      {project.factoryOffer?.importedAt ? (
+                        <div className="flex justify-between gap-2">
+                          <dt>Прайс обновлён</dt>
+                          <dd className="text-foreground">
+                            {new Date(project.factoryOffer.importedAt).toLocaleString("ru-RU")}
+                          </dd>
+                        </div>
+                      ) : null}
+                      {project.factoryOffer?.sources && project.factoryOffer.sources.length > 0 ? (
+                        <div className="flex justify-between gap-2">
+                          <dt>Источники прайса</dt>
+                          <dd className="text-foreground text-right">
+                            {project.factoryOffer.sources.join(", ")}
+                          </dd>
+                        </div>
+                      ) : null}
+                      <div className="flex justify-between gap-2">
+                        <dt>Ссылка Tilda</dt>
+                        <dd className="text-foreground max-w-[60%] truncate text-right">
+                          <a
+                            href={project.projectUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="hover:text-primary underline-offset-2 hover:underline"
+                          >
+                            открыть
+                          </a>
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+
+                  {Object.values(project.syncOverrides ?? {}).some(Boolean) ? (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Защита синхронизации</p>
+                      <p className="text-muted-foreground text-xs">
+                        Поля с янтарной точкой не перезаписываются Tilda. Сброс — кнопкой слева
+                        от «Готово» в режиме редактирования.
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {(() => {
+                    const otherAssets = project.assets.filter((a) => a.type === "unknown");
+                    if (otherAssets.length === 0) return null;
+                    return (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">
+                          Неразмеченные фото ({otherAssets.length})
+                        </p>
+                        <AssetGrid
+                          assets={otherAssets}
+                          floors={project.floors}
+                          busyId={assetBusyId}
+                          onPatch={patchAsset}
+                          compact
+                        />
+                      </div>
+                    );
+                  })()}
+                </TabsContent>
+              </Tabs>
+            </Panel>
+          </aside>
         </div>
       ) : null}
     </DashboardShell>
   );
 }
 
-function EmptyAssets() {
+function AssetGrid({
+  assets,
+  floors,
+  busyId,
+  onPatch,
+  compact
+}: {
+  assets: Asset[];
+  floors: number | null;
+  busyId: string | null;
+  compact?: boolean;
+  onPatch: (
+    assetId: string,
+    body: {
+      type?: AssetType;
+      floorNumber?: number | null;
+      isPrimary?: boolean;
+      isHidden?: boolean;
+    }
+  ) => void;
+}) {
   return (
-    <Card className={cn("border-dashed")}>
-      <CardContent className="text-muted-foreground py-10 text-center text-sm">
-        У проекта пока нет изображений. Запустите синхронизацию с Tilda.
-      </CardContent>
-    </Card>
+    <div className={cn("grid gap-2", compact ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3")}>
+      {assets.map((asset) => {
+        const showFloorSelect = asset.type === "floor_plan" && (floors ?? 0) > 1;
+        const floorOptions = Array.from({ length: Math.max(floors ?? 0, 0) }, (_, i) => i + 1);
+
+        return (
+          <div
+            key={asset.id}
+            className={cn(
+              "bg-muted/30 overflow-hidden rounded-lg border",
+              asset.isHidden && "opacity-55"
+            )}
+          >
+            <div className="bg-muted relative aspect-video overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={asset.sourceUrl} alt="" className="size-full object-cover" />
+              <div className="absolute top-2 left-2 flex flex-wrap gap-1">
+                {asset.isPrimary ? <Badge>Главный</Badge> : null}
+                {asset.isHidden ? <Badge variant="secondary">Скрыт</Badge> : null}
+              </div>
+            </div>
+            <div className="flex items-center gap-1 p-2">
+              <Select
+                value={asset.type}
+                disabled={busyId === asset.id}
+                onValueChange={(value) =>
+                  void onPatch(asset.id, { type: value as AssetType })
+                }
+              >
+                <SelectTrigger size="sm" className="h-8 min-w-0 flex-1 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ASSET_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant={asset.isPrimary ? "default" : "ghost"}
+                size="sm"
+                className="size-8 shrink-0 px-0"
+                disabled={busyId === asset.id || asset.isPrimary}
+                title="Сделать главным"
+                aria-label="Сделать главным"
+                onClick={() => void onPatch(asset.id, { isPrimary: true })}
+              >
+                {asset.isPrimary ? (
+                  <IconStarFilled className="size-4" />
+                ) : (
+                  <IconStar className="size-4" />
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="size-8 shrink-0 px-0"
+                disabled={busyId === asset.id}
+                title={asset.isHidden ? "Показать" : "Скрыть"}
+                aria-label={asset.isHidden ? "Показать" : "Скрыть"}
+                onClick={() => void onPatch(asset.id, { isHidden: !asset.isHidden })}
+              >
+                {asset.isHidden ? (
+                  <IconEye className="size-4" />
+                ) : (
+                  <IconEyeOff className="size-4" />
+                )}
+              </Button>
+            </div>
+            {showFloorSelect ? (
+              <div className="px-2 pb-2">
+                <Select
+                  value={asset.floorNumber != null ? String(asset.floorNumber) : "unset"}
+                  disabled={busyId === asset.id}
+                  onValueChange={(value) =>
+                    void onPatch(asset.id, {
+                      floorNumber: value === "unset" ? null : Number(value)
+                    })
+                  }
+                >
+                  <SelectTrigger size="sm" className="h-8 w-full text-xs">
+                    <SelectValue placeholder="Этаж" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unset">Этаж не указан</SelectItem>
+                    {floorOptions.map((floor) => (
+                      <SelectItem key={floor} value={String(floor)}>
+                        {floor}-й этаж
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
   );
 }

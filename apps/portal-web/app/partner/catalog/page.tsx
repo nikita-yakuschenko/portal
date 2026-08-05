@@ -23,14 +23,17 @@ import {
   IconEyeOff,
   IconGripVertical,
   IconHeart,
-  IconSearch,
   IconSearchOff,
   IconX
 } from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { CatalogProjectCard } from "@/components/catalog-project-card";
-import { FilterControlShell, FilterTrailingSlot } from "@/components/filter-clear";
+import {
+  CatalogFiltersBar,
+  type CatalogFloorsFilter,
+  type CatalogTechnologyFilter
+} from "@/components/catalog-filters-bar";
 import {
   CatalogViewToggle,
   type CatalogViewMode
@@ -48,16 +51,7 @@ import {
   EmptyMedia,
   EmptyTitle
 } from "@/components/ui/empty";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Slider } from "@/components/ui/slider";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
@@ -68,11 +62,7 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
-import {
-  TECHNOLOGY_LABELS,
-  technologyBadgeCode,
-  technologyBadgeVariant
-} from "@/lib/catalog-display";
+import { technologyBadgeCode, technologyBadgeVariant } from "@/lib/catalog-display";
 import { cn } from "@/lib/utils";
 
 type Project = {
@@ -103,9 +93,6 @@ type PricingRow = {
   }>;
 };
 
-type TechnologyFilter = "all" | "modular" | "panel_frame";
-type FloorsFilter = "all" | "1" | "2";
-
 const FAVORITES_KEY = "avgst.partner.catalog.favorites";
 const VIEW_KEY = "avgst.partner.catalog.view";
 
@@ -135,23 +122,6 @@ function loadViewMode(): CatalogViewMode {
 function formatRub(value: number | null | undefined): string {
   if (value == null) return "—";
   return value.toLocaleString("ru-RU");
-}
-
-function formatPriceRange(value: number): string {
-  if (value >= 1_000_000) {
-    const mln = value / 1_000_000;
-    return `${mln.toLocaleString("ru-RU", { maximumFractionDigits: mln >= 10 ? 0 : 1 })} млн`;
-  }
-  return value.toLocaleString("ru-RU");
-}
-
-function rangeStep(min: number, max: number): number {
-  const span = Math.max(max - min, 1);
-  if (span <= 50) return 1;
-  if (span <= 500) return 5;
-  if (span <= 5_000) return 50;
-  if (span <= 500_000) return 10_000;
-  return 50_000;
 }
 
 function SortableCard({
@@ -245,8 +215,8 @@ export default function PartnerCatalogPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [technology, setTechnology] = useState<TechnologyFilter>("all");
-  const [floors, setFloors] = useState<FloorsFilter>("all");
+  const [technology, setTechnology] = useState<CatalogTechnologyFilter>("all");
+  const [floors, setFloors] = useState<CatalogFloorsFilter>("all");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -566,400 +536,247 @@ export default function PartnerCatalogPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <div className="min-w-0 flex-1 space-y-4">
-          {loading ? (
-            viewMode === "cards" ? (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <Skeleton key={index} className="aspect-video w-full rounded-xl" />
-                ))}
-              </div>
-            ) : (
-              <Skeleton className="h-96 w-full rounded-xl" />
-            )
-          ) : filtered.length === 0 ? (
-            <Empty className="border">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <IconSearchOff />
-                </EmptyMedia>
-                <EmptyTitle>Ничего не найдено</EmptyTitle>
-                <EmptyDescription>
-                  {favoritesOnly && favorites.size === 0
-                    ? "В избранном пока пусто — отметьте проекты сердечком на карточке."
-                    : "Снимите фильтры или измените поисковый запрос."}
-                </EmptyDescription>
-              </EmptyHeader>
-              {hasActiveFilters ? (
-                <EmptyContent>
-                  <button
-                    type="button"
-                    onClick={resetFilters}
-                    className="text-primary text-sm font-medium underline-offset-4 hover:underline"
-                  >
-                    Сбросить фильтры
-                  </button>
-                </EmptyContent>
-              ) : null}
-            </Empty>
+      <CatalogFiltersBar
+        query={query}
+        onQueryChange={setQuery}
+        technology={technology}
+        onTechnologyChange={setTechnology}
+        floors={floors}
+        onFloorsChange={setFloors}
+        showFavorites
+        favoritesOnly={favoritesOnly}
+        onFavoritesOnlyChange={setFavoritesOnly}
+        favoritesCount={favorites.size}
+        priceBounds={priceBounds}
+        priceRange={priceRange}
+        onPriceRangeChange={setPriceRange}
+        areaBounds={areaBounds}
+        areaRange={areaRange}
+        onAreaRangeChange={setAreaRange}
+      />
+
+      <div className="min-w-0 space-y-4">
+        {loading ? (
+          viewMode === "cards" ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <Skeleton key={index} className="aspect-video w-full rounded-xl" />
+              ))}
+            </div>
           ) : (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              {viewMode === "cards" ? (
-                <SortableContext
-                  items={filtered.map((project) => project.id)}
-                  strategy={rectSortingStrategy}
+            <Skeleton className="h-96 w-full rounded-xl" />
+          )
+        ) : filtered.length === 0 ? (
+          <Empty className="border">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <IconSearchOff />
+              </EmptyMedia>
+              <EmptyTitle>Ничего не найдено</EmptyTitle>
+              <EmptyDescription>
+                {favoritesOnly && favorites.size === 0
+                  ? "В избранном пока пусто — отметьте проекты сердечком на карточке."
+                  : "Снимите фильтры или измените поисковый запрос."}
+              </EmptyDescription>
+            </EmptyHeader>
+            {hasActiveFilters ? (
+              <EmptyContent>
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="text-primary text-sm font-medium underline-offset-4 hover:underline"
                 >
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {filtered.map((project) => (
-                      <SortableCard
-                        key={project.id}
-                        id={project.id}
-                        disabled={!canReorder}
-                      >
-                        {(dragHandle) => (
-                          <CatalogProjectCard
-                            href={`/partner/catalog/${project.id}`}
-                            name={project.name}
-                            description={project.description}
-                            technology={project.technology}
-                            area={project.area}
-                            floors={project.floors}
-                            bedrooms={project.bedrooms}
-                            basePrice={project.basePrice}
-                            retailPrice={pricingById[project.id]?.displayPrice ?? null}
-                            retailOnRequest={
-                              pricingById[project.id]?.displayOnRequest ?? false
-                            }
-                            isPublished={pricingById[project.id]?.isPublished ?? false}
-                            assets={project.assets ?? []}
-                            favorite={favorites.has(project.id)}
-                            onToggleFavorite={() => toggleFavorite(project.id)}
-                            selected={selected.has(project.id)}
-                            onSelectedChange={(next) => toggleSelected(project.id, next)}
-                            dragHandle={dragHandle}
-                            requestInfoHref={`/partner/catalog/${project.id}?request=1`}
-                          />
-                        )}
-                      </SortableCard>
-                    ))}
-                  </div>
-                </SortableContext>
-              ) : (
-                <div className="overflow-hidden rounded-xl border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-10" />
-                        <TableHead className="w-10">
-                          <Checkbox
-                            checked={
-                              allFilteredSelected
-                                ? true
-                                : someFilteredSelected
-                                  ? "indeterminate"
-                                  : false
-                            }
-                            onCheckedChange={(value) =>
-                              toggleSelectAllFiltered(value === true)
-                            }
-                            aria-label="Выбрать все на странице"
-                          />
-                        </TableHead>
-                        <TableHead className="w-10">Статус</TableHead>
-                        <TableHead>Проект</TableHead>
-                        <TableHead>Технология</TableHead>
-                        <TableHead className="text-right">Площадь</TableHead>
-                        <TableHead className="text-right">Этажи</TableHead>
-                        <TableHead className="text-right">Спальни</TableHead>
-                        <TableHead className="text-right">Завод</TableHead>
-                        <TableHead className="text-right">Ваша цена</TableHead>
-                        <TableHead className="w-10" />
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      <SortableContext
-                        items={filtered.map((project) => project.id)}
-                        strategy={verticalListSortingStrategy}
-                      >
-                        {filtered.map((project) => {
-                          const pricing = pricingById[project.id];
-                          const published = pricing?.isPublished ?? false;
-                          const retailOnRequest = pricing?.displayOnRequest ?? false;
-                          const retailPrice = pricing?.displayPrice ?? null;
-                          const hasRetail = retailPrice != null || retailOnRequest;
-                          const isFavorite = favorites.has(project.id);
-                          const isSelected = selected.has(project.id);
-
-                          return (
-                            <SortableTableRow
-                              key={project.id}
-                              id={project.id}
-                              disabled={!canReorder}
-                              data-state={isSelected ? "selected" : undefined}
-                            >
-                              <TableCell>
-                                <Checkbox
-                                  checked={isSelected}
-                                  onCheckedChange={(value) =>
-                                    toggleSelected(project.id, value === true)
-                                  }
-                                  aria-label={`Выбрать ${project.name}`}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <span
-                                  className={cn(
-                                    "inline-flex",
-                                    published ? "text-primary" : "text-muted-foreground"
-                                  )}
-                                  title={
-                                    published ? "Опубликован на сайте" : "Скрыт с сайта"
-                                  }
-                                  aria-label={
-                                    published ? "Опубликован на сайте" : "Скрыт с сайта"
-                                  }
-                                >
-                                  {published ? (
-                                    <IconCircleCheck className="size-4" />
-                                  ) : (
-                                    <IconEyeOff className="size-4" />
-                                  )}
-                                </span>
-                              </TableCell>
-                              <TableCell>
-                                <Link
-                                  href={`/partner/catalog/${project.id}`}
-                                  className="hover:text-primary font-medium underline-offset-4 hover:underline"
-                                >
-                                  {project.name}
-                                </Link>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={technologyBadgeVariant(project.technology)}>
-                                  {technologyBadgeCode(project.technology)}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">
-                                {project.area != null ? `${project.area} м²` : "—"}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">
-                                {project.floors ?? "—"}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">
-                                {project.bedrooms ?? "—"}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">
-                                {project.basePrice ? formatRub(project.basePrice) : "По запросу"}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">
-                                {!hasRetail
-                                  ? "—"
-                                  : retailOnRequest || retailPrice == null
-                                    ? "По запросу"
-                                    : formatRub(retailPrice)}
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  type="button"
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  aria-label={
-                                    isFavorite ? "Убрать из избранного" : "В избранное"
-                                  }
-                                  aria-pressed={isFavorite}
-                                  onClick={() => toggleFavorite(project.id)}
-                                >
-                                  <IconHeart
-                                    className={cn(isFavorite && "fill-primary text-primary")}
-                                  />
-                                </Button>
-                              </TableCell>
-                            </SortableTableRow>
-                          );
-                        })}
-                      </SortableContext>
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </DndContext>
-          )}
-        </div>
-
-        <aside className="w-full shrink-0 space-y-3 lg:sticky lg:top-6 lg:w-72">
-          <FilterControlShell
-            active={Boolean(query.trim())}
-            className="h-9 w-full min-w-0"
+                  Сбросить фильтры
+                </button>
+              </EmptyContent>
+            ) : null}
+          </Empty>
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
           >
-            <div className="relative min-w-0 flex-1">
-              <IconSearch className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Поиск по названию"
-                aria-label="Поиск по названию"
-                className="h-9 w-full rounded-none border-0 bg-transparent pl-9 shadow-none focus-visible:ring-0"
-              />
-            </div>
-            <FilterTrailingSlot
-              mode={query.trim() ? "clear" : "empty"}
-              onClear={() => setQuery("")}
-              label="Очистить поиск"
-            />
-          </FilterControlShell>
-
-          <FilterControlShell active={technology !== "all"} className="relative h-9 w-full min-w-0">
-            <Select
-              value={technology}
-              onValueChange={(value) => setTechnology(value as TechnologyFilter)}
-            >
-              <SelectTrigger
-                className={cn(
-                  "h-9 w-full rounded-none border-0 bg-transparent shadow-none focus:ring-0 focus-visible:ring-0",
-                  technology !== "all" && "[&>svg:last-child]:invisible"
-                )}
-                aria-label="Технология"
+            {viewMode === "cards" ? (
+              <SortableContext
+                items={filtered.map((project) => project.id)}
+                strategy={rectSortingStrategy}
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper">
-                <SelectItem value="all">Технология: все</SelectItem>
-                <SelectItem value="modular">{TECHNOLOGY_LABELS.modular}</SelectItem>
-                <SelectItem value="panel_frame">{TECHNOLOGY_LABELS.panel_frame}</SelectItem>
-              </SelectContent>
-            </Select>
-            {technology !== "all" ? (
-              <FilterTrailingSlot
-                mode="clear"
-                onClear={() => setTechnology("all")}
-                label="Сбросить фильтр технологии"
-                className="absolute inset-y-0 right-0 z-10"
-              />
-            ) : null}
-          </FilterControlShell>
-
-          <FilterControlShell active={floors !== "all"} className="relative h-9 w-full min-w-0">
-            <Select value={floors} onValueChange={(value) => setFloors(value as FloorsFilter)}>
-              <SelectTrigger
-                className={cn(
-                  "h-9 w-full rounded-none border-0 bg-transparent shadow-none focus:ring-0 focus-visible:ring-0",
-                  floors !== "all" && "[&>svg:last-child]:invisible"
-                )}
-                aria-label="Этажность"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper">
-                <SelectItem value="all">Этажи: все</SelectItem>
-                <SelectItem value="1">1 этаж</SelectItem>
-                <SelectItem value="2">2 этажа</SelectItem>
-              </SelectContent>
-            </Select>
-            {floors !== "all" ? (
-              <FilterTrailingSlot
-                mode="clear"
-                onClear={() => setFloors("all")}
-                label="Сбросить фильтр этажности"
-                className="absolute inset-y-0 right-0 z-10"
-              />
-            ) : null}
-          </FilterControlShell>
-
-          <FilterControlShell active={favoritesOnly} className="h-9 w-full min-w-0">
-            <button
-              type="button"
-              className={cn(
-                "inline-flex h-full min-w-0 flex-1 items-center justify-start gap-2 px-3 text-sm font-medium transition hover:bg-muted/50",
-                favoritesOnly && "hover:bg-transparent"
-              )}
-              aria-pressed={favoritesOnly}
-              onClick={() => setFavoritesOnly((value) => !value)}
-            >
-              <IconHeart
-                className={cn(
-                  "size-4 shrink-0",
-                  favoritesOnly && "fill-primary text-primary"
-                )}
-              />
-              Избранное
-              {favorites.size > 0 ? (
-                <span className="text-muted-foreground tabular-nums">{favorites.size}</span>
-              ) : null}
-            </button>
-            <FilterTrailingSlot
-              mode={favoritesOnly ? "clear" : "empty"}
-              onClear={() => setFavoritesOnly(false)}
-              label="Сбросить фильтр избранного"
-            />
-          </FilterControlShell>
-
-          {priceBounds && priceRange ? (
-            <div className="overflow-hidden rounded-xl border">
-              <div className="flex items-stretch">
-                <div className="min-w-0 flex-1 px-3 py-3">
-                  <p className="text-sm font-medium">Цена</p>
-                  <p className="text-muted-foreground mt-0.5 text-xs tabular-nums">
-                    {formatPriceRange(priceRange[0])} — {formatPriceRange(priceRange[1])}
-                  </p>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {filtered.map((project) => (
+                    <SortableCard
+                      key={project.id}
+                      id={project.id}
+                      disabled={!canReorder}
+                    >
+                      {(dragHandle) => (
+                        <CatalogProjectCard
+                          href={`/partner/catalog/${project.id}`}
+                          name={project.name}
+                          description={project.description}
+                          technology={project.technology}
+                          area={project.area}
+                          floors={project.floors}
+                          bedrooms={project.bedrooms}
+                          basePrice={project.basePrice}
+                          retailPrice={pricingById[project.id]?.displayPrice ?? null}
+                          retailOnRequest={
+                            pricingById[project.id]?.displayOnRequest ?? false
+                          }
+                          isPublished={pricingById[project.id]?.isPublished ?? false}
+                          assets={project.assets ?? []}
+                          favorite={favorites.has(project.id)}
+                          onToggleFavorite={() => toggleFavorite(project.id)}
+                          selected={selected.has(project.id)}
+                          onSelectedChange={(next) => toggleSelected(project.id, next)}
+                          dragHandle={dragHandle}
+                          requestInfoHref={`/partner/catalog/${project.id}?request=1`}
+                        />
+                      )}
+                    </SortableCard>
+                  ))}
                 </div>
-                <FilterTrailingSlot
-                  mode={priceActive ? "clear" : "empty"}
-                  onClear={() => setPriceRange([priceBounds.min, priceBounds.max])}
-                  label="Сбросить фильтр цены"
-                  className="self-stretch"
-                />
-              </div>
-              <div className="px-3 pb-3">
-                <Slider
-                  min={priceBounds.min}
-                  max={priceBounds.max}
-                  step={rangeStep(priceBounds.min, priceBounds.max)}
-                  value={priceRange}
-                  onValueChange={(value) => {
-                    if (value.length >= 2) setPriceRange([value[0]!, value[1]!]);
-                  }}
-                  aria-label="Диапазон цены"
-                />
-              </div>
-            </div>
-          ) : null}
+              </SortableContext>
+            ) : (
+              <div className="overflow-hidden rounded-xl border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10" />
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={
+                            allFilteredSelected
+                              ? true
+                              : someFilteredSelected
+                                ? "indeterminate"
+                                : false
+                          }
+                          onCheckedChange={(value) =>
+                            toggleSelectAllFiltered(value === true)
+                          }
+                          aria-label="Выбрать все на странице"
+                        />
+                      </TableHead>
+                      <TableHead className="w-10">Статус</TableHead>
+                      <TableHead>Проект</TableHead>
+                      <TableHead>Технология</TableHead>
+                      <TableHead className="text-right">Площадь</TableHead>
+                      <TableHead className="text-right">Этажи</TableHead>
+                      <TableHead className="text-right">Спальни</TableHead>
+                      <TableHead className="text-right">Завод</TableHead>
+                      <TableHead className="text-right">Ваша цена</TableHead>
+                      <TableHead className="w-10" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <SortableContext
+                      items={filtered.map((project) => project.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {filtered.map((project) => {
+                        const pricing = pricingById[project.id];
+                        const published = pricing?.isPublished ?? false;
+                        const retailOnRequest = pricing?.displayOnRequest ?? false;
+                        const retailPrice = pricing?.displayPrice ?? null;
+                        const hasRetail = retailPrice != null || retailOnRequest;
+                        const isFavorite = favorites.has(project.id);
+                        const isSelected = selected.has(project.id);
 
-          {areaBounds && areaRange ? (
-            <div className="overflow-hidden rounded-xl border">
-              <div className="flex items-stretch">
-                <div className="min-w-0 flex-1 px-3 py-3">
-                  <p className="text-sm font-medium">Площадь</p>
-                  <p className="text-muted-foreground mt-0.5 text-xs tabular-nums">
-                    {areaRange[0]} — {areaRange[1]} м²
-                  </p>
-                </div>
-                <FilterTrailingSlot
-                  mode={areaActive ? "clear" : "empty"}
-                  onClear={() => setAreaRange([areaBounds.min, areaBounds.max])}
-                  label="Сбросить фильтр площади"
-                  className="self-stretch"
-                />
+                        return (
+                          <SortableTableRow
+                            key={project.id}
+                            id={project.id}
+                            disabled={!canReorder}
+                            data-state={isSelected ? "selected" : undefined}
+                          >
+                            <TableCell>
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={(value) =>
+                                  toggleSelected(project.id, value === true)
+                                }
+                                aria-label={`Выбрать ${project.name}`}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <span
+                                className={cn(
+                                  "inline-flex",
+                                  published ? "text-primary" : "text-muted-foreground"
+                                )}
+                                title={
+                                  published ? "Опубликован на сайте" : "Скрыт с сайта"
+                                }
+                                aria-label={
+                                  published ? "Опубликован на сайте" : "Скрыт с сайта"
+                                }
+                              >
+                                {published ? (
+                                  <IconCircleCheck className="size-4" />
+                                ) : (
+                                  <IconEyeOff className="size-4" />
+                                )}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <Link
+                                href={`/partner/catalog/${project.id}`}
+                                className="hover:text-primary font-medium underline-offset-4 hover:underline"
+                              >
+                                {project.name}
+                              </Link>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={technologyBadgeVariant(project.technology)}>
+                                {technologyBadgeCode(project.technology)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {project.area != null ? `${project.area} м²` : "—"}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {project.floors ?? "—"}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {project.bedrooms ?? "—"}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {project.basePrice ? formatRub(project.basePrice) : "По запросу"}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {!hasRetail
+                                ? "—"
+                                : retailOnRequest || retailPrice == null
+                                  ? "По запросу"
+                                  : formatRub(retailPrice)}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                aria-label={
+                                  isFavorite ? "Убрать из избранного" : "В избранное"
+                                }
+                                aria-pressed={isFavorite}
+                                onClick={() => toggleFavorite(project.id)}
+                              >
+                                <IconHeart
+                                  className={cn(isFavorite && "fill-primary text-primary")}
+                                />
+                              </Button>
+                            </TableCell>
+                          </SortableTableRow>
+                        );
+                      })}
+                    </SortableContext>
+                  </TableBody>
+                </Table>
               </div>
-              <div className="px-3 pb-3">
-                <Slider
-                  min={areaBounds.min}
-                  max={areaBounds.max}
-                  step={rangeStep(areaBounds.min, areaBounds.max)}
-                  value={areaRange}
-                  onValueChange={(value) => {
-                    if (value.length >= 2) setAreaRange([value[0]!, value[1]!]);
-                  }}
-                  aria-label="Диапазон площади"
-                />
-              </div>
-            </div>
-          ) : null}
-        </aside>
+            )}
+          </DndContext>
+        )}
       </div>
     </PartnerShell>
   );

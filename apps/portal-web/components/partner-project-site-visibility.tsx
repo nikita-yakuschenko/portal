@@ -89,11 +89,11 @@ export function PartnerProjectSiteVisibility({
   }
 
   return (
-    <span className="inline-grid grid-cols-[11.75rem_10.5rem] items-center gap-2">
+    <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap">
       <Badge
         key={published ? "published" : "hidden"}
         variant={published ? "default" : "warning"}
-        className="animate-in fade-in zoom-in-95 w-full justify-center duration-200"
+        className="animate-in fade-in zoom-in-95 duration-200"
       >
         {published ? <IconCircleCheck /> : <IconEyeOff />}
         {published ? "Опубликован на сайте" : "Скрыт с сайта"}
@@ -105,7 +105,7 @@ export function PartnerProjectSiteVisibility({
           variant="link"
           size="sm"
           disabled={saving}
-          className="text-muted-foreground hover:text-foreground h-auto w-full justify-start gap-1.5 px-0"
+          className="text-muted-foreground hover:text-foreground h-auto gap-1.5 px-0"
           onClick={() => void toggle(!published)}
         >
           {saving ? (
@@ -117,9 +117,7 @@ export function PartnerProjectSiteVisibility({
           )}
           {published ? "Снять с публикации" : "Опубликовать"}
         </Button>
-      ) : (
-        <span />
-      )}
+      ) : null}
     </span>
   );
 }

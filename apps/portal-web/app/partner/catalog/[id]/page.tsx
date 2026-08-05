@@ -138,6 +138,7 @@ type Project = {
   } | null;
   currency: string;
   projectUrl: string;
+  active: boolean;
   assets: Array<{
     id: string;
     sourceUrl: string;
@@ -211,10 +212,10 @@ export default function PartnerCatalogProjectPage() {
   const [savingFactoryOptions, setSavingFactoryOptions] = useState(false);
 
   useEffect(() => {
-    if (searchParams.get("request") === "1") {
-      setInquiryOpen(true);
-    }
-  }, [searchParams]);
+    if (searchParams.get("request") !== "1") return;
+    if (!project || !project.active) return;
+    setInquiryOpen(true);
+  }, [searchParams, project]);
 
   useEffect(() => {
     setFavorite(loadFavorites().has(projectId));
@@ -294,7 +295,7 @@ export default function PartnerCatalogProjectPage() {
 
   async function persistFactoryOptions(nextKeys: string[]) {
     setFactorySelectedOptions(nextKeys);
-    if (!canManagePricing) return;
+    if (!canManagePricing || project?.active === false) return;
     setSavingFactoryOptions(true);
     try {
       await apiFetch("/api/partner/pricing", {
@@ -339,7 +340,7 @@ export default function PartnerCatalogProjectPage() {
 
   async function handleInquiry(event: React.FormEvent) {
     event.preventDefault();
-    if (!project) return;
+    if (!project || !project.active) return;
 
     setSaving(true);
     try {
@@ -376,6 +377,9 @@ export default function PartnerCatalogProjectPage() {
     }
   }
 
+  const unavailable = Boolean(project && !project.active);
+  const canManage = canManagePricing && !unavailable;
+
   return (
     <PartnerShell
       currentPath={`/partner/catalog/${projectId}`}
@@ -404,7 +408,14 @@ export default function PartnerCatalogProjectPage() {
       }
       title={project?.name ?? "Проект"}
       headerActions={
-        <Button type="button" onClick={() => setInquiryOpen(true)} disabled={!project}>
+        <Button
+          type="button"
+          onClick={() => setInquiryOpen(true)}
+          disabled={!project || unavailable}
+          title={
+            unavailable ? "Проект снят с публикации и недоступен к заказу" : undefined
+          }
+        >
           Запросить информацию
         </Button>
       }
@@ -413,9 +424,26 @@ export default function PartnerCatalogProjectPage() {
       {loading ? <Skeleton className="h-96 w-full" /> : null}
 
       {!loading && project && details ? (
-        <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-3">
+        <div className="space-y-4 md:space-y-6">
+          {unavailable ? (
+            <div
+              role="status"
+              className="bg-brand-yellow text-brand-yellow-foreground overflow-hidden rounded-xl"
+            >
+              <p className="px-4 py-2.5 text-center text-xs font-semibold tracking-wide uppercase">
+                Проект снят с публикации и недоступен к заказу
+              </p>
+            </div>
+          ) : null}
+
+          <div
+            className={cn(
+              "grid items-start gap-4 md:gap-6 xl:grid-cols-3",
+              unavailable && "grayscale"
+            )}
+          >
           <div className="min-w-0 space-y-4 xl:col-span-2">
-            <Card>
+            <Card className={cn(unavailable && "opacity-80")}>
               <CardContent className="flex flex-wrap items-stretch justify-between gap-4">
                 <div className="flex min-h-full min-w-0 flex-1 flex-col gap-3">
                   <div className="flex flex-wrap items-center gap-2">
@@ -425,7 +453,7 @@ export default function PartnerCatalogProjectPage() {
                     </Badge>
                     <PartnerProjectSiteVisibility
                       projectId={project.id}
-                      canManage={canManagePricing}
+                      canManage={canManage}
                     />
                   </div>
                   <ProjectSpecsStrip
@@ -445,7 +473,12 @@ export default function PartnerCatalogProjectPage() {
                       : "Цена по запросу"}
                   </p>
                   <p className="text-muted-foreground mt-2 text-xs">Ваша цена для покупателя</p>
-                  <p className="text-primary text-lg font-semibold tabular-nums">
+                  <p
+                    className={cn(
+                      "text-lg font-semibold tabular-nums",
+                      unavailable ? "text-muted-foreground" : "text-primary"
+                    )}
+                  >
                     {retailPreview.onRequest || retailPreview.amount == null
                       ? "По запросу"
                       : `от ${formatRub(retailPreview.amount)}`}
@@ -472,7 +505,7 @@ export default function PartnerCatalogProjectPage() {
                   <PartnerProjectPricingPanel
                     panel="price"
                     projectId={project.id}
-                    canManage={canManagePricing}
+                    canManage={canManage}
                     housePrice={project.basePrice}
                     factoryBasePrice={dealerFactoryBase}
                     onDraftChange={(next) => setPricingHint(next)}
@@ -493,7 +526,7 @@ export default function PartnerCatalogProjectPage() {
                     housePrice={project.basePrice}
                     offer={project.factoryOffer}
                     selectedKeys={factorySelectedOptions}
-                    canManage={canManagePricing}
+                    canManage={canManage}
                     saving={savingFactoryOptions}
                     onChange={(next) => {
                       void persistFactoryOptions(next);
@@ -507,7 +540,7 @@ export default function PartnerCatalogProjectPage() {
                   <PartnerProjectPricingPanel
                     panel="options"
                     projectId={project.id}
-                    canManage={canManagePricing}
+                    canManage={canManage}
                     housePrice={project.basePrice}
                     factoryBasePrice={dealerFactoryBase}
                   />
@@ -616,7 +649,7 @@ export default function PartnerCatalogProjectPage() {
             </Tabs>
           </div>
 
-          <aside className="min-w-0 xl:self-start">
+          <aside className={cn("min-w-0 xl:self-start", unavailable && "opacity-80")}>
             <Card className="gap-0 overflow-hidden py-0">
               <div className="bg-muted relative aspect-[16/9] w-full overflow-hidden">
                 {activeAsset ? (
@@ -698,6 +731,7 @@ export default function PartnerCatalogProjectPage() {
               ) : null}
             </Card>
           </aside>
+          </div>
         </div>
       ) : null}
 

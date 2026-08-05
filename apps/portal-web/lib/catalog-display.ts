@@ -5,10 +5,10 @@ export const TECHNOLOGY_LABELS: Record<CatalogTechnology, string> = {
   panel_frame: "Панельно-каркасная"
 };
 
-/** Короткие подписи для бейджей в каталоге */
+/** Подписи для бейджей — те же, что у фильтра «Технология» (ж.р.) */
 export const TECHNOLOGY_BADGE: Record<CatalogTechnology, string> = {
-  modular: "Модульный",
-  panel_frame: "Панельно-каркасный"
+  modular: "Модульная",
+  panel_frame: "Панельно-каркасная"
 };
 
 export function technologyLabel(value: CatalogTechnology | string | null | undefined): string {
@@ -17,8 +17,7 @@ export function technologyLabel(value: CatalogTechnology | string | null | undef
 }
 
 export function technologyBadgeCode(value: CatalogTechnology | string | null | undefined): string {
-  if (value === "panel_frame") return TECHNOLOGY_BADGE.panel_frame;
-  return TECHNOLOGY_BADGE.modular;
+  return technologyLabel(value);
 }
 
 export function technologyBadgeVariant(

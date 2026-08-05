@@ -156,6 +156,18 @@ const updateCatalogAssetSchema = z.object({
   isHidden: z.boolean().optional()
 });
 
+const factoryOfferLineSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  price: z.number().int().nonnegative()
+});
+
+const updateFactoryOfferSchema = z.object({
+  basePrice: z.number().int().nonnegative().nullable().optional(),
+  assembly: z.array(factoryOfferLineSchema),
+  extras: z.array(factoryOfferLineSchema)
+});
+
 const passwordResetConfirmSchema = z.object({
   token: z.string().min(8),
   password: z.string().min(8)
@@ -670,6 +682,25 @@ export async function buildApp() {
     return project;
   });
 
+  app.put("/api/company/catalog/projects/:id/factory-offer", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const parsed = updateFactoryOfferSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    const { id } = request.params as { id: string };
+    const project = await portalService.updateFactoryOffer(id, parsed.data);
+    if (!project) {
+      return reply.status(404).send({ message: "Проект не найден" });
+    }
+    return project;
+  });
+
   app.post("/api/company/catalog/projects/:id/clear-sync-overrides", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
     if (roleCheck) {
@@ -1060,7 +1091,9 @@ export async function buildApp() {
       return roleCheck;
     }
     const partnerId = getAuthUser(request)!.partnerId!;
-    const projects = await portalService.listCatalogProjects();
+    const projects = (await portalService.listCatalogProjects()).filter(
+      (project) => project.active
+    );
     const ordered = await portalService.applyPartnerCatalogOrder(partnerId, projects);
     return ordered.map((project) => portalService.withVisibleAssets(project));
   });
@@ -1093,6 +1126,7 @@ export async function buildApp() {
 
     const { id } = request.params as { id: string };
     const project = await portalService.getCatalogProject(id);
+    // Скрытый HQ (active=false) отдаём: партнёр видит карточку в режиме «недоступен к заказу»
     if (!project) {
       return reply.status(404).send({ message: "Проект не найден" });
     }
