@@ -33,9 +33,19 @@ import { mapTildaProduct } from "../catalog/catalog-service.js";
 import { buildProjectDetails, defaultOptionGroups } from "../catalog/project-details.js";
 import type { TildaClient } from "../catalog/tilda-client.js";
 import {
+  buildFactoryOffer,
+  findCatalogMatches,
+  normalizeFactoryOffer,
+  parsePriceListBuffer,
+  type PriceImportReport,
+  type PriceListImportFile
+} from "../catalog/price-list-import.js";
+import {
   mergeExtraOptionLibrary,
   normalizeExtraGroups,
+  normalizeFactorySelectedOptions,
   normalizePricingMode,
+  resolveDealerFactoryBase,
   resolvePartnerDisplayPrice
 } from "../partners/partner-pricing.js";
 import { partnerSiteService } from "../partners/partner-site-service.js";
@@ -629,7 +639,13 @@ export class PortalService {
           }
         : null;
 
-      const display = resolvePartnerDisplayPrice(project.basePrice, pricing);
+      const selected = row ? normalizeFactorySelectedOptions(row.factorySelectedOptions) : [];
+      const dealerFactoryBase = resolveDealerFactoryBase(
+        project.basePrice,
+        project.factoryOffer,
+        selected
+      );
+      const display = resolvePartnerDisplayPrice(dealerFactoryBase, pricing);
       const visible = this.withVisibleAssets(project);
       // Список витрины: только обложка — иначе JSON и сеть раздуваются десятками фото
       const cover =
@@ -639,6 +655,7 @@ export class PortalService {
         ...visible,
         assets: cover ? [cover] : [],
         factoryBasePrice: project.basePrice ?? null,
+        dealerFactoryBase,
         basePrice: display.amount,
         priceOnRequest: display.onRequest,
         dealerPricing: pricing,
@@ -683,12 +700,19 @@ export class PortalService {
         }
       : null;
 
-    const display = resolvePartnerDisplayPrice(mapped.basePrice, pricing);
+    const selected = row ? normalizeFactorySelectedOptions(row.factorySelectedOptions) : [];
+    const dealerFactoryBase = resolveDealerFactoryBase(
+      mapped.basePrice,
+      mapped.factoryOffer,
+      selected
+    );
+    const display = resolvePartnerDisplayPrice(dealerFactoryBase, pricing);
     const visible = this.withVisibleAssets(mapped);
 
     return {
       ...visible,
       factoryBasePrice: mapped.basePrice ?? null,
+      dealerFactoryBase,
       basePrice: display.amount,
       priceOnRequest: display.onRequest,
       dealerPricing: pricing,
@@ -757,8 +781,17 @@ export class PortalService {
         ? normalizePricingMode(row.pricingMode)
         : ("on_request" as PartnerPricingMode);
       const extras = row ? normalizeExtraGroups(row.extras) : [];
-      const display = resolvePartnerDisplayPrice(
+      const factorySelectedOptions = row
+        ? normalizeFactorySelectedOptions(row.factorySelectedOptions)
+        : [];
+      const offer = normalizeFactoryOffer(project.factoryOffer);
+      const dealerFactoryBase = resolveDealerFactoryBase(
         project.basePrice,
+        offer,
+        factorySelectedOptions
+      );
+      const display = resolvePartnerDisplayPrice(
+        dealerFactoryBase,
         row
           ? {
               pricingMode,
@@ -774,6 +807,8 @@ export class PortalService {
         projectName: project.name,
         technology: project.technology,
         factoryBasePrice: project.basePrice ?? null,
+        dealerFactoryBase,
+        factorySelectedOptions,
         pricingMode,
         markupPercent: row?.markupPercent ?? null,
         publicPrice: row?.publicPrice ?? null,
@@ -799,6 +834,7 @@ export class PortalService {
     isPublished?: boolean;
     /** Группы допов; id опциональны — normalizeExtraGroups проставит */
     extras?: PartnerProjectExtraGroup[];
+    factorySelectedOptions?: string[];
   }) {
     const project = await db.query.catalogProjects.findFirst({
       where: eq(catalogProjects.id, input.projectId)
@@ -808,7 +844,6 @@ export class PortalService {
     }
 
     const pricingMode = normalizePricingMode(input.pricingMode);
-    const extras = normalizeExtraGroups(input.extras ?? []);
     const priceOnRequest = pricingMode === "on_request";
     const markupPercent =
       pricingMode === "markup" && input.markupPercent != null
@@ -824,6 +859,15 @@ export class PortalService {
       )
     });
 
+    const extras =
+      input.extras !== undefined
+        ? normalizeExtraGroups(input.extras)
+        : normalizeExtraGroups(existing?.extras);
+    const factorySelectedOptions =
+      input.factorySelectedOptions !== undefined
+        ? normalizeFactorySelectedOptions(input.factorySelectedOptions)
+        : normalizeFactorySelectedOptions(existing?.factorySelectedOptions);
+
     const payload = {
       pricingMode,
       markupPercent,
@@ -831,6 +875,7 @@ export class PortalService {
       priceOnRequest,
       isPublished: input.isPublished ?? existing?.isPublished ?? false,
       extras,
+      factorySelectedOptions,
       updatedAt: new Date()
     };
 
@@ -973,6 +1018,125 @@ export class PortalService {
     return this.getCatalogProject(projectId);
   }
 
+  /** Импорт заводских цен из Excel (модульные / ПКД). Каталог — источник истины по составу. */
+  async importFactoryPricesFromExcel(files: PriceListImportFile[]): Promise<PriceImportReport> {
+    const report: PriceImportReport = {
+      updated: [],
+      skippedUnmatched: [],
+      ambiguous: [],
+      errors: []
+    };
+
+    if (files.length === 0) {
+      report.errors.push("Прикрепите хотя бы один файл прайса");
+      return report;
+    }
+
+    const catalog = await db.select().from(catalogProjects);
+    const importedAt = new Date().toISOString();
+    const touched = new Map<
+      string,
+      {
+        projectId: string;
+        projectName: string;
+        excelName: string;
+        basePrice: number | null;
+        offer: ReturnType<typeof buildFactoryOffer>;
+        syncOverrides: CatalogSyncOverrides;
+      }
+    >();
+
+    for (const file of files) {
+      let blocks;
+      try {
+        blocks = await parsePriceListBuffer(file.buffer);
+      } catch (error) {
+        report.errors.push(
+          `${file.fileName}: ${error instanceof Error ? error.message : "не удалось прочитать файл"}`
+        );
+        continue;
+      }
+
+      if (blocks.length === 0) {
+        report.errors.push(`${file.fileName}: не найдены блоки проектов`);
+        continue;
+      }
+
+      const targets = catalog
+        .filter((row) =>
+          file.technology === "panel_frame"
+            ? row.technology === "panel_frame"
+            : row.technology !== "panel_frame"
+        )
+        .map((row) => ({
+          id: row.id,
+          name: row.name,
+          technology: (row.technology === "panel_frame" ? "panel_frame" : "modular") as
+            | "modular"
+            | "panel_frame"
+        }));
+
+      for (const block of blocks) {
+        const matches = findCatalogMatches(block.excelName, targets);
+        if (matches.length === 0) {
+          report.skippedUnmatched.push(block.excelName);
+          continue;
+        }
+        if (matches.length > 1) {
+          report.ambiguous.push({
+            excelName: block.excelName,
+            candidates: matches.map((m) => m.name)
+          });
+          continue;
+        }
+
+        const match = matches[0]!;
+        const existing = catalog.find((row) => row.id === match.id);
+        if (!existing) continue;
+
+        const prev = touched.get(match.id);
+        const sources = [
+          ...new Set([...(prev?.offer.sources ?? []), file.fileName].filter(Boolean))
+        ];
+        const offer = buildFactoryOffer(block, sources, importedAt);
+        // Если оба файла попали в один проект — не ожидается; последний выигрывает по полям
+        const syncOverrides = {
+          ...normalizeSyncOverrides(existing.syncOverrides),
+          ...(prev?.syncOverrides ?? {}),
+          basePrice: true
+        };
+
+        touched.set(match.id, {
+          projectId: match.id,
+          projectName: match.name,
+          excelName: block.excelName,
+          basePrice: block.basePrice,
+          offer,
+          syncOverrides
+        });
+      }
+    }
+
+    for (const row of touched.values()) {
+      await db
+        .update(catalogProjects)
+        .set({
+          ...(row.basePrice != null ? { basePrice: row.basePrice } : {}),
+          factoryOffer: row.offer,
+          syncOverrides: row.syncOverrides
+        })
+        .where(eq(catalogProjects.id, row.projectId));
+
+      report.updated.push({
+        projectId: row.projectId,
+        projectName: row.projectName,
+        excelName: row.excelName
+      });
+    }
+
+    return report;
+  }
+
   /** Сброс защиты полей от синка (все или выбранные) */
   async clearCatalogSyncOverrides(projectId: string, fields?: string[]) {
     const existing = await db.query.catalogProjects.findFirst({
@@ -1082,6 +1246,7 @@ export class PortalService {
       bedrooms: normalizeOptionalNumber(project.bedrooms),
       bathrooms: normalizeOptionalString(project.bathrooms),
       basePrice: normalizeOptionalNumber(project.basePrice),
+      factoryOffer: normalizeFactoryOffer(project.factoryOffer),
       currency: project.currency,
       projectUrl: project.projectUrl,
       active: project.active,

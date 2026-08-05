@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { IconCheck, IconGripVertical, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconCheck, IconDeviceFloppy, IconGripVertical, IconPlus, IconTrash } from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,6 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
-import { FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -40,6 +39,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { formatRub, resolveDealerDisplayPrice } from "@/lib/partner-pricing";
+import {
+  formatPriceCell,
+  PriceCompositionStrip
+} from "@/components/price-composition-strip";
 
 type Extra = { id: string; name: string; price?: number; note?: string };
 type ExtraGroup = { id: string; title: string; items: Extra[] };
@@ -358,7 +362,7 @@ function LibraryPickerDialog({
                     <span className="text-muted-foreground text-xs">
                       {sectionLabel(row.sectionTitle)}
                       {row.price != null
-                        ? ` · ${row.price.toLocaleString("ru-RU")} ₽`
+                        ? ` · ${row.price.toLocaleString("ru-RU")}`
                         : ""}
                     </span>
                   </span>
@@ -563,10 +567,32 @@ function SortableSectionCard({
 
 export function PartnerProjectPricingPanel({
   projectId,
-  canManage
+  canManage,
+  housePrice = null,
+  factoryBasePrice = null,
+  panel = "price",
+  onDraftChange,
+  onSaved
 }: {
   projectId: string;
   canManage: boolean;
+  /** Цена домокомплекта (без заводских опций) */
+  housePrice?: number | null;
+  factoryBasePrice?: number | null;
+  /** price — состав и наценка; options — ваши услуги */
+  panel?: "price" | "options";
+  onDraftChange?: (next: {
+    pricingMode: PricingMode;
+    markupPercent: number | null;
+    publicPrice: number | null;
+  }) => void;
+  onSaved?: (next: {
+    displayPrice: number | null;
+    displayOnRequest: boolean;
+    pricingMode: PricingMode;
+    markupPercent: number | null;
+    publicPrice: number | null;
+  }) => void;
 }) {
   const [draft, setDraft] = useState<PricingState>({
     pricingMode: "on_request",
@@ -613,6 +639,11 @@ export function PartnerProjectPricingPanel({
             publicPrice: row.publicPrice,
             extras: coerceGroups(row.extras)
           });
+          onDraftChange?.({
+            pricingMode: row.pricingMode,
+            markupPercent: row.markupPercent,
+            publicPrice: row.publicPrice
+          });
         }
       } finally {
         setLoading(false);
@@ -623,7 +654,10 @@ export function PartnerProjectPricingPanel({
   async function handleSave() {
     setSaving(true);
     try {
-      await apiFetch("/api/partner/pricing", {
+      const saved = await apiFetch<{
+        displayPrice: number | null;
+        displayOnRequest: boolean;
+      } | null>("/api/partner/pricing", {
         method: "PUT",
         body: JSON.stringify({
           projectId,
@@ -636,23 +670,55 @@ export function PartnerProjectPricingPanel({
             draft.pricingMode === "exact" && draft.publicPrice != null
               ? Math.round(draft.publicPrice)
               : undefined,
-          extras: draft.extras
-            .map((group) => ({
-              id: group.id,
-              title: group.title.trim(),
-              items: group.items
-                .filter((item) => item.name.trim())
-                .map((item) =>
-                  withPrice(item, item.price != null ? Math.round(item.price) : undefined)
-                )
-            }))
-            .filter((group) => group.title || group.items.length > 0)
+          ...(panel === "options"
+            ? {
+                extras: draft.extras
+                  .map((group) => ({
+                    id: group.id,
+                    title: group.title.trim(),
+                    items: group.items
+                      .filter((item) => item.name.trim())
+                      .map((item) =>
+                        withPrice(item, item.price != null ? Math.round(item.price) : undefined)
+                      )
+                  }))
+                  .filter((group) => group.title || group.items.length > 0)
+              }
+            : {})
         })
       });
-      await loadLibrary();
-      toast.success("Цена и опции сохранены");
+      if (panel === "options") await loadLibrary();
+
+      const preview = resolveDealerDisplayPrice(factoryBasePrice, {
+        pricingMode: draft.pricingMode,
+        markupPercent: draft.markupPercent,
+        publicPrice: draft.publicPrice
+      });
+      const displayPrice = saved?.displayPrice ?? preview.amount;
+      const displayOnRequest = saved?.displayOnRequest ?? preview.onRequest;
+      onSaved?.({
+        displayPrice,
+        displayOnRequest,
+        pricingMode: draft.pricingMode,
+        markupPercent: draft.markupPercent,
+        publicPrice: draft.publicPrice
+      });
+
+      toast.success(
+        panel === "options"
+          ? "Опции сохранены"
+          : displayOnRequest || displayPrice == null
+            ? "Сохранено: цена по запросу"
+            : `Сохранено: ${formatRub(displayPrice)} для покупателя`
+      );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Не удалось сохранить цену");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : panel === "options"
+            ? "Не удалось сохранить опции"
+            : "Не удалось сохранить цену"
+      );
     } finally {
       setSaving(false);
     }
@@ -777,97 +843,208 @@ export function PartnerProjectPricingPanel({
   const ungrouped = draft.extras.find((g) => !g.title);
   const sections = draft.extras.filter((g) => g.title);
   const hasAnyExtras = draft.extras.some((g) => g.items.length > 0 || g.title);
+  const liveRetail = resolveDealerDisplayPrice(factoryBasePrice, {
+    pricingMode: draft.pricingMode,
+    markupPercent: draft.markupPercent,
+    publicPrice: draft.publicPrice
+  });
+
+  const packageSum =
+    housePrice != null && factoryBasePrice != null
+      ? Math.max(0, factoryBasePrice - housePrice)
+      : factoryBasePrice != null && housePrice == null
+        ? factoryBasePrice
+        : 0;
+
+  const markupAmount =
+    draft.pricingMode === "markup" &&
+    factoryBasePrice != null &&
+    draft.markupPercent != null &&
+    !liveRetail.onRequest &&
+    liveRetail.amount != null
+      ? liveRetail.amount - factoryBasePrice
+      : draft.pricingMode === "exact" &&
+          factoryBasePrice != null &&
+          draft.publicPrice != null
+        ? draft.publicPrice - factoryBasePrice
+        : null;
+
+  const modeMarkup = draft.pricingMode === "markup";
+  const modeExact = draft.pricingMode === "exact";
 
   return (
-    <div className="space-y-8">
-      <LibraryPickerDialog
-        open={picker != null}
-        mode={picker}
-        library={library}
-        currentExtras={draft.extras}
-        onOpenChange={(open) => {
-          if (!open) setPicker(null);
-        }}
-        onPickOption={onPickLibraryOption}
-        onPickSection={onPickLibrarySection}
-        onCreateNew={onCreateNewFromPicker}
-      />
+    <div className="space-y-4">
+      {panel === "options" ? (
+        <LibraryPickerDialog
+          open={picker != null}
+          mode={picker}
+          library={library}
+          currentExtras={draft.extras}
+          onOpenChange={(open) => {
+            if (!open) setPicker(null);
+          }}
+          onPickOption={onPickLibraryOption}
+          onPickSection={onPickLibrarySection}
+          onCreateNew={onCreateNewFromPicker}
+        />
+      ) : null}
 
-      <section className="space-y-4">
-        <h3 className="text-base font-semibold tracking-tight">Цена</h3>
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex w-fit flex-col gap-1.5">
-            <FieldLabel htmlFor="pricing-mode">Режим цены</FieldLabel>
-            <Select
-              value={draft.pricingMode}
-              disabled={!canManage}
-              onValueChange={(value) =>
-                setDraft((prev) => ({ ...prev, pricingMode: value as PricingMode }))
+      {panel === "price" ? (
+        <div className="space-y-3">
+          <PriceCompositionStrip
+            cells={[
+              {
+                label: "Домокомплект",
+                value: formatPriceCell(housePrice)
+              },
+              {
+                label: "Комплектация",
+                value: formatPriceCell(packageSum, "0"),
+                inactive: packageSum === 0
+              },
+              {
+                label: "Наценка",
+                value: formatPriceCell(markupAmount),
+                inactive: markupAmount == null
+              },
+              {
+                label: "Для покупателя",
+                value:
+                  liveRetail.onRequest || liveRetail.amount == null
+                    ? "По запросу"
+                    : formatPriceCell(liveRetail.amount),
+                emphasize: true
               }
-            >
-              <SelectTrigger id="pricing-mode" className="w-[13rem]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="markup">Наценка % от завода</SelectItem>
-                <SelectItem value="exact">Точная цена</SelectItem>
-                <SelectItem value="on_request">По запросу</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            ]}
+            actions={
+              <>
+                <Select
+                  value={draft.pricingMode}
+                  disabled={!canManage}
+                  onValueChange={(value) => {
+                    const pricingMode = value as PricingMode;
+                    setDraft((prev) => {
+                      const next = { ...prev, pricingMode };
+                      onDraftChange?.({
+                        pricingMode: next.pricingMode,
+                        markupPercent: next.markupPercent,
+                        publicPrice: next.publicPrice
+                      });
+                      return next;
+                    });
+                  }}
+                >
+                  <SelectTrigger
+                    id="pricing-mode"
+                    size="sm"
+                    aria-label="Режим цены"
+                    className="h-8 w-[8.25rem] shrink-0"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="markup">Наценка %</SelectItem>
+                    <SelectItem value="exact">Точная</SelectItem>
+                    <SelectItem value="on_request">По запросу</SelectItem>
+                  </SelectContent>
+                </Select>
 
-          {draft.pricingMode === "markup" ? (
-            <div className="flex w-fit flex-col gap-1.5">
-              <FieldLabel htmlFor="pricing-markup">Наценка, %</FieldLabel>
-              <Input
-                id="pricing-markup"
-                inputMode="numeric"
-                autoComplete="off"
-                maxLength={3}
-                disabled={!canManage}
-                className="w-16 tabular-nums"
-                value={draft.markupPercent ?? ""}
-                onChange={(e) => {
-                  const raw = e.target.value.replace(/\D/g, "").slice(0, 3);
-                  setDraft((prev) => ({
-                    ...prev,
-                    markupPercent: raw === "" ? null : Number(raw)
-                  }));
-                }}
-              />
-            </div>
-          ) : null}
+                {/* Один слот: % или точная цена (взаимоисключающие), ширина под 99 999 999 */}
+                <div
+                  className={cn(
+                    "relative flex h-8 w-[9.5rem] shrink-0 items-center",
+                    draft.pricingMode === "on_request" && "opacity-40"
+                  )}
+                >
+                  {modeMarkup ? (
+                    <>
+                      <Input
+                        id="pricing-markup"
+                        aria-label="Наценка, %"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        maxLength={3}
+                        disabled={!canManage}
+                        className="h-8 w-full pr-6 text-center tabular-nums"
+                        value={draft.markupPercent ?? ""}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/\D/g, "").slice(0, 3);
+                          setDraft((prev) => {
+                            const next = {
+                              ...prev,
+                              markupPercent: raw === "" ? null : Number(raw)
+                            };
+                            onDraftChange?.({
+                              pricingMode: next.pricingMode,
+                              markupPercent: next.markupPercent,
+                              publicPrice: next.publicPrice
+                            });
+                            return next;
+                          });
+                        }}
+                      />
+                      <span className="text-muted-foreground pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs">
+                        %
+                      </span>
+                    </>
+                  ) : (
+                    <Input
+                      id="pricing-public"
+                      aria-label="Ваша цена"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      disabled={!canManage || !modeExact}
+                      placeholder={modeExact ? "Цена" : "—"}
+                      className="h-8 w-full tabular-nums"
+                      value={modeExact ? (draft.publicPrice ?? "") : ""}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/\D/g, "");
+                        setDraft((prev) => {
+                          const next = {
+                            ...prev,
+                            publicPrice: raw === "" ? null : Number(raw)
+                          };
+                          onDraftChange?.({
+                            pricingMode: next.pricingMode,
+                            markupPercent: next.markupPercent,
+                            publicPrice: next.publicPrice
+                          });
+                          return next;
+                        });
+                      }}
+                    />
+                  )}
+                </div>
 
-          {draft.pricingMode === "exact" ? (
-            <div className="flex w-fit flex-col gap-1.5">
-              <FieldLabel htmlFor="pricing-public">Ваша цена, ₽</FieldLabel>
-              <Input
-                id="pricing-public"
-                inputMode="numeric"
-                autoComplete="off"
-                disabled={!canManage}
-                className="w-40 tabular-nums"
-                value={draft.publicPrice ?? ""}
-                onChange={(e) => {
-                  const raw = e.target.value.replace(/\D/g, "");
-                  setDraft((prev) => ({
-                    ...prev,
-                    publicPrice: raw === "" ? null : Number(raw)
-                  }));
-                }}
-              />
-            </div>
+                {canManage ? (
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    className="size-8 shrink-0"
+                    disabled={saving}
+                    aria-label={saving ? "Сохраняем" : "Сохранить"}
+                    title="Сохранить"
+                    onClick={() => void handleSave()}
+                  >
+                    {saving ? <Spinner /> : <IconDeviceFloppy />}
+                  </Button>
+                ) : null}
+              </>
+            }
+          />
+
+          {!canManage ? (
+            <p className="text-muted-foreground text-sm">
+              Изменять цены может только владелец кабинета.
+            </p>
           ) : null}
         </div>
-      </section>
-
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-base font-semibold tracking-tight">
-            Дополнительные опции для покупателей
-          </h3>
+      ) : (
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold tracking-tight">Ваши услуги</h3>
           {canManage ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               <Button
                 type="button"
                 size="sm"
@@ -875,7 +1052,7 @@ export function PartnerProjectPricingPanel({
                 onClick={() => setPicker({ kind: "section" })}
               >
                 <IconPlus />
-                Добавить раздел
+                Раздел
               </Button>
               <Button
                 type="button"
@@ -884,16 +1061,14 @@ export function PartnerProjectPricingPanel({
                 onClick={() => setPicker({ kind: "option" })}
               >
                 <IconPlus />
-                Добавить опцию
+                Опция
               </Button>
             </div>
           ) : null}
         </div>
 
         {!hasAnyExtras ? (
-          <p className="text-muted-foreground text-sm">
-            Пока без опций. Можно добавить отдельную опцию или раздел (например «Фундамент»).
-          </p>
+          <p className="text-muted-foreground text-sm">Пока без опций</p>
         ) : (
           <div className="space-y-5">
             {ungrouped && ungrouped.items.length > 0 ? (
@@ -977,19 +1152,22 @@ export function PartnerProjectPricingPanel({
               </DndContext>
             ) : null}
           </div>
-        )}
-      </section>
-
-      {canManage ? (
-        <Button type="button" disabled={saving} onClick={() => void handleSave()}>
-          {saving ? <Spinner /> : null}
-          {saving ? "Сохраняем…" : "Сохранить"}
-        </Button>
-      ) : (
-        <p className="text-muted-foreground text-sm">
-          Изменять цены может только владелец кабинета.
-        </p>
+          )}
+        </section>
       )}
+
+      {panel === "options" ? (
+        canManage ? (
+          <Button type="button" disabled={saving} onClick={() => void handleSave()}>
+            {saving ? <Spinner /> : null}
+            {saving ? "Сохраняем…" : "Сохранить"}
+          </Button>
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            Изменять опции может только владелец кабинета.
+          </p>
+        )
+      ) : null}
     </div>
   );
 }

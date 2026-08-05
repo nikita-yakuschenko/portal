@@ -250,7 +250,7 @@ export function CatalogProjectCard({
         <div>
           <p className="text-muted-foreground text-xs">Завод</p>
           <p className="text-base font-semibold tabular-nums">
-            {basePrice ? `${basePrice.toLocaleString("ru-RU")} ₽` : "Цена по запросу"}
+            {basePrice ? basePrice.toLocaleString("ru-RU") : "Цена по запросу"}
           </p>
           {hasRetail ? (
             <>
@@ -258,7 +258,7 @@ export function CatalogProjectCard({
               <p className="text-primary text-base font-semibold tabular-nums">
                 {retailOnRequest || retailPrice == null
                   ? "По запросу"
-                  : `${retailPrice.toLocaleString("ru-RU")} ₽`}
+                  : retailPrice.toLocaleString("ru-RU")}
               </p>
             </>
           ) : showRetailHint ? (

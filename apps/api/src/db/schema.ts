@@ -133,6 +133,8 @@ export const catalogProjects = pgTable(
     bedrooms: integer("bedrooms"),
     bathrooms: text("bathrooms"),
     basePrice: integer("base_price"),
+    // Предложение завода дилеру: сборка + допы (из Excel), отдельно от допов дилера
+    factoryOffer: jsonb("factory_offer").notNull().default({}),
     currency: text("currency").notNull().default("RUB"),
     projectUrl: text("project_url").notNull(),
     active: boolean("active").notNull().default(true),
@@ -242,6 +244,8 @@ export const partnerProjectPrices = pgTable(
     priceOnRequest: boolean("price_on_request").notNull().default(true),
     isPublished: boolean("is_published").notNull().default(false),
     extras: jsonb("extras").notNull().default([]),
+    // Ключи заводских опций (нормализованное name), включённых дилером в базу для наценки
+    factorySelectedOptions: jsonb("factory_selected_options").notNull().default([]),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },
   (table) => ({

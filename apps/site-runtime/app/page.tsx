@@ -1,6 +1,6 @@
 const projects = [
-  { name: "Зимний 54", price: "2 768 000 ₽", details: "2 спальни, 54 м²" },
-  { name: "Север 87", price: "4 210 000 ₽", details: "3 спальни, 87 м²" }
+  { name: "Зимний 54", price: "2 768 000", details: "2 спальни, 54 м²" },
+  { name: "Север 87", price: "4 210 000", details: "3 спальни, 87 м²" }
 ];
 
 export default function PartnerSiteHomePage() {

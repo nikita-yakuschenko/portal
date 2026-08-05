@@ -141,6 +141,7 @@ export class PartnerService {
       priceOnRequest: pricingMode === "on_request",
       isPublished: true,
       extras: existing?.extras ?? [],
+      factorySelectedOptions: existing?.factorySelectedOptions ?? [],
       updatedAt: new Date().toISOString()
     };
 

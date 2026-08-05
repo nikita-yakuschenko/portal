@@ -72,6 +72,21 @@ export interface CatalogAsset {
   isHidden?: boolean;
 }
 
+/** Строка заводского прайса (сборка или доп для дилера) */
+export interface FactoryOfferLine {
+  id: string;
+  name: string;
+  price: number;
+}
+
+/** Предложение завода дилеру — не путать с допами дилера для покупателя */
+export interface FactoryOffer {
+  importedAt: string;
+  sources: string[];
+  assembly: FactoryOfferLine[];
+  extras: FactoryOfferLine[];
+}
+
 export interface CatalogProject {
   id: string;
   source: SourceSystem;
@@ -86,6 +101,7 @@ export interface CatalogProject {
   bedrooms?: number;
   bathrooms?: string;
   basePrice?: number;
+  factoryOffer?: FactoryOffer | null;
   currency: string;
   projectUrl: string;
   active: boolean;
@@ -185,6 +201,8 @@ export interface PartnerProjectPrice {
   isPublished: boolean;
   /** Допы дилера: разделы с опциями (JSONB, совместим со старым плоским массивом через normalize) */
   extras: PartnerProjectExtraGroup[];
+  /** Нормализованные имена заводских опций, включённых в базу для наценки */
+  factorySelectedOptions: string[];
   updatedAt: string;
 }
 

@@ -550,11 +550,7 @@ export default function PartnerSiteProjectDetailPage() {
                       {priceAmount == null ? (
                         "Цена по запросу"
                       ) : (
-                        <>
-                          от {priceAmount}
-                          {/* ₽ только на десктопе — на мобилке знак уезжал на отдельную строку */}
-                          <span className="hidden lg:inline">&nbsp;₽</span>
-                        </>
+                        <>от {priceAmount}</>
                       )}
                     </p>
                   </div>

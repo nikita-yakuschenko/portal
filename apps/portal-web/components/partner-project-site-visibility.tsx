@@ -1,20 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { IconCircleCheck, IconEyeOff } from "@tabler/icons-react";
+import { IconCircleCheck, IconEyeCheck, IconEyeOff } from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { apiFetch } from "@/lib/api";
 
@@ -31,7 +22,7 @@ type PricingRow = {
   }>;
 };
 
-/** Публикация проекта на сайт компании — отдельно от ценообразования */
+/** Публикация на сайт — бейдж + ссылка рядом с технологией в шапке проекта */
 export function PartnerProjectSiteVisibility({
   projectId,
   canManage
@@ -94,42 +85,41 @@ export function PartnerProjectSiteVisibility({
   }
 
   if (loading) {
-    return <Skeleton className="h-32 w-full" />;
+    return <span className="bg-muted inline-block h-6 w-28 animate-pulse rounded-full" />;
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Публикация на сайте</CardTitle>
-        <CardDescription>
-          {published
-            ? "Проект показывается в каталоге вашего сайта — покупатели могут оставить заявку."
-            : "Проект виден только в кабинете. На сайте покупатели его не найдут."}
-        </CardDescription>
-        {canManage ? (
-          <CardAction>
-            <Button
-              type="button"
-              variant={published ? "outline" : "default"}
-              disabled={saving}
-              onClick={() => void toggle(!published)}
-            >
-              {saving ? <Spinner /> : null}
-              {published ? "Снять с публикации" : "Опубликовать"}
-            </Button>
-          </CardAction>
-        ) : null}
-      </CardHeader>
-      <CardContent className="flex flex-wrap items-center gap-3">
-        <Badge
-          key={published ? "published" : "hidden"}
-          variant={published ? "default" : "secondary"}
-          className="animate-in fade-in zoom-in-95 duration-200"
+    <span className="inline-grid grid-cols-[11.75rem_10.5rem] items-center gap-2">
+      <Badge
+        key={published ? "published" : "hidden"}
+        variant={published ? "default" : "warning"}
+        className="animate-in fade-in zoom-in-95 w-full justify-center duration-200"
+      >
+        {published ? <IconCircleCheck /> : <IconEyeOff />}
+        {published ? "Опубликован на сайте" : "Скрыт с сайта"}
+      </Badge>
+
+      {canManage ? (
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          disabled={saving}
+          className="text-muted-foreground hover:text-foreground h-auto w-full justify-start gap-1.5 px-0"
+          onClick={() => void toggle(!published)}
         >
-          {published ? <IconCircleCheck /> : <IconEyeOff />}
-          {published ? "Опубликован на сайте" : "Скрыт с сайта"}
-        </Badge>
-      </CardContent>
-    </Card>
+          {saving ? (
+            <Spinner className="size-3.5" />
+          ) : published ? (
+            <IconEyeOff className="size-3.5" />
+          ) : (
+            <IconEyeCheck className="size-3.5" />
+          )}
+          {published ? "Снять с публикации" : "Опубликовать"}
+        </Button>
+      ) : (
+        <span />
+      )}
+    </span>
   );
 }

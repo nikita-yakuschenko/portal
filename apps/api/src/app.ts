@@ -97,6 +97,7 @@ const upsertPartnerPriceSchema = z.object({
   markupPercent: z.number().min(0).max(500).optional(),
   publicPrice: z.number().int().positive().optional(),
   isPublished: z.boolean().optional(),
+  factorySelectedOptions: z.array(z.string()).optional(),
   extras: z
     .array(
       z.object({
@@ -581,6 +582,59 @@ export async function buildApp() {
       return roleCheck;
     }
     return portalService.listCatalogProjects();
+  });
+
+  // Обновление заводских цен из Excel (модульные / ПКД), без синка Tilda
+  app.post("/api/company/catalog/prices/import", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const fileSchema = z.object({
+      fileName: z.string().min(1),
+      dataBase64: z.string().min(1)
+    });
+    const parsed = z
+      .object({
+        modular: fileSchema.optional(),
+        panelFrame: fileSchema.optional()
+      })
+      .safeParse(request.body);
+
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    if (!parsed.data.modular && !parsed.data.panelFrame) {
+      return reply.status(400).send({ message: "Прикрепите хотя бы один файл прайса" });
+    }
+
+    const files: Array<{
+      fileName: string;
+      buffer: Buffer;
+      technology: "modular" | "panel_frame";
+    }> = [];
+
+    try {
+      if (parsed.data.modular) {
+        files.push({
+          fileName: parsed.data.modular.fileName,
+          buffer: Buffer.from(parsed.data.modular.dataBase64, "base64"),
+          technology: "modular"
+        });
+      }
+      if (parsed.data.panelFrame) {
+        files.push({
+          fileName: parsed.data.panelFrame.fileName,
+          buffer: Buffer.from(parsed.data.panelFrame.dataBase64, "base64"),
+          technology: "panel_frame"
+        });
+      }
+    } catch {
+      return reply.status(400).send({ message: "Не удалось прочитать файл (base64)" });
+    }
+
+    return portalService.importFactoryPricesFromExcel(files);
   });
 
   app.get("/api/company/catalog/projects/:id", async (request, reply) => {
@@ -1082,6 +1136,9 @@ export async function buildApp() {
           : {}),
         ...(parsed.data.publicPrice !== undefined ? { publicPrice: parsed.data.publicPrice } : {}),
         ...(parsed.data.isPublished !== undefined ? { isPublished: parsed.data.isPublished } : {}),
+        ...(parsed.data.factorySelectedOptions !== undefined
+          ? { factorySelectedOptions: parsed.data.factorySelectedOptions }
+          : {}),
         ...(parsed.data.extras !== undefined
           ? {
               extras: parsed.data.extras.map((group) => ({

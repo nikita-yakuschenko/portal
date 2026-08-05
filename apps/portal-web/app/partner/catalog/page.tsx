@@ -134,15 +134,15 @@ function loadViewMode(): CatalogViewMode {
 
 function formatRub(value: number | null | undefined): string {
   if (value == null) return "—";
-  return `${value.toLocaleString("ru-RU")} ₽`;
+  return value.toLocaleString("ru-RU");
 }
 
 function formatPriceRange(value: number): string {
   if (value >= 1_000_000) {
     const mln = value / 1_000_000;
-    return `${mln.toLocaleString("ru-RU", { maximumFractionDigits: mln >= 10 ? 0 : 1 })} млн\u00A0₽`;
+    return `${mln.toLocaleString("ru-RU", { maximumFractionDigits: mln >= 10 ? 0 : 1 })} млн`;
   }
-  return `${value.toLocaleString("ru-RU")} ₽`;
+  return value.toLocaleString("ru-RU");
 }
 
 function rangeStep(min: number, max: number): number {

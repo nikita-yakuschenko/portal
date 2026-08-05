@@ -5,6 +5,46 @@ import type {
   PartnerProjectPrice
 } from "@b2b/domain";
 
+/** Ключ заводской опции — по имени, чтобы переживать реимпорт Excel с новыми id */
+export function factoryOptionKey(name: string): string {
+  return name.trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
+}
+
+export function normalizeFactorySelectedOptions(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const keys = value
+    .filter((item): item is string => typeof item === "string")
+    .map(factoryOptionKey)
+    .filter(Boolean);
+  return [...new Set(keys)];
+}
+
+type FactoryOfferLike = {
+  assembly?: Array<{ name: string; price: number }>;
+  extras?: Array<{ name: string; price: number }>;
+} | null;
+
+/** База завода для наценки: дом + включённые дилером заводские опции */
+export function resolveDealerFactoryBase(
+  housePrice: number | null | undefined,
+  offer: FactoryOfferLike | undefined,
+  selectedKeys: string[]
+): number | null {
+  const selected = new Set(selectedKeys.map(factoryOptionKey));
+  const lines = [...(offer?.assembly ?? []), ...(offer?.extras ?? [])];
+  let optionsSum = 0;
+  for (const line of lines) {
+    if (selected.has(factoryOptionKey(line.name))) {
+      optionsSum += line.price;
+    }
+  }
+
+  if (housePrice == null) {
+    return optionsSum > 0 ? optionsSum : null;
+  }
+  return housePrice + optionsSum;
+}
+
 /** Итоговая цена для витрины дилера поверх заводской basePrice */
 export function resolvePartnerDisplayPrice(
   factoryBasePrice: number | null | undefined,

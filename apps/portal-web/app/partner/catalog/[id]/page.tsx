@@ -5,6 +5,9 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { PartnerShell } from "@/components/partner-shell";
+import {
+  FactoryPackagesEditor
+} from "@/components/factory-offer-panel";
 import { PageAlert } from "@/components/page-alert";
 import {
   Breadcrumb,
@@ -44,14 +47,18 @@ import {
 import { apiFetch } from "@/lib/api";
 import {
   technologyBadgeCode,
-  technologyBadgeVariant,
-  technologyLabel
+  technologyBadgeVariant
 } from "@/lib/catalog-display";
-import { formatRub } from "@/lib/partner-pricing";
+import {
+  formatRub,
+  resolveDealerDisplayPrice,
+  resolveDealerFactoryBase
+} from "@/lib/partner-pricing";
 import { floorPlanLabel } from "@/lib/floor-plan";
 import { cn } from "@/lib/utils";
 import { PartnerProjectPricingPanel } from "@/components/partner-project-pricing-panel";
 import { PartnerProjectSiteVisibility } from "@/components/partner-project-site-visibility";
+import { ProjectSpecsStrip } from "@/components/project-specs-strip";
 import {
   IconChevronLeft,
   IconChevronRight,
@@ -61,6 +68,14 @@ import {
   IconX
 } from "@tabler/icons-react";
 import { toast } from "sonner";
+
+type PricingMode = "markup" | "exact" | "on_request";
+
+type PricingHint = {
+  pricingMode: PricingMode;
+  markupPercent: number | null;
+  publicPrice: number | null;
+};
 
 const DOC_KIND_LABEL: Record<string, string> = {
   passport: "Паспорт",
@@ -115,6 +130,12 @@ type Project = {
   bedrooms: number | null;
   bathrooms: string | null;
   basePrice: number | null;
+  factoryOffer?: {
+    importedAt?: string;
+    sources?: string[];
+    assembly: Array<{ id: string; name: string; price: number }>;
+    extras: Array<{ id: string; name: string; price: number }>;
+  } | null;
   currency: string;
   projectUrl: string;
   assets: Array<{
@@ -144,9 +165,11 @@ function saveFavorites(ids: Set<string>) {
 }
 
 function MetaList({ items }: { items: Array<{ label: string; value: string }> }) {
+  const visible = items.filter((item) => item.value.trim() && item.value !== "—");
+  if (visible.length === 0) return null;
   return (
     <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {items.map((item) => (
+      {visible.map((item) => (
         <div key={item.label} className="bg-muted rounded-lg px-3 py-2.5">
           <dt className="text-muted-foreground text-xs tracking-wide uppercase">{item.label}</dt>
           <dd className="mt-1 text-sm font-medium">{item.value}</dd>
@@ -179,7 +202,13 @@ export default function PartnerCatalogProjectPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ subject: "", message: "" });
   const [canManagePricing, setCanManagePricing] = useState(false);
-  const [retailLabel, setRetailLabel] = useState<string | null>(null);
+  const [factorySelectedOptions, setFactorySelectedOptions] = useState<string[]>([]);
+  const [pricingHint, setPricingHint] = useState<PricingHint>({
+    pricingMode: "on_request",
+    markupPercent: null,
+    publicPrice: null
+  });
+  const [savingFactoryOptions, setSavingFactoryOptions] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("request") === "1") {
@@ -200,6 +229,10 @@ export default function PartnerCatalogProjectPage() {
           apiFetch<
             Array<{
               projectId: string;
+              pricingMode: PricingMode;
+              markupPercent: number | null;
+              publicPrice: number | null;
+              factorySelectedOptions?: string[];
               displayPrice: number | null;
               displayOnRequest: boolean;
             }>
@@ -209,11 +242,12 @@ export default function PartnerCatalogProjectPage() {
         setCanManagePricing(me.user.role === "partner_owner");
         const priceRow = pricing.find((item) => item.projectId === projectId);
         if (priceRow) {
-          setRetailLabel(
-            priceRow.displayOnRequest || priceRow.displayPrice == null
-              ? "по запросу"
-              : formatRub(priceRow.displayPrice)
-          );
+          setFactorySelectedOptions(priceRow.factorySelectedOptions ?? []);
+          setPricingHint({
+            pricingMode: priceRow.pricingMode,
+            markupPercent: priceRow.markupPercent,
+            publicPrice: priceRow.publicPrice
+          });
         }
         setForm({
           subject: `Запрос по проекту «${row.name}»`,
@@ -238,6 +272,51 @@ export default function PartnerCatalogProjectPage() {
       (a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.sortOrder - b.sortOrder
     );
   }, [project]);
+
+  // База завода = дом + включённые опции; от неё живёт наценка в шапке
+  const dealerFactoryBase = useMemo(
+    () =>
+      project
+        ? resolveDealerFactoryBase(project.basePrice, project.factoryOffer, factorySelectedOptions)
+        : null,
+    [project, factorySelectedOptions]
+  );
+
+  const retailPreview = useMemo(
+    () =>
+      resolveDealerDisplayPrice(dealerFactoryBase, {
+        pricingMode: pricingHint.pricingMode,
+        markupPercent: pricingHint.markupPercent,
+        publicPrice: pricingHint.publicPrice
+      }),
+    [dealerFactoryBase, pricingHint]
+  );
+
+  async function persistFactoryOptions(nextKeys: string[]) {
+    setFactorySelectedOptions(nextKeys);
+    if (!canManagePricing) return;
+    setSavingFactoryOptions(true);
+    try {
+      await apiFetch("/api/partner/pricing", {
+        method: "PUT",
+        body: JSON.stringify({
+          projectId,
+          pricingMode: pricingHint.pricingMode,
+          ...(pricingHint.pricingMode === "markup" && pricingHint.markupPercent != null
+            ? { markupPercent: Math.round(pricingHint.markupPercent) }
+            : {}),
+          ...(pricingHint.pricingMode === "exact" && pricingHint.publicPrice != null
+            ? { publicPrice: Math.round(pricingHint.publicPrice) }
+            : {}),
+          factorySelectedOptions: nextKeys
+        })
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось сохранить комплектацию");
+    } finally {
+      setSavingFactoryOptions(false);
+    }
+  }
 
   const activeAsset = assets[activeIndex] ?? assets[0];
   const details = project?.details;
@@ -334,55 +413,51 @@ export default function PartnerCatalogProjectPage() {
       {loading ? <Skeleton className="h-96 w-full" /> : null}
 
       {!loading && project && details ? (
-        <div className="grid gap-4 md:gap-6 xl:grid-cols-3">
+        <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-3">
           <div className="min-w-0 space-y-4 xl:col-span-2">
             <Card>
-              <CardContent className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0 space-y-2">
+              <CardContent className="flex flex-wrap items-stretch justify-between gap-4">
+                <div className="flex min-h-full min-w-0 flex-1 flex-col gap-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-xl font-semibold tracking-tight">{project.name}</h2>
                     <Badge variant={technologyBadgeVariant(project.technology)}>
                       {technologyBadgeCode(project.technology)}
                     </Badge>
+                    <PartnerProjectSiteVisibility
+                      projectId={project.id}
+                      canManage={canManagePricing}
+                    />
                   </div>
-                  {project.area || project.floors || project.bedrooms ? (
-                    <p className="text-muted-foreground text-sm">
-                      {[
-                        project.area ? `${project.area} м²` : null,
-                        project.floors ? `${project.floors} эт.` : null,
-                        project.bedrooms ? `${project.bedrooms} сп.` : null
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
-                  ) : null}
+                  <ProjectSpecsStrip
+                    className="mt-auto"
+                    area={project.area}
+                    dimensionsLabel={details.dimensions?.label}
+                    floors={project.floors}
+                    bedrooms={project.bedrooms}
+                    bathrooms={project.bathrooms}
+                  />
                 </div>
-                <div className="text-right">
-                  <p className="text-muted-foreground text-xs">Заводская</p>
+                <div className="shrink-0 self-start text-right">
+                  <p className="text-muted-foreground text-xs">Базовая стоимость</p>
                   <p className="text-lg font-semibold tabular-nums">
-                    {project.basePrice
-                      ? `от ${project.basePrice.toLocaleString("ru-RU")} ₽`
+                    {dealerFactoryBase != null
+                      ? `от ${dealerFactoryBase.toLocaleString("ru-RU")}`
                       : "Цена по запросу"}
                   </p>
-                  {retailLabel ? (
-                    <>
-                      <p className="text-muted-foreground mt-2 text-xs">
-                        Ваша цена для покупателя
-                      </p>
-                      <p className="text-primary text-lg font-semibold tabular-nums">
-                        {retailLabel === "по запросу" ? "По запросу" : `от ${retailLabel}`}
-                      </p>
-                    </>
-                  ) : null}
+                  <p className="text-muted-foreground mt-2 text-xs">Ваша цена для покупателя</p>
+                  <p className="text-primary text-lg font-semibold tabular-nums">
+                    {retailPreview.onRequest || retailPreview.amount == null
+                      ? "По запросу"
+                      : `от ${formatRub(retailPreview.amount)}`}
+                  </p>
                 </div>
               </CardContent>
             </Card>
 
-            <Tabs defaultValue="overview">
+            <Tabs defaultValue="price">
               <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
-                <TabsTrigger value="overview">Обзор</TabsTrigger>
                 <TabsTrigger value="price">Цена</TabsTrigger>
-                <TabsTrigger value="packages">Комплектации</TabsTrigger>
+                <TabsTrigger value="packages">Комплектация</TabsTrigger>
                 <TabsTrigger value="options">Опции</TabsTrigger>
                 <TabsTrigger value="docs" disabled title="Скоро">
                   Документация
@@ -392,131 +467,50 @@ export default function PartnerCatalogProjectPage() {
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="overview" className="mt-0 space-y-4">
-                <PartnerProjectSiteVisibility
-                  projectId={project.id}
-                  canManage={canManagePricing}
-                />
-
-                <Panel>
-                  <MetaList
-                    items={[
-                      {
-                        label: "Площадь",
-                        value: project.area ? `${project.area} м²` : "—"
-                      },
-                      {
-                        label: "Габариты",
-                        value: details.dimensions?.label ?? "—"
-                      },
-                      {
-                        label: "Этажность",
-                        value: project.floors ? String(project.floors) : "—"
-                      },
-                      {
-                        label: "Спальни",
-                        value: project.bedrooms ? String(project.bedrooms) : "—"
-                      },
-                      {
-                        label: "Санузлы",
-                        value: project.bathrooms || "—"
-                      },
-                      {
-                        label: "Технология",
-                        value: technologyLabel(project.technology)
-                      }
-                    ]}
-                  />
-
-                  {details.summary ? (
-                    <p className="mt-5 text-sm leading-relaxed">{details.summary}</p>
-                  ) : null}
-
-                  {details.characteristics.length > 0 ? (
-                    <div className="mt-5 border-t pt-5">
-                      <h4 className="text-sm font-semibold">Характеристики</h4>
-                      <ul className="divide-border mt-3 divide-y">
-                        {details.characteristics.map((item) => (
-                          <li
-                            key={`${item.title}-${item.value}`}
-                            className="flex items-center justify-between gap-4 py-2 text-sm"
-                          >
-                            <span className="text-muted-foreground">{item.title}</span>
-                            <span className="font-medium">{item.value}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </Panel>
-              </TabsContent>
-
               <TabsContent value="price" className="mt-0">
                 <Panel>
                   <PartnerProjectPricingPanel
+                    panel="price"
                     projectId={project.id}
                     canManage={canManagePricing}
+                    housePrice={project.basePrice}
+                    factoryBasePrice={dealerFactoryBase}
+                    onDraftChange={(next) => setPricingHint(next)}
+                    onSaved={(next) => {
+                      setPricingHint({
+                        pricingMode: next.pricingMode,
+                        markupPercent: next.markupPercent,
+                        publicPrice: next.publicPrice
+                      });
+                    }}
                   />
                 </Panel>
               </TabsContent>
 
               <TabsContent value="packages" className="mt-0">
                 <Panel>
-                  {details.packages.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">
-                      Состав комплектаций уточняется на заводе. Отправьте запрос — пришлём
-                      актуальный прайс.
-                    </p>
-                  ) : (
-                    <div className="grid gap-3">
-                      {details.packages.map((item) => (
-                        <div key={item.id} className="rounded-lg border px-4 py-3">
-                          <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <p className="font-medium">{item.name}</p>
-                            <p className="text-sm font-semibold tabular-nums">
-                              {item.price
-                                ? `${item.price.toLocaleString("ru-RU")} ₽`
-                                : "Цена по запросу"}
-                            </p>
-                          </div>
-                          {item.description ? (
-                            <p className="text-muted-foreground mt-1 text-sm">
-                              {item.description}
-                            </p>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <FactoryPackagesEditor
+                    housePrice={project.basePrice}
+                    offer={project.factoryOffer}
+                    selectedKeys={factorySelectedOptions}
+                    canManage={canManagePricing}
+                    saving={savingFactoryOptions}
+                    onChange={(next) => {
+                      void persistFactoryOptions(next);
+                    }}
+                  />
                 </Panel>
               </TabsContent>
 
               <TabsContent value="options" className="mt-0">
                 <Panel>
-                  <p className="text-muted-foreground mb-4 text-sm">
-                    {project.technology === "panel_frame"
-                      ? "Для панельно-каркасных проектов доступны поставка домокомплекта и сборка в Нижнем Новгороде и Москве; перегородки на деревянном каркасе — для отдельных проектов."
-                      : "Возможные опции и допы. Стоимость зависит от проекта — уточняйте на заводе."}
-                  </p>
-                  <div className="space-y-5">
-                    {details.optionGroups.map((group) => (
-                      <div key={group.id}>
-                        <h4 className="text-sm font-semibold">{group.title}</h4>
-                        <ul className="mt-2 space-y-2">
-                          {group.items.map((item) => (
-                            <li key={item.id} className="bg-muted rounded-lg px-3 py-2 text-sm">
-                              <span className="font-medium">{item.name}</span>
-                              {item.note ? (
-                                <span className="text-muted-foreground mt-0.5 block">
-                                  {item.note}
-                                </span>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
+                  <PartnerProjectPricingPanel
+                    panel="options"
+                    projectId={project.id}
+                    canManage={canManagePricing}
+                    housePrice={project.basePrice}
+                    factoryBasePrice={dealerFactoryBase}
+                  />
                 </Panel>
               </TabsContent>
 
@@ -622,7 +616,7 @@ export default function PartnerCatalogProjectPage() {
             </Tabs>
           </div>
 
-          <aside className="min-w-0 xl:sticky xl:top-6 xl:self-start">
+          <aside className="min-w-0 xl:self-start">
             <Card className="gap-0 overflow-hidden py-0">
               <div className="bg-muted relative aspect-[16/9] w-full overflow-hidden">
                 {activeAsset ? (

@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 
 import { DashboardShell } from "@/components/dashboard-shell";
+import { FactoryOfferPanel } from "@/components/factory-offer-panel";
 import { PageAlert } from "@/components/page-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,12 @@ type Project = {
   bedrooms: number | null;
   bathrooms: string | null;
   basePrice: number | null;
+  factoryOffer?: {
+    importedAt?: string;
+    sources?: string[];
+    assembly: Array<{ id: string; name: string; price: number }>;
+    extras: Array<{ id: string; name: string; price: number }>;
+  } | null;
   projectUrl: string;
   active: boolean;
   syncOverrides?: SyncOverrides;
@@ -94,7 +101,7 @@ const OVERRIDE_FIELD_LABELS: Record<keyof SyncOverrides, string> = {
   floors: "Этажи",
   bedrooms: "Спальни",
   bathrooms: "Санузлы",
-  basePrice: "Заводская цена, ₽",
+  basePrice: "Заводская цена",
   active: "Статус"
 };
 
@@ -459,6 +466,23 @@ export default function CompanyCatalogProjectPage() {
                   </Button>
                 </div>
               </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Прайс завода</CardTitle>
+              <p className="text-muted-foreground text-sm">
+                Стоимость дома, сборка и допы для дилера из Excel. Это не опции покупателя на
+                сайте партнёра.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <FactoryOfferPanel
+                basePrice={project.basePrice}
+                offer={project.factoryOffer}
+                emptyHint="Загрузите прайс кнопкой «Обновить цены» на странице каталога."
+              />
             </CardContent>
           </Card>
 

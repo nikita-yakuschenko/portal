@@ -11,6 +11,7 @@ import {
 } from "@/components/catalog-view-toggle";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { PageAlert } from "@/components/page-alert";
+import { UpdateFactoryPricesButton } from "@/components/update-factory-prices-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -118,6 +119,15 @@ export default function CompanyCatalogPage() {
     }
   }
 
+  async function reloadProjects() {
+    try {
+      setProjects(await apiFetch<Project[]>("/api/company/catalog/projects"));
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось загрузить каталог");
+    }
+  }
+
   return (
     <DashboardShell
       cabinetKind="company"
@@ -132,7 +142,10 @@ export default function CompanyCatalogPage() {
         <CardHeader>
           <CardTitle>Проекты</CardTitle>
           <CardAction>
-            <CatalogViewToggle value={view} onChange={changeView} />
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <UpdateFactoryPricesButton onDone={() => void reloadProjects()} />
+              <CatalogViewToggle value={view} onChange={changeView} />
+            </div>
           </CardAction>
         </CardHeader>
         <CardContent>
@@ -245,7 +258,7 @@ export default function CompanyCatalogPage() {
                       <TableCell className="tabular-nums">{project.floors ?? "—"}</TableCell>
                       <TableCell className="tabular-nums whitespace-nowrap">
                         {project.basePrice
-                          ? `${project.basePrice.toLocaleString("ru-RU")} ₽`
+                          ? project.basePrice.toLocaleString("ru-RU")
                           : "по запросу"}
                       </TableCell>
                       <TableCell>

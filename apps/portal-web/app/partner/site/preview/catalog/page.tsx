@@ -40,9 +40,9 @@ function parseTechnologyFilter(value: string | null): TechnologyFilter {
 function formatPriceRange(value: number): string {
   if (value >= 1_000_000) {
     const mln = value / 1_000_000;
-    return `${mln.toLocaleString("ru-RU", { maximumFractionDigits: mln >= 10 ? 0 : 1 })} млн\u00A0₽`;
+    return `${mln.toLocaleString("ru-RU", { maximumFractionDigits: mln >= 10 ? 0 : 1 })} млн`;
   }
-  return `${value.toLocaleString("ru-RU")} ₽`;
+  return value.toLocaleString("ru-RU");
 }
 
 function rangeStep(min: number, max: number): number {
@@ -486,7 +486,7 @@ function PartnerSiteProjectsContent() {
                 min={0}
                 max={100}
                 value={[0, 0]}
-                formatValue={(v) => `${v.toLocaleString("ru-RU")} ₽`}
+                formatValue={(v) => v.toLocaleString("ru-RU")}
                 disabled
                 aria-label="Диапазон цены"
               />
