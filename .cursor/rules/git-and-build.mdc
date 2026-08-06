@@ -10,6 +10,7 @@ alwaysApply: true
 - Агент **ЗАПРЕЩЕНО** самостоятельно выполнять `git commit`, `git push`, `git add` для коммита.
 - Агент даёт пользователю **раздельные** copy-paste блоки: отдельно `git add`, отдельно `git commit -m "..."`, отдельно `git push` (если нужен push).
 - Сообщения коммитов — на русском, по смыслу изменения.
+- **ЗАПРЕЩЕНО** указывать соавторство AI/агента в коммитах (AES): никаких `Co-authored-by: Cursor <cursoragent@cursor.com>`, иных `Co-authored-by` с AI и фраз вроде «generated with / via Cursor Agent». В предлагаемых `git commit` таких trailer-ов быть не должно.
 
 ## Обязательный build перед git-командами
 

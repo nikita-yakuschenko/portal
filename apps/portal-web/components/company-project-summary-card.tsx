@@ -9,8 +9,8 @@ import {
   ProjectSpecsStrip,
   type SpecKey
 } from "@/components/project-specs-strip";
+import { ProjectSummaryCard } from "@/components/project-summary-card";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
 import {
   TECHNOLOGY_LABELS,
@@ -158,65 +158,66 @@ export function CompanyProjectSummaryCard({
   }
 
   return (
-    <Card>
-      <CardContent className="flex flex-wrap items-stretch justify-between gap-4">
-        <div className="flex min-h-full min-w-0 flex-1 flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <InlineEditPopover
-              enabled={editMode}
-              ariaLabel="Название"
-              value={project.name}
-              onCommit={(next) => patch({ name: next })}
-              display={nameNode}
-            />
-
-            <InlineEditPopover
-              enabled={editMode}
-              ariaLabel="Технология"
-              value={project.technology}
-              options={[
-                { value: "modular", label: TECHNOLOGY_LABELS.modular },
-                { value: "panel_frame", label: TECHNOLOGY_LABELS.panel_frame }
-              ]}
-              onCommit={(next) => patch({ technology: next })}
-              display={technologyNode}
-            />
-
-            <CompanyProjectCatalogVisibility
-              projectId={project.id}
-              active={project.active}
-              onUpdated={(updated) => {
-                onUpdated({
-                  ...project,
-                  active: Boolean(updated.active),
-                  syncOverrides: {
-                    ...project.syncOverrides,
-                    ...(updated.syncOverrides as SyncOverrides | undefined)
-                  }
-                });
-              }}
-            />
-          </div>
-
-          <ProjectSpecsStrip
-            className="mt-auto"
-            area={project.area}
-            dimensionsLabel={project.details?.dimensions?.label}
-            floors={project.floors}
-            bedrooms={project.bedrooms}
-            bathrooms={project.bathrooms}
-            showEmpty
-            renderValue={renderSpecValue}
-          />
-        </div>
-
-        <div className="shrink-0 self-start text-right">
+    <ProjectSummaryCard
+      title={
+        <InlineEditPopover
+          enabled={editMode}
+          ariaLabel="Название"
+          value={project.name}
+          onCommit={(next) => patch({ name: next })}
+          display={nameNode}
+        />
+      }
+      badge={
+        <InlineEditPopover
+          enabled={editMode}
+          ariaLabel="Технология"
+          value={project.technology}
+          options={[
+            { value: "modular", label: TECHNOLOGY_LABELS.modular },
+            { value: "panel_frame", label: TECHNOLOGY_LABELS.panel_frame }
+          ]}
+          onCommit={(next) => patch({ technology: next })}
+          display={technologyNode}
+        />
+      }
+      visibility={
+        <CompanyProjectCatalogVisibility
+          projectId={project.id}
+          active={project.active}
+          onUpdated={(updated) => {
+            onUpdated({
+              ...project,
+              active: Boolean(updated.active),
+              syncOverrides: {
+                ...project.syncOverrides,
+                ...(updated.syncOverrides as SyncOverrides | undefined)
+              }
+            });
+          }}
+        />
+      }
+      specs={
+        <ProjectSpecsStrip
+          className="mt-auto"
+          area={project.area}
+          dimensionsLabel={project.details?.dimensions?.label}
+          floors={project.floors}
+          bedrooms={project.bedrooms}
+          bathrooms={project.bathrooms}
+          showEmpty
+          renderValue={renderSpecValue}
+        />
+      }
+      prices={
+        <>
           <p className="text-muted-foreground inline-flex items-center justify-end gap-1.5 text-xs">
             Базовая стоимость
             <SyncDot on={overrides.basePrice} />
           </p>
           <InlineEditPopover
             enabled={editMode}
+            align="end"
             ariaLabel="Базовая стоимость"
             value={project.basePrice != null ? String(project.basePrice) : ""}
             inputType="number"
@@ -224,8 +225,8 @@ export function CompanyProjectSummaryCard({
             onCommit={(next) => patch({ basePrice: next ? Number(next) : null })}
             display={priceNode}
           />
-        </div>
-      </CardContent>
-    </Card>
+        </>
+      }
+    />
   );
 }

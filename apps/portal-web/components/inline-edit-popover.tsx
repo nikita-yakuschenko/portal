@@ -28,6 +28,8 @@ type InlineEditPopoverProps = {
   options?: SelectOption[];
   placeholder?: string;
   ariaLabel: string;
+  /** end — панель по правому краю триггера (растёт влево, удобно у правого края экрана) */
+  align?: "start" | "end";
   className?: string;
 };
 
@@ -41,6 +43,7 @@ export function InlineEditPopover({
   options,
   placeholder,
   ariaLabel,
+  align = "start",
   className
 }: InlineEditPopoverProps) {
   const [open, setOpen] = useState(false);
@@ -67,12 +70,17 @@ export function InlineEditPopover({
     return () => window.clearTimeout(t);
   }, [open]);
 
-  function measureTrigger() {
+  function measurePanelPos() {
     // display:contents — у самого span box нет, меряем дочерний узел
     const el = triggerRef.current?.firstElementChild ?? triggerRef.current;
     if (!el) return null;
     const rect = el.getBoundingClientRect();
-    return { top: rect.bottom + 6, left: rect.left };
+    const top = rect.bottom + 6;
+    const margin = 8;
+    const panelW = panelRef.current?.offsetWidth ?? 220;
+    let left = align === "end" ? rect.right - panelW : rect.left;
+    left = Math.max(margin, Math.min(left, window.innerWidth - panelW - margin));
+    return { top, left };
   }
 
   useLayoutEffect(() => {
@@ -80,8 +88,13 @@ export function InlineEditPopover({
       setPanelPos(null);
       return;
     }
-    setPanelPos(measureTrigger());
-  }, [open]);
+    // первый проход — грубая позиция; после paint уточняем по ширине панели
+    setPanelPos(measurePanelPos());
+    const raf = window.requestAnimationFrame(() => {
+      setPanelPos(measurePanelPos());
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [open, align, draft, options]);
 
   useEffect(() => {
     if (!open) return;
@@ -98,7 +111,7 @@ export function InlineEditPopover({
     }
 
     function onReposition() {
-      setPanelPos(measureTrigger());
+      setPanelPos(measurePanelPos());
     }
 
     document.addEventListener("mousedown", onDoc);
@@ -111,14 +124,11 @@ export function InlineEditPopover({
       window.removeEventListener("scroll", onReposition, true);
       window.removeEventListener("resize", onReposition);
     };
-  }, [open]);
+  }, [open, align]);
 
   async function commit() {
     const next = draft.trim();
-    if (next === String(value ?? "").trim()) {
-      setOpen(false);
-      return;
-    }
+    // Всегда шлём onCommit: даже без смены значения нужно выставить sync-override
     setSaving(true);
     try {
       await onCommit(next);
@@ -127,6 +137,61 @@ export function InlineEditPopover({
       setSaving(false);
     }
   }
+
+  const actions = (
+    <>
+      <Button
+        type="button"
+        size="icon-sm"
+        disabled={saving}
+        aria-label="Сохранить"
+        onClick={() => void commit()}
+      >
+        {saving ? <Spinner className="size-3.5" /> : <IconCheck className="size-4" />}
+      </Button>
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
+        disabled={saving}
+        aria-label="Отменить"
+        onClick={() => setOpen(false)}
+      >
+        <IconX className="size-4" />
+      </Button>
+    </>
+  );
+
+  const field = options ? (
+    <Select value={draft || options[0]?.value || ""} onValueChange={setDraft}>
+      <SelectTrigger className="h-8 min-w-[10rem] flex-1" aria-label={ariaLabel}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper">
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  ) : (
+    <Input
+      type={inputType}
+      min={inputType === "number" ? 0 : undefined}
+      value={draft}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      className="h-8 min-w-[8rem] flex-1"
+      onChange={(event) => setDraft(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          void commit();
+        }
+      }}
+    />
+  );
 
   // contents — обёртка не участвует в layout, размер = размер display
   return (
@@ -174,61 +239,21 @@ export function InlineEditPopover({
               id={panelId}
               role="dialog"
               aria-label={ariaLabel}
-              className="bg-popover text-popover-foreground fixed z-50 flex min-w-[12rem] items-center gap-1 rounded-lg border p-1.5 shadow-md"
+              className="bg-popover text-popover-foreground fixed z-50 flex max-w-[calc(100vw-1rem)] min-w-[12rem] items-center gap-1 rounded-lg border p-1.5 shadow-md"
               style={{ top: panelPos.top, left: panelPos.left }}
             >
-              {options ? (
-                <Select
-                  value={draft || options[0]?.value || ""}
-                  onValueChange={setDraft}
-                >
-                  <SelectTrigger className="h-8 min-w-[10rem] flex-1" aria-label={ariaLabel}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent position="popper">
-                    {options.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {/* align=end: кнопки слева + панель у правого края триггера */}
+              {align === "end" ? (
+                <>
+                  {actions}
+                  {field}
+                </>
               ) : (
-                <Input
-                  type={inputType}
-                  min={inputType === "number" ? 0 : undefined}
-                  value={draft}
-                  placeholder={placeholder}
-                  aria-label={ariaLabel}
-                  className="h-8 min-w-[8rem] flex-1"
-                  onChange={(event) => setDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void commit();
-                    }
-                  }}
-                />
+                <>
+                  {field}
+                  {actions}
+                </>
               )}
-              <Button
-                type="button"
-                size="icon-sm"
-                disabled={saving}
-                aria-label="Сохранить"
-                onClick={() => void commit()}
-              >
-                {saving ? <Spinner className="size-3.5" /> : <IconCheck className="size-4" />}
-              </Button>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                disabled={saving}
-                aria-label="Отменить"
-                onClick={() => setOpen(false)}
-              >
-                <IconX className="size-4" />
-              </Button>
             </div>,
             document.body
           )

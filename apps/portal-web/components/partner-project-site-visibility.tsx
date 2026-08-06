@@ -85,15 +85,15 @@ export function PartnerProjectSiteVisibility({
   }
 
   if (loading) {
-    return <span className="bg-muted inline-block h-6 w-28 animate-pulse rounded-full" />;
+    return <span className="bg-muted inline-block h-6 w-44 animate-pulse rounded-full" />;
   }
 
   return (
     <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap">
+      {/* min-w по длинной подписи — ширина не прыгает при смене статуса */}
       <Badge
-        key={published ? "published" : "hidden"}
         variant={published ? "default" : "warning"}
-        className="animate-in fade-in zoom-in-95 duration-200"
+        className="min-w-[11.5rem] justify-center"
       >
         {published ? <IconCircleCheck /> : <IconEyeOff />}
         {published ? "Опубликован на сайте" : "Скрыт с сайта"}
@@ -105,7 +105,7 @@ export function PartnerProjectSiteVisibility({
           variant="link"
           size="sm"
           disabled={saving}
-          className="text-muted-foreground hover:text-foreground h-auto gap-1.5 px-0"
+          className="text-muted-foreground hover:text-foreground h-auto min-w-[10.5rem] justify-center gap-1.5 px-0"
           onClick={() => void toggle(!published)}
         >
           {saving ? (

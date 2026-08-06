@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -85,19 +84,83 @@ function groupExtrasByTab(extras: FactoryOfferLine[]) {
   return tabs;
 }
 
-function Lines({
+const priceFieldClass =
+  "w-28 shrink-0 border-0 px-1.5 py-0.5 text-right text-sm font-medium tabular-nums shadow-none outline-none ring-0 focus:outline-none focus-visible:ring-0 rounded-sm";
+
+function parsePriceInput(raw: string): number | null {
+  const digits = raw.replace(/[^\d]/g, "");
+  if (digits === "") return 0;
+  const next = Number(digits);
+  return Number.isFinite(next) ? Math.max(0, Math.round(next)) : null;
+}
+
+/** Цена: одна геометрия; в edit — бледно-зелёный фон без рамки */
+function PriceField({
+  price,
+  editable,
+  ariaLabel,
+  onChange
+}: {
+  price: number;
+  editable: boolean;
+  ariaLabel: string;
+  onChange?: (next: number) => void;
+}) {
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      readOnly={!editable}
+      tabIndex={editable ? 0 : -1}
+      aria-label={ariaLabel}
+      className={cn(
+        priceFieldClass,
+        editable
+          ? "bg-primary/10 cursor-text focus:bg-primary/15"
+          : "bg-transparent pointer-events-none"
+      )}
+      value={editable && focused ? draft : formatRub(price)}
+      onFocus={() => {
+        if (!editable) return;
+        setDraft(String(price));
+        setFocused(true);
+      }}
+      onBlur={() => setFocused(false)}
+      onChange={(e) => {
+        if (!editable) return;
+        setDraft(e.target.value);
+        const next = parsePriceInput(e.target.value);
+        if (next != null) onChange?.(next);
+      }}
+    />
+  );
+}
+
+function PriceLines({
   items,
-  dense
+  editable = false,
+  onChangePrice
 }: {
   items: FactoryOfferLine[];
-  dense?: boolean;
+  editable?: boolean;
+  onChangePrice?: (id: string, price: number) => void;
 }) {
   return (
-    <ul className={cn("divide-border divide-y", dense && "text-sm")}>
+    <ul className="divide-border divide-y">
       {items.map((item) => (
-        <li key={item.id} className="flex items-start justify-between gap-4 py-2">
+        <li key={item.id} className="flex items-center justify-between gap-4 py-2 text-sm">
           <span className="min-w-0">{item.name}</span>
-          <span className="shrink-0 font-medium tabular-nums">{formatRub(item.price)}</span>
+          <PriceField
+            price={item.price}
+            editable={editable}
+            ariaLabel={item.name}
+            {...(onChangePrice
+              ? { onChange: (next: number) => onChangePrice(item.id, next) }
+              : {})}
+          />
         </li>
       ))}
     </ul>
@@ -155,7 +218,7 @@ export function FactoryOfferPanel({
             <div>
               <h4 className="text-sm font-semibold">Сборка</h4>
               <div className="mt-1">
-                <Lines items={assembly} />
+                <PriceLines items={assembly} />
               </div>
             </div>
           ) : null}
@@ -163,7 +226,7 @@ export function FactoryOfferPanel({
             <div>
               <h4 className="text-sm font-semibold">Допы завода</h4>
               <div className="mt-1">
-                <Lines items={extras} />
+                <PriceLines items={extras} />
               </div>
             </div>
           ) : null}
@@ -311,78 +374,36 @@ export function FactoryPackagesEditor({
   );
 }
 
-function EditablePriceLines({
-  items,
-  onChangePrice
-}: {
-  items: FactoryOfferLine[];
-  onChangePrice: (id: string, price: number) => void;
-}) {
-  return (
-    <ul className="divide-border divide-y">
-      {items.map((item) => (
-        <li key={item.id} className="flex items-center justify-between gap-4 py-2 text-sm">
-          <span className="min-w-0">{item.name}</span>
-          <Input
-            type="number"
-            min={0}
-            step={1}
-            className="h-8 w-32 shrink-0 text-right tabular-nums"
-            value={item.price}
-            onChange={(e) => {
-              const next = e.target.value === "" ? 0 : Number(e.target.value);
-              if (!Number.isFinite(next)) return;
-              onChangePrice(item.id, Math.max(0, Math.round(next)));
-            }}
-          />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** HQ: комплектация с редактированием цен по тематическим табам */
+/**
+ * HQ: заводской прайс по вкладкам.
+ * editable=false — только просмотр; правка и «Сохранить» — при editMode.
+ */
 export function FactoryPackagesPriceEditor({
+  section,
   housePrice,
   offer,
   saving,
+  editable = true,
   onSave
 }: {
+  section: "assembly" | "extras";
   housePrice?: number | null;
   offer: FactoryOfferView | null | undefined;
   saving?: boolean;
+  editable?: boolean;
   onSave: (next: {
     basePrice: number | null;
     assembly: FactoryOfferLine[];
     extras: FactoryOfferLine[];
   }) => void;
 }) {
-  const [basePrice, setBasePrice] = useState<number | null>(housePrice ?? null);
   const [assembly, setAssembly] = useState<FactoryOfferLine[]>(offer?.assembly ?? []);
   const [extras, setExtras] = useState<FactoryOfferLine[]>(offer?.extras ?? []);
 
   useEffect(() => {
-    setBasePrice(housePrice ?? null);
     setAssembly(offer?.assembly ?? []);
     setExtras(offer?.extras ?? []);
-  }, [housePrice, offer]);
-
-  const extraTabs = groupExtrasByTab(extras);
-  const packageTabs = [
-    ...(assembly.length > 0
-      ? [{ id: "assembly", title: "Сборка", items: assembly }]
-      : []),
-    ...extraTabs
-  ];
-  const hasAnything = basePrice != null || assembly.length > 0 || extras.length > 0;
-
-  if (!hasAnything) {
-    return (
-      <p className="text-muted-foreground text-sm">
-        Прайс ещё не загружен. Обновите цены из Excel на странице каталога.
-      </p>
-    );
-  }
+  }, [offer]);
 
   function patchAssemblyPrice(id: string, price: number) {
     setAssembly((prev) => prev.map((row) => (row.id === id ? { ...row, price } : row)));
@@ -392,65 +413,71 @@ export function FactoryPackagesPriceEditor({
     setExtras((prev) => prev.map((row) => (row.id === id ? { ...row, price } : row)));
   }
 
+  const saveButton = editable ? (
+    <div>
+      <Button
+        type="button"
+        disabled={saving}
+        onClick={() =>
+          onSave({ basePrice: housePrice ?? null, assembly, extras })
+        }
+      >
+        {saving ? <Spinner /> : null}
+        Сохранить прайс
+      </Button>
+    </div>
+  ) : null;
+
+  if (section === "assembly") {
+    if (assembly.length === 0) {
+      return (
+        <p className="text-muted-foreground text-sm">
+          Позиции сборки не загружены. Обновите цены из Excel на странице каталога.
+        </p>
+      );
+    }
+    return (
+      <div className="space-y-4">
+        <PriceLines
+          items={assembly}
+          editable={editable}
+          onChangePrice={patchAssemblyPrice}
+        />
+        {saveButton}
+      </div>
+    );
+  }
+
+  const extraTabs = groupExtrasByTab(extras);
+  if (extraTabs.length === 0) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        Заводские опции не загружены. Обновите цены из Excel на странице каталога.
+      </p>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="font-medium">Домокомплект</p>
-        <Input
-          type="number"
-          min={0}
-          step={1}
-          className="h-8 w-40 text-right tabular-nums"
-          value={basePrice ?? ""}
-          placeholder="Цена"
-          onChange={(e) => {
-            if (e.target.value === "") {
-              setBasePrice(null);
-              return;
-            }
-            const next = Number(e.target.value);
-            if (!Number.isFinite(next)) return;
-            setBasePrice(Math.max(0, Math.round(next)));
-          }}
-        />
-      </div>
-
-      {packageTabs.length > 0 ? (
-        <Tabs defaultValue={packageTabs[0]!.id} className="gap-2 md:gap-2">
-          <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
-            {packageTabs.map((tab) => (
-              <TabsTrigger key={tab.id} value={tab.id}>
-                {tab.title}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          {packageTabs.map((tab) => (
-            <TabsContent key={tab.id} value={tab.id} className="mt-0 px-1">
-              <EditablePriceLines
-                items={tab.items}
-                onChangePrice={tab.id === "assembly" ? patchAssemblyPrice : patchExtraPrice}
-              />
-            </TabsContent>
+      <Tabs defaultValue={extraTabs[0]!.id} className="gap-2 md:gap-2">
+        <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
+          {extraTabs.map((tab) => (
+            <TabsTrigger key={tab.id} value={tab.id}>
+              {tab.title}
+            </TabsTrigger>
           ))}
-        </Tabs>
-      ) : null}
-
-      <div>
-        <Button
-          type="button"
-          disabled={saving}
-          onClick={() =>
-            onSave({
-              basePrice,
-              assembly,
-              extras
-            })
-          }
-        >
-          {saving ? <Spinner /> : null}
-          Сохранить прайс
-        </Button>
-      </div>
+        </TabsList>
+        {extraTabs.map((tab) => (
+          <TabsContent key={tab.id} value={tab.id} className="mt-0 px-1">
+            <PriceLines
+              items={tab.items}
+              editable={editable}
+              onChangePrice={patchExtraPrice}
+            />
+          </TabsContent>
+        ))}
+      </Tabs>
+      {saveButton}
     </div>
   );
 }

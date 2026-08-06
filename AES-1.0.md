@@ -1761,6 +1761,18 @@ Proposed / Accepted / Deprecated / Superseded
 14. Для production изменения укажи rollback.
 15. Не скрывай допущения и ограничения.
 
+## Git: авторство коммитов
+
+ЗАПРЕЩЕНО указывать соавторство AI/агента в коммитах, сообщениях коммитов, trailer-ах и метаданных.
+
+В том числе ЗАПРЕЩЕНО:
+
+- `Co-authored-by: Cursor <cursoragent@cursor.com>`;
+- любые другие `Co-authored-by` с Cursor, Claude, Copilot, GPT и иными AI-агентами;
+- формулировки вроде «generated with», «via Cursor Agent», «co-authored by AI» в теле коммита.
+
+Автор коммита — человек (владелец репозитория / исполнитель), который принимает и фиксирует изменение. Агент не является соавтором.
+
 ## Профильное назначение
 
 - React/Next.js — web UI и full-stack web;

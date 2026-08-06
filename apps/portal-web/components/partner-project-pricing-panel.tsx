@@ -938,21 +938,27 @@ export function PartnerProjectPricingPanel({
                     id="pricing-mode"
                     size="sm"
                     aria-label="Режим цены"
-                    className="h-8 w-[8.25rem] shrink-0"
+                    className="h-8 w-[7.5rem] shrink-0 min-[1360px]:w-[8rem] min-[1600px]:w-[8.5rem]"
                   >
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="markup">Наценка %</SelectItem>
-                    <SelectItem value="exact">Точная</SelectItem>
-                    <SelectItem value="on_request">По запросу</SelectItem>
+                  <SelectContent className="min-w-[7.5rem]">
+                    <SelectItem value="markup" className="whitespace-nowrap">
+                      Наценка %
+                    </SelectItem>
+                    <SelectItem value="exact" className="whitespace-nowrap">
+                      Точная
+                    </SelectItem>
+                    <SelectItem value="on_request" className="whitespace-nowrap">
+                      По запросу
+                    </SelectItem>
                   </SelectContent>
                 </Select>
 
-                {/* Один слот: % или точная цена (взаимоисключающие), ширина под 99 999 999 */}
+                {/* % / точная: уже по ширине <1360, высота как у кнопки (h-8) */}
                 <div
                   className={cn(
-                    "relative flex h-8 w-[9.5rem] shrink-0 items-center",
+                    "relative flex h-8 w-[5.75rem] shrink-0 items-center min-[1360px]:w-[6.5rem] min-[1600px]:w-[7.5rem]",
                     draft.pricingMode === "on_request" && "opacity-40"
                   )}
                 >
@@ -965,7 +971,7 @@ export function PartnerProjectPricingPanel({
                         autoComplete="off"
                         maxLength={3}
                         disabled={!canManage}
-                        className="h-8 w-full pr-6 text-center tabular-nums"
+                        className="h-8 w-full px-1.5 pr-5 text-center text-sm tabular-nums min-[1360px]:px-2"
                         value={draft.markupPercent ?? ""}
                         onChange={(e) => {
                           const raw = e.target.value.replace(/\D/g, "").slice(0, 3);
@@ -983,7 +989,7 @@ export function PartnerProjectPricingPanel({
                           });
                         }}
                       />
-                      <span className="text-muted-foreground pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs">
+                      <span className="text-muted-foreground pointer-events-none absolute inset-y-0 right-1.5 flex items-center text-xs">
                         %
                       </span>
                     </>
@@ -995,7 +1001,7 @@ export function PartnerProjectPricingPanel({
                       autoComplete="off"
                       disabled={!canManage || !modeExact}
                       placeholder={modeExact ? "Цена" : "—"}
-                      className="h-8 w-full tabular-nums"
+                      className="h-8 w-full px-1.5 text-sm tabular-nums min-[1360px]:px-2"
                       value={modeExact ? (draft.publicPrice ?? "") : ""}
                       onChange={(e) => {
                         const raw = e.target.value.replace(/\D/g, "");

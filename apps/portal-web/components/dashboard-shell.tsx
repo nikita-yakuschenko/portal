@@ -142,8 +142,11 @@ export function DashboardShell(props: {
           </div>
         </header>
 
-        <div className="cabinet-content-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:gap-6 md:p-6">
-          {props.children}
+        <div className="cabinet-content-scroll flex min-h-0 flex-1 flex-col overflow-y-auto p-4 md:p-6">
+          {/* Колонка по центру: 980 → 1280 (≥1600) → 1366 (≥1920) */}
+          <div className="mx-auto flex w-full max-w-[980px] flex-1 flex-col gap-4 md:gap-6 min-[1600px]:max-w-[1280px] min-[1920px]:max-w-[1366px]">
+            {props.children}
+          </div>
         </div>
       </SidebarInset>
     </SidebarProvider>

@@ -14,7 +14,7 @@ type ProjectActivePatch = {
   syncOverrides?: Partial<Record<"active", boolean>>;
 };
 
-/** Публикация в общем каталоге HQ — бейдж + ссылка в одну строку */
+/** Публикация в каталоге HQ — тот же принцип, что у партнёра: бейдж + ссылка, фиксированная min-ширина */
 export function CompanyProjectCatalogVisibility({
   projectId,
   active,
@@ -50,9 +50,8 @@ export function CompanyProjectCatalogVisibility({
   return (
     <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap">
       <Badge
-        key={active ? "published" : "hidden"}
         variant={active ? "default" : "warning"}
-        className="animate-in fade-in zoom-in-95 duration-200"
+        className="min-w-[12.5rem] justify-center"
       >
         {active ? <IconCircleCheck /> : <IconEyeOff />}
         {active ? "Опубликован в каталоге" : "Скрыт из каталога"}
@@ -63,7 +62,7 @@ export function CompanyProjectCatalogVisibility({
         variant="link"
         size="sm"
         disabled={saving}
-        className="text-muted-foreground hover:text-foreground h-auto gap-1.5 px-0"
+          className="text-muted-foreground hover:text-foreground h-auto min-w-[10.5rem] justify-center gap-1.5 px-0"
         onClick={() => void toggle(!active)}
       >
         {saving ? (

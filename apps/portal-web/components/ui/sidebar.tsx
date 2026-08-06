@@ -32,6 +32,8 @@ const SIDEBAR_WIDTH = "16rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
+/** Ниже — сайдбар принудительно свёрнут (окно браузера), контент шире */
+const SIDEBAR_AUTO_COLLAPSE_BELOW = 1100
 
 function readCookie(name: string): string | null {
   if (typeof document === "undefined") return null
@@ -137,8 +139,13 @@ function SidebarProvider({
         if (!userId || cancelled) return
         userIdRef.current = userId
         const perUser = readSidebarOpen(defaultOpen, userId)
-        _setOpen(perUser)
         persistSidebarOpen(perUser, userId)
+        // Узкое окно — не разворачиваем поверх автосворачивания
+        if (window.innerWidth < SIDEBAR_AUTO_COLLAPSE_BELOW) {
+          _setOpen(false)
+        } else {
+          _setOpen(perUser)
+        }
       } catch {
         /* нет сессии — оставляем общий ключ */
       }
@@ -146,6 +153,23 @@ function SidebarProvider({
     return () => {
       cancelled = true
     }
+  }, [defaultOpen])
+
+  // Окно <1100 — сайдбар свёрнут; сохранённое предпочтение не затираем
+  React.useEffect(() => {
+    const mql = window.matchMedia(
+      `(max-width: ${SIDEBAR_AUTO_COLLAPSE_BELOW - 1}px)`
+    )
+    const apply = () => {
+      if (mql.matches) {
+        _setOpen(false)
+        return
+      }
+      _setOpen(readSidebarOpen(defaultOpen, userIdRef.current))
+    }
+    apply()
+    mql.addEventListener("change", apply)
+    return () => mql.removeEventListener("change", apply)
   }, [defaultOpen])
 
   // Helper to toggle the sidebar.
