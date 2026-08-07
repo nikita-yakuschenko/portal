@@ -10,6 +10,7 @@
     "start": "next start",
     "start:site": "cross-env APP_ROLE=site NEXT_PUBLIC_APP_ROLE=site next start -p 3001",
     "lint": "eslint .",
+    "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -43,6 +44,7 @@
     "@types/node": "^24.3.0",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.7"
   }
 }

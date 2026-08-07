@@ -507,3 +507,35 @@ export const notifications = pgTable(
     userCreatedIdx: index("notifications_user_created_idx").on(table.userId, table.createdAt)
   })
 );
+
+/**
+ * Снимок публичного профиля соцсети. Одна строка на (платформа, username) —
+ * общая для всех партнёров, ссылающихся на один и тот же канал.
+ * Хранится только удачно полученный snapshot; неудачная попытка обновляет
+ * поля last_attempt_* и оставляет прежние данные для отдачи как stale.
+ */
+export const socialProfileSnapshots = pgTable(
+  "social_profile_snapshots",
+  {
+    id: text("id").primaryKey(),
+    platform: text("platform").notNull(),
+    /** Нормализованный username в нижнем регистре — часть ключа кэша */
+    username: text("username").notNull(),
+    profileUrl: text("profile_url").notNull(),
+    source: text("source").notNull(),
+    payload: jsonb("payload").notNull().default({}),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    /** Последняя попытка обновления — в том числе неудачная */
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    lastAttemptStatus: text("last_attempt_status"),
+    lastErrorClass: text("last_error_class"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    platformUsernameIdx: uniqueIndex("social_profile_snapshots_platform_username_idx").on(
+      table.platform,
+      table.username
+    )
+  })
+);

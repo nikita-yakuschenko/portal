@@ -38,6 +38,15 @@ services:
       TILDA_PANEL_STOREPARTUID: ${TILDA_PANEL_STOREPARTUID:-}
       TILDA_PANEL_RECID: ${TILDA_PANEL_RECID:-}
       TILDA_SITE_BASE_URL: ${TILDA_SITE_BASE_URL:-https://avgst.ru}
+      # Снимки профилей соцсетей
+      SOCIAL_PROFILE_TTL_MINUTES: ${SOCIAL_PROFILE_TTL_MINUTES:-20}
+      INSTAGRAM_PROVIDER: ${INSTAGRAM_PROVIDER:-auto}
+      META_APP_ID: ${META_APP_ID:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      META_ACCESS_TOKEN: ${META_ACCESS_TOKEN:-}
+      META_IG_BUSINESS_ID: ${META_IG_BUSINESS_ID:-}
+      INSTAGRAM_COLLECTOR_URL: ${INSTAGRAM_COLLECTOR_URL:-http://instagram-collector:4100}
+      INSTAGRAM_COLLECTOR_TOKEN: ${INSTAGRAM_COLLECTOR_TOKEN:-}
     expose:
       - "4000"
     healthcheck:
@@ -90,6 +99,40 @@ services:
       PORT: "3410"
     expose:
       - "3410"
+
+  # Браузерный сборщик Instagram: отдельный контейнер с Chromium.
+  # Наружу не публикуется — только внутренняя сеть и общий токен с API.
+  instagram-collector:
+    build:
+      context: .
+      dockerfile: apps/instagram-collector/Dockerfile
+    restart: unless-stopped
+    networks:
+      - default
+    environment:
+      INSTAGRAM_COLLECTOR_TOKEN: ${INSTAGRAM_COLLECTOR_TOKEN:?INSTAGRAM_COLLECTOR_TOKEN required}
+      COLLECTOR_PORT: 4100
+      COLLECTOR_CONCURRENCY: ${COLLECTOR_CONCURRENCY:-1}
+      COLLECTOR_TRACE_TTL_MINUTES: ${COLLECTOR_TRACE_TTL_MINUTES:-60}
+      # storageState служебного аккаунта монтируется как secret, в образ не кладётся
+      COLLECTOR_STORAGE_STATE: ${COLLECTOR_STORAGE_STATE:-}
+      # Обязателен, если сервер стоит в РФ: instagram.com оттуда недоступен
+      COLLECTOR_PROXY_URL: ${COLLECTOR_PROXY_URL:-}
+      COLLECTOR_PROXY_USERNAME: ${COLLECTOR_PROXY_USERNAME:-}
+      COLLECTOR_PROXY_PASSWORD: ${COLLECTOR_PROXY_PASSWORD:-}
+    expose:
+      - "4100"
+    shm_size: 1gb
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4100/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
 networks:
   # Общая сеть Dokploy: сюда подключены Databases → резолвится b2b-portal-hblrpr

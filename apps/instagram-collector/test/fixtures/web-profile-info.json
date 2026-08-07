@@ -1,0 +1,60 @@
+{
+  "data": {
+    "user": {
+      "username": "partner_demo",
+      "full_name": "Партнёр Демо",
+      "biography": "Строим дома под ключ\nНижний Новгород",
+      "profile_pic_url_hd": "https://scontent-arn2-1.cdninstagram.com/v/avatar_hd.jpg",
+      "profile_pic_url": "https://scontent-arn2-1.cdninstagram.com/v/avatar.jpg",
+      "external_url": "https://partner-demo.ru",
+      "category_name": "Строительная компания",
+      "edge_followed_by": { "count": 11700 },
+      "edge_follow": { "count": 128 },
+      "edge_owner_to_timeline_media": {
+        "count": 342,
+        "edges": [
+          {
+            "node": {
+              "id": "3001",
+              "shortcode": "Cxx001",
+              "__typename": "GraphImage",
+              "display_url": "https://scontent-arn2-1.cdninstagram.com/v/post1.jpg",
+              "thumbnail_src": "https://scontent-arn2-1.cdninstagram.com/v/post1_thumb.jpg",
+              "taken_at_timestamp": 1786000000,
+              "edge_media_to_caption": {
+                "edges": [{ "node": { "text": "Сдали дом в Кстово" } }]
+              }
+            }
+          },
+          {
+            "node": {
+              "id": "3002",
+              "shortcode": "Cxx002",
+              "__typename": "GraphVideo",
+              "is_video": true,
+              "display_url": "https://scontent-arn2-1.cdninstagram.com/v/post2.jpg",
+              "thumbnail_src": "https://scontent-arn2-1.cdninstagram.com/v/post2_thumb.jpg",
+              "video_view_count": 5400,
+              "taken_at_timestamp": 1785900000,
+              "edge_media_to_caption": { "edges": [] }
+            }
+          },
+          {
+            "node": {
+              "id": "3003",
+              "shortcode": "Cxx003",
+              "__typename": "GraphSidecar",
+              "display_url": "https://scontent-arn2-1.cdninstagram.com/v/post3.jpg",
+              "taken_at_timestamp": 1785800000,
+              "edge_sidecar_to_children": { "edges": [{ "node": { "id": "3003a" } }] },
+              "edge_media_to_caption": {
+                "edges": [{ "node": { "text": "Ход стройки" } }]
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "status": "ok"
+}

@@ -1,3 +1,5 @@
+export * from "./social.js";
+
 export type SourceSystem = "tilda";
 
 export type PartnerStatus = "pending" | "active" | "suspended";

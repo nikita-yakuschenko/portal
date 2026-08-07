@@ -11,5 +11,25 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  # Браузерный сборщик Instagram. Локально нужен только когда проверяют
+  # Instagram-профили: Telegram работает без него.
+  instagram-collector:
+    build:
+      context: .
+      dockerfile: apps/instagram-collector/Dockerfile
+    restart: unless-stopped
+    environment:
+      INSTAGRAM_COLLECTOR_TOKEN: ${INSTAGRAM_COLLECTOR_TOKEN:-local-dev-token}
+      COLLECTOR_PORT: 4100
+      COLLECTOR_CONCURRENCY: ${COLLECTOR_CONCURRENCY:-1}
+      # Из РФ instagram.com не резолвится — без прокси сбор всегда даст таймаут
+      COLLECTOR_PROXY_URL: ${COLLECTOR_PROXY_URL:-}
+      COLLECTOR_PROXY_USERNAME: ${COLLECTOR_PROXY_USERNAME:-}
+      COLLECTOR_PROXY_PASSWORD: ${COLLECTOR_PROXY_PASSWORD:-}
+    ports:
+      - "4100:4100"
+    # Chromium падает в контейнере с дефолтным /dev/shm в 64 МБ
+    shm_size: 1gb
+
 volumes:
   postgres_data:

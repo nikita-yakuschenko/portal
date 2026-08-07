@@ -12,7 +12,13 @@ import { partnerSiteService } from "./modules/partners/partner-site-service.js";
 import { notificationService } from "./modules/notifications/notification-service.js";
 import { messengerService } from "./modules/messenger/messenger-service.js";
 import { PortalService } from "./modules/portal/portal-service.js";
+import { socialProfileService } from "./modules/social/social-profile-service.js";
+import { resolvePartnerSocialUrl } from "./modules/social/social-urls.js";
+import { fetchProxiedMedia } from "./modules/social/media-proxy.js";
+import { OutboundError } from "./modules/social/social-http.js";
+import { consumeRateLimit } from "./modules/social/rate-limit.js";
 import { partnerSiteDraftSchema } from "@b2b/site-schema";
+import type { SocialProfileSnapshot } from "@b2b/domain";
 
 const applicationSchema = z.object({
   inn: z.string().regex(/^\d{10}(\d{2})?$/, "ИНН должен содержать 10 или 12 цифр"),
@@ -135,6 +141,14 @@ const resolveSiteSchema = z.object({
 
 const passwordResetRequestSchema = z.object({
   email: z.email()
+});
+
+const socialProfileQuerySchema = z.object({
+  platform: z.enum(["telegram", "instagram", "vk", "youtube", "dzen", "max"])
+});
+
+const socialMediaQuerySchema = z.object({
+  url: z.string().url().max(2048)
 });
 
 const updateCatalogProjectSchema = z.object({
@@ -380,6 +394,122 @@ export async function buildApp() {
     if (parsed.data.customerEmail !== undefined) leadInput.customerEmail = parsed.data.customerEmail;
     if (parsed.data.message !== undefined) leadInput.message = parsed.data.message;
     return portalService.createLead(leadInput);
+  });
+
+  /** Диагностика остаётся в логе: наружу уходят только данные профиля и статус */
+  function toPublicSnapshot(snapshot: SocialProfileSnapshot) {
+    const { diagnostics: _diagnostics, ...rest } = snapshot;
+    return rest;
+  }
+
+  function logSocialFetch(
+    request: { log: { info: (payload: Record<string, unknown>) => void } },
+    snapshot: SocialProfileSnapshot
+  ) {
+    request.log.info({
+      event: "social_profile_fetch",
+      platform: snapshot.platform,
+      username: snapshot.username,
+      provider: snapshot.source,
+      providerStage: snapshot.diagnostics?.providerStage,
+      upstreamStatus: snapshot.diagnostics?.upstreamStatus,
+      durationMs: snapshot.diagnostics?.durationMs,
+      resultStatus: snapshot.status,
+      mediaCount: snapshot.media.length,
+      errorClass: snapshot.diagnostics?.errorClass,
+      requestId: snapshot.diagnostics?.requestId
+    });
+  }
+
+  /** Снимок профиля соцсети для витрины опубликованного сайта партнёра */
+  app.get("/api/public/sites/:partnerId/social-profile", async (request, reply) => {
+    const { partnerId } = request.params as { partnerId: string };
+    if (!consumeRateLimit(`social:${request.ip}`, 60, 60_000)) {
+      return reply.status(429).send({ message: "Слишком много запросов" });
+    }
+
+    const parsed = socialProfileQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    const published = await partnerSiteService.resolvePublishedByPartnerId(partnerId);
+    if (!published) {
+      return reply.status(404).send({ message: "Сайт не опубликован" });
+    }
+
+    const link = resolvePartnerSocialUrl(
+      published.config as unknown as Record<string, unknown>,
+      parsed.data.platform
+    );
+    if (!link) {
+      return reply.status(404).send({ message: "Ссылка на площадку не настроена" });
+    }
+
+    const snapshot = await socialProfileService.getProfile(link);
+    logSocialFetch(request, snapshot);
+    return toPublicSnapshot(snapshot);
+  });
+
+  /** То же самое для превью в кабинете — по черновику сайта, до публикации */
+  app.get("/api/partner/social-profile", async (request, reply) => {
+    const authResult = await requireAuth(request, reply);
+    if (authResult) {
+      return authResult;
+    }
+    const auth = getAuthUser(request)!;
+    if (!auth.partnerId) {
+      return reply.status(403).send({ message: "Forbidden" });
+    }
+
+    const parsed = socialProfileQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    const site = await partnerSiteService.getByPartnerId(auth.partnerId);
+    const link = resolvePartnerSocialUrl(
+      site.config as unknown as Record<string, unknown>,
+      parsed.data.platform
+    );
+    if (!link) {
+      return reply.status(404).send({ message: "Ссылка на площадку не настроена" });
+    }
+
+    const snapshot = await socialProfileService.getProfile(link);
+    logSocialFetch(request, snapshot);
+    return toPublicSnapshot(snapshot);
+  });
+
+  /**
+   * Прокси картинок соцсетей: CDN Telegram и Instagram не отдают их в браузер
+   * напрямую из-за referrer-политик, а тянуть их клиентом — светить посетителя.
+   */
+  app.get("/api/public/social-media", async (request, reply) => {
+    if (!consumeRateLimit(`media:${request.ip}`, 300, 60_000)) {
+      return reply.status(429).send({ message: "Слишком много запросов" });
+    }
+
+    const parsed = socialMediaQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    try {
+      const media = await fetchProxiedMedia(parsed.data.url);
+      return reply
+        .header("Content-Type", media.contentType)
+        .header("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800")
+        .header("Content-Security-Policy", "default-src 'none'; sandbox")
+        .header("X-Content-Type-Options", "nosniff")
+        .send(media.body);
+    } catch (error) {
+      const errorClass = error instanceof OutboundError ? error.errorClass : "unexpected_error";
+      request.log.info({ event: "social_media_proxy_rejected", errorClass });
+      return reply.status(errorClass === "host_not_allowed" ? 400 : 502).send({
+        message: "Медиа недоступно"
+      });
+    }
   });
 
   app.post("/api/auth/login", async (request, reply) => {

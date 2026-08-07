@@ -30,7 +30,19 @@ const configSchema = z.object({
   TILDA_MODULAR_RECID: z.string().default(""),
   TILDA_PANEL_STOREPARTUID: z.string().default(""),
   TILDA_PANEL_RECID: z.string().default(""),
-  TILDA_SITE_BASE_URL: z.string().url().default("https://avgst.ru")
+  TILDA_SITE_BASE_URL: z.string().url().default("https://avgst.ru"),
+  // Снимки публичных профилей соцсетей: TTL и лимиты outbound-запросов
+  SOCIAL_PROFILE_TTL_MINUTES: z.coerce.number().int().positive().default(20),
+  SOCIAL_FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
+  SOCIAL_MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(8 * 1024 * 1024),
+  // auto — пробуем Meta API, затем collector; off — Instagram отключён
+  INSTAGRAM_PROVIDER: z.enum(["auto", "off"]).default("auto"),
+  META_APP_ID: z.string().default(""),
+  META_APP_SECRET: z.string().default(""),
+  META_ACCESS_TOKEN: z.string().default(""),
+  META_IG_BUSINESS_ID: z.string().default(""),
+  INSTAGRAM_COLLECTOR_URL: z.string().default(""),
+  INSTAGRAM_COLLECTOR_TOKEN: z.string().default("")
 });
 
 // Dokploy часто прокидывает пустые строки вместо отсутствия ключа —
@@ -73,5 +85,19 @@ export const config = {
         catalogPath: "/catalog/panelno-karkasnye-doma"
       }
     ].filter((source) => source.storepartuid && source.recid)
+  },
+  social: {
+    profileTtlMinutes: parsedConfig.SOCIAL_PROFILE_TTL_MINUTES,
+    fetchTimeoutMs: parsedConfig.SOCIAL_FETCH_TIMEOUT_MS,
+    mediaMaxBytes: parsedConfig.SOCIAL_MEDIA_MAX_BYTES,
+    instagram: {
+      provider: parsedConfig.INSTAGRAM_PROVIDER,
+      metaAppId: parsedConfig.META_APP_ID,
+      metaAppSecret: parsedConfig.META_APP_SECRET,
+      metaAccessToken: parsedConfig.META_ACCESS_TOKEN,
+      metaBusinessId: parsedConfig.META_IG_BUSINESS_ID,
+      collectorUrl: parsedConfig.INSTAGRAM_COLLECTOR_URL,
+      collectorToken: parsedConfig.INSTAGRAM_COLLECTOR_TOKEN
+    }
   }
 };
