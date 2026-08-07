@@ -298,6 +298,9 @@ export default async function HomePage() {
             <a href="https://avgst.ru" className="transition hover:text-foreground">
               avgst.ru
             </a>
+            <Link href="/delete" className="transition hover:text-foreground">
+              Удаление данных
+            </Link>
             <Link
               href={cabinetHref ?? "/login"}
               className="transition hover:text-foreground"

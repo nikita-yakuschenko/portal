@@ -56,11 +56,13 @@ export function middleware(request: NextRequest) {
   ) {
     return NextResponse.rewrite(new URL("/partner/site/preview", request.url));
   }
+  // /delete — инструкция завода по удалению данных, на домене дилера её быть не должно
   if (
     pathname.startsWith("/company") ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/signup") ||
-    pathname.startsWith("/reset-password")
+    pathname.startsWith("/reset-password") ||
+    pathname === "/delete"
   ) {
     return new NextResponse("Not Found", { status: 404 });
   }
