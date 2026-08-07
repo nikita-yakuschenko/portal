@@ -84,7 +84,7 @@ type Project = {
 
 function Panel({ children }: { children: React.ReactNode }) {
   return (
-    <Card>
+    <Card className="pb-[23px]">
       <CardContent>{children}</CardContent>
     </Card>
   );
@@ -250,7 +250,7 @@ export default function CompanyCatalogProjectPage() {
       {loading ? <Skeleton className="h-96 w-full" /> : null}
 
       {!loading && project ? (
-        <div className="min-w-0 space-y-4">
+        <div className="min-w-0 space-y-2">
           <CompanyProjectSummaryCard
             project={project}
             editMode={editMode}
@@ -259,7 +259,7 @@ export default function CompanyCatalogProjectPage() {
             }}
           />
 
-          <Tabs defaultValue="about">
+          <Tabs defaultValue="about" className="gap-[15px] md:gap-[23px]">
             <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
               <TabsTrigger value="about">О проекте</TabsTrigger>
               <TabsTrigger value="packages">Комплектация</TabsTrigger>

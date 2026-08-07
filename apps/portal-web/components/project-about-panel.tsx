@@ -140,7 +140,7 @@ export function ProjectAboutPanel({
 
   return (
     <div className="space-y-3">
-      <Tabs defaultValue="description" className="gap-2">
+      <Tabs defaultValue="description">
         <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
           <TabsTrigger value="description">
             <span className="relative inline-flex items-center">
@@ -328,8 +328,14 @@ function FloorPlanExplication({
     setFloorAssetIndex(0);
   }, [selectedFloor]);
 
-  const taggedForFloor = assets.filter((asset) => asset.floorNumber === selectedFloor);
-  const untagged = assets.filter((asset) => asset.floorNumber == null);
+  // Дом одноэтажный — разметка по этажу не нужна, любой ассет планировки однозначно 1-й этаж.
+  // Если этажность здания вырастет, ассеты автоматически перестанут маркироваться неявно.
+  const taggedForFloor =
+    floorCount === 1
+      ? assets
+      : assets.filter((asset) => asset.floorNumber === selectedFloor);
+  const untagged =
+    floorCount === 1 ? [] : assets.filter((asset) => asset.floorNumber == null);
   // В редактировании неразмеченные фото — кандидаты на любой этаж, их нужно видеть и листать
   // независимо от того, есть ли уже тегированное фото. В обычном просмотре показываем только тегированное
   const floorAssets = onPatch ? [...taggedForFloor, ...untagged] : taggedForFloor;

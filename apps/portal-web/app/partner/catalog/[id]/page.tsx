@@ -432,7 +432,7 @@ export default function PartnerCatalogProjectPage() {
             </div>
           ) : null}
 
-          <div className={cn("min-w-0 space-y-4", unavailable && "grayscale")}>
+          <div className={cn("min-w-0 space-y-2", unavailable && "grayscale")}>
             <ProjectSummaryCard
               className={cn(unavailable && "opacity-80")}
               title={
@@ -482,7 +482,7 @@ export default function PartnerCatalogProjectPage() {
               }
             />
 
-            <Tabs defaultValue="about">
+            <Tabs defaultValue="about" className="gap-[15px] md:gap-[23px]">
               <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
                 <TabsTrigger value="about">О проекте</TabsTrigger>
                 <TabsTrigger value="price">Цена</TabsTrigger>
@@ -497,7 +497,7 @@ export default function PartnerCatalogProjectPage() {
               </TabsList>
 
               <TabsContent value="about" className="mt-0">
-                <Panel>
+                <Panel className="pb-[23px]">
                   <ProjectAboutPanel
                     projectName={project.name}
                     description={project.description}
