@@ -17,6 +17,7 @@ type PartnerShellProps = {
   title?: string;
   breadcrumbs?: React.ReactNode;
   headerActions?: React.ReactNode;
+  headerCenter?: React.ReactNode;
   fluidContent?: boolean;
   children: React.ReactNode;
 };
@@ -34,6 +35,7 @@ export function PartnerShell({
   title,
   breadcrumbs,
   headerActions,
+  headerCenter,
   fluidContent,
   children
 }: PartnerShellProps) {
@@ -91,6 +93,7 @@ export function PartnerShell({
       {...(title !== undefined ? { title } : {})}
       {...(breadcrumbs !== undefined ? { breadcrumbs } : {})}
       {...(headerActions !== undefined ? { headerActions } : {})}
+      {...(headerCenter !== undefined ? { headerCenter } : {})}
       {...(fluidContent !== undefined ? { fluidContent } : {})}
     >
       {children}

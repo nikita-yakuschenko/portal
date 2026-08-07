@@ -58,6 +58,8 @@ export function DashboardShell(props: {
   breadcrumbs?: React.ReactNode;
   /** Контент справа в верхнем хедере */
   headerActions?: React.ReactNode;
+  /** Контент по центру хедера (поверх заголовка), например поиск раздела мессенджера */
+  headerCenter?: React.ReactNode;
   /** Без паддингов, центрирующей колонки и скролла шелла — контент сам занимает всё пространство и сам скроллится (мессенджер) */
   fluidContent?: boolean;
   children: React.ReactNode;
@@ -124,7 +126,7 @@ export function DashboardShell(props: {
 
         <header
           className={[
-            "bg-background z-30 flex min-h-16 shrink-0 items-center gap-2 border-b px-4 py-3",
+            "bg-background relative z-30 flex min-h-16 shrink-0 items-center gap-2 border-b px-4 py-3",
             isPartnerCabinet ? "" : "md:rounded-t-xl"
           ].join(" ")}
         >
@@ -136,6 +138,11 @@ export function DashboardShell(props: {
           {props.breadcrumbs ?? (
             <h1 className="min-w-0 flex-1 truncate text-base font-medium">{sectionTitle}</h1>
           )}
+          {props.headerCenter ? (
+            <div className="pointer-events-none absolute inset-x-0 hidden justify-center sm:flex">
+              <div className="pointer-events-auto">{props.headerCenter}</div>
+            </div>
+          ) : null}
           <div className="ml-auto flex shrink-0 items-center gap-2">
             {props.headerActions}
             <NotificationsBell

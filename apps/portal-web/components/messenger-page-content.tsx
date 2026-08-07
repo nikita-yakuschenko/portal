@@ -374,6 +374,27 @@ function TypingDots() {
   );
 }
 
+/** Поиск по чатам/запросам/каналам — выносится в шапку раздела */
+export function MessengerHeaderSearch({
+  value,
+  onChange
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="relative min-w-0">
+      <IconSearch className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Поиск по чатам, запросам и каналам…"
+        className="h-9 w-80 pl-8 sm:w-[28rem] md:w-[36rem] lg:w-[40rem]"
+      />
+    </div>
+  );
+}
+
 function typingLabel(typers: Typer[]) {
   if (typers.length === 0) return "";
   if (typers.length === 1) return `${typers[0]!.fullName} печатает`;
@@ -382,7 +403,14 @@ function typingLabel(typers: Typer[]) {
 }
 
 /** Inbox мессенджера: чаты / запросы / каналы */
-export function MessengerPageContent({ audience }: { audience: MessengerAudience }) {
+export function MessengerPageContent({
+  audience,
+  search
+}: {
+  audience: MessengerAudience;
+  /** Значение поиска — поле ввода живёт в шапке раздела (MessengerHeaderSearch) */
+  search: string;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialId = searchParams.get("c");
@@ -390,7 +418,6 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   const basePath = isCompany ? "/company/messenger" : "/partner/messenger";
 
   const [tab, setTabState] = useState<TabKey>(() => parseTab(searchParams.get("tab")));
-  const [q, setQ] = useState("");
   const [listLoading, setListLoading] = useState(true);
   const [threadLoading, setThreadLoading] = useState(false);
   const [error, setError] = useState("");
@@ -983,7 +1010,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
   }
 
   const searchFiltered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
+    const needle = search.trim().toLowerCase();
     // Поиск индексирует все типы; без запроса — только активный таб
     const pool = needle ? conversations : filtered;
     if (!needle) return pool;
@@ -994,9 +1021,9 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
         .toLowerCase()
         .includes(needle)
     );
-  }, [conversations, filtered, q]);
+  }, [conversations, filtered, search]);
 
-  const isGlobalSearch = q.trim().length > 0;
+  const isGlobalSearch = search.trim().length > 0;
 
   const unreadByTab = useMemo(() => {
     const counts: Record<TabKey, number> = { dm: 0, request: 0, channel: 0 };
@@ -1016,15 +1043,6 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       >
         <div className="flex h-full min-h-0 flex-col overflow-hidden border-b md:border-r md:border-b-0">
           <div className="flex flex-col gap-3 border-b p-4">
-            <div className="relative min-w-0">
-              <IconSearch className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Поиск по чатам, запросам и каналам…"
-                className="pl-8"
-              />
-            </div>
             <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
               <TabsList className="grid w-full grid-cols-3">
                 {(Object.keys(TAB_LABELS) as TabKey[]).map((key) => (

@@ -3,6 +3,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Компактная раскладка галереи проекта — низкие мониторы (высота < 1081px),
+   ограничение по ширине защищает мобильный портретный режим */
+@custom-variant gallery-compact {
+  @media (max-height: 1080px) and (min-width: 768px) {
+    @slot;
+  }
+}
+
 /* ADS 1.1 — Avangard Design Standard, каноническая тема shadcn */
 @theme inline {
   --color-background: var(--background);

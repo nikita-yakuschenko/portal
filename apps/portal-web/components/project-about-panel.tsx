@@ -270,6 +270,37 @@ function AssetCarousel({
   const [active, setActive] = useState(0);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const scrollLockRef = useRef(false);
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [gridScrollable, setGridScrollable] = useState(false);
+
+  // Переключение компактной раскладки (gallery-compact) меняет ширину слайда —
+  // без пересчёта scrollLeft слайдер застревает между кадрами
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const resizeObserver = new ResizeObserver(() => {
+      if (scrollLockRef.current || el.clientWidth <= 0) return;
+      el.scrollTo({ left: activeRef.current * el.clientWidth, behavior: "instant" as ScrollBehavior });
+    });
+    resizeObserver.observe(el);
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  // Фейд по краям сетки миниатюр нужен только когда она реально скроллится
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) {
+      setGridScrollable(false);
+      return;
+    }
+    const check = () => setGridScrollable(el.scrollHeight - el.clientHeight > 1);
+    check();
+    const resizeObserver = new ResizeObserver(check);
+    resizeObserver.observe(el);
+    return () => resizeObserver.disconnect();
+  }, [assets.length]);
 
   const index = Math.min(active, assets.length - 1);
   const current = assets[index];
@@ -303,57 +334,59 @@ function AssetCarousel({
 
   return (
     <div className="space-y-2">
-      <div className="bg-muted relative overflow-hidden rounded-xl border">
-        <div
-          ref={scrollerRef}
-          onScroll={syncActiveFromScroll}
-          className="scrollbar-none flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain"
-        >
-          {assets.map((asset, assetIndex) => (
-            <button
-              key={asset.id}
-              type="button"
-              onClick={() => onOpen(assetIndex)}
-              className={cn(
-                "relative aspect-video w-full min-w-full shrink-0 cursor-zoom-in snap-center snap-always transition hover:opacity-95",
-                asset.type === "floor_plan" ? "bg-background" : "bg-muted",
-                asset.isHidden && "opacity-55"
-              )}
-              aria-label={`Открыть: ${assetLabel(asset, projectName)}`}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={asset.sourceUrl}
-                alt={assetLabel(asset, projectName)}
-                loading={assetIndex === 0 ? "eager" : "lazy"}
-                decoding="async"
-                draggable={false}
-                className={cn(
-                  "absolute inset-0 size-full select-none",
-                  asset.type === "floor_plan" ? "object-contain" : "object-cover"
-                )}
-              />
-            </button>
-          ))}
-        </div>
-
-        <div className="pointer-events-none absolute top-3 left-3 flex flex-wrap gap-1">
-          {current.isPrimary ? <Badge>Главный</Badge> : null}
-          {current.isHidden ? <Badge variant="secondary">Скрыт</Badge> : null}
-        </div>
-
-        {assets.length > 1 ? (
-          <p className="bg-background/90 text-muted-foreground pointer-events-none absolute top-3 right-3 rounded-md px-2 py-1 text-xs font-medium tabular-nums shadow-sm backdrop-blur">
-            {index + 1} / {assets.length}
-          </p>
-        ) : null}
-
-        {onPatch ? (
+      <div className="flex flex-col gap-2 gallery-compact:h-[clamp(320px,52vh,560px)] gallery-compact:flex-row">
+        <div className="bg-muted relative overflow-hidden rounded-xl border gallery-compact:h-full gallery-compact:min-w-0 gallery-compact:flex-[2]">
           <div
-            className="bg-background/90 absolute bottom-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1.5 rounded-lg p-1.5 shadow-sm backdrop-blur"
-            onClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
+            ref={scrollerRef}
+            onScroll={syncActiveFromScroll}
+            className="scrollbar-none flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain gallery-compact:h-full gallery-compact:snap-none gallery-compact:overflow-hidden"
           >
+            {assets.map((asset, assetIndex) => (
+              <button
+                key={asset.id}
+                type="button"
+                onClick={() => onOpen(assetIndex)}
+                className={cn(
+                  "relative aspect-video w-full min-w-full shrink-0 cursor-zoom-in snap-center snap-always transition hover:opacity-95",
+                  "gallery-compact:aspect-auto gallery-compact:h-full",
+                  asset.type === "floor_plan" ? "bg-background" : "bg-muted",
+                  asset.isHidden && "opacity-55"
+                )}
+                aria-label={`Открыть: ${assetLabel(asset, projectName)}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={asset.sourceUrl}
+                  alt={assetLabel(asset, projectName)}
+                  loading={assetIndex === 0 ? "eager" : "lazy"}
+                  decoding="async"
+                  draggable={false}
+                  className={cn(
+                    "absolute inset-0 size-full select-none",
+                    asset.type === "floor_plan" ? "object-contain" : "object-cover"
+                  )}
+                />
+              </button>
+            ))}
+          </div>
+
+          <div className="pointer-events-none absolute top-3 left-3 flex flex-wrap gap-1">
+            {current.isPrimary ? <Badge>Главный</Badge> : null}
+            {current.isHidden ? <Badge variant="secondary">Скрыт</Badge> : null}
+          </div>
+
+          {assets.length > 1 ? (
+            <p className="bg-background/90 text-muted-foreground pointer-events-none absolute top-3 right-3 rounded-md px-2 py-1 text-xs font-medium tabular-nums shadow-sm backdrop-blur">
+              {index + 1} / {assets.length}
+            </p>
+          ) : null}
+
+          {onPatch ? (
+            <div
+              className="bg-background/90 absolute bottom-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1.5 rounded-lg p-1.5 shadow-sm backdrop-blur"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
             <Select
               value={current.type}
               disabled={busy}
@@ -430,50 +463,70 @@ function AssetCarousel({
             {busy ? <Spinner className="size-4" /> : null}
           </div>
         ) : null}
+        </div>
+
+        {assets.length > 1 ? (
+          <div className="relative gallery-compact:min-w-0 gallery-compact:flex-1">
+            <div
+              ref={gridRef}
+              className={cn(
+                "scrollbar-none flex gap-2 overflow-x-auto pb-0.5 gallery-compact:h-full gallery-compact:content-start gallery-compact:gap-1.5 gallery-compact:overflow-x-hidden gallery-compact:overflow-y-auto gallery-compact:overscroll-contain gallery-compact:pr-0.5 gallery-compact:pb-0",
+                assets.length > 8
+                  ? "gallery-compact:grid gallery-compact:grid-cols-3"
+                  : "gallery-compact:grid gallery-compact:grid-cols-2"
+              )}
+            >
+              {assets.map((asset, assetIndex) => (
+                <button
+                  key={asset.id}
+                  type="button"
+                  onClick={() => goTo(assetIndex)}
+                  aria-label={`${title} ${assetIndex + 1}`}
+                  aria-pressed={assetIndex === index}
+                  className={cn(
+                    "relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition sm:h-16 sm:w-24",
+                    "gallery-compact:h-auto gallery-compact:w-full gallery-compact:shrink gallery-compact:aspect-video",
+                    assetIndex === index
+                      ? "border-primary"
+                      : "border-border hover:border-muted-foreground/50",
+                    asset.isHidden && "opacity-55"
+                  )}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={asset.sourceUrl}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className={cn(
+                      "size-full",
+                      asset.type === "floor_plan" ? "bg-background object-contain" : "object-cover"
+                    )}
+                  />
+                  {asset.type === "floor_plan" && asset.floorNumber != null ? (
+                    <span className="absolute inset-x-0 bottom-0 bg-black/55 py-0.5 text-center text-[10px] leading-tight font-medium text-white">
+                      {asset.floorNumber} эт.
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+
+            {/* Фейд по краям сетки — только когда она реально скроллится, и еле заметный */}
+            {gridScrollable ? (
+              <>
+                <div className="from-background/60 pointer-events-none absolute inset-x-0 top-0 hidden h-4 bg-gradient-to-b to-transparent gallery-compact:block" />
+                <div className="from-background/60 pointer-events-none absolute inset-x-0 bottom-0 hidden h-4 bg-gradient-to-t to-transparent gallery-compact:block" />
+              </>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {isPlan && current.floorNumber != null ? (
         <p className="text-muted-foreground text-center text-xs font-medium">
           {floorPlanLabel(current.floorNumber)}
         </p>
-      ) : null}
-
-      {assets.length > 1 ? (
-        <div className="scrollbar-none flex gap-2 overflow-x-auto pb-0.5">
-          {assets.map((asset, assetIndex) => (
-            <button
-              key={asset.id}
-              type="button"
-              onClick={() => goTo(assetIndex)}
-              aria-label={`${title} ${assetIndex + 1}`}
-              aria-pressed={assetIndex === index}
-              className={cn(
-                "relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition sm:h-16 sm:w-24",
-                assetIndex === index
-                  ? "border-primary"
-                  : "border-border hover:border-muted-foreground/50",
-                asset.isHidden && "opacity-55"
-              )}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={asset.sourceUrl}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className={cn(
-                  "size-full",
-                  asset.type === "floor_plan" ? "bg-background object-contain" : "object-cover"
-                )}
-              />
-              {asset.type === "floor_plan" && asset.floorNumber != null ? (
-                <span className="absolute inset-x-0 bottom-0 bg-black/55 py-0.5 text-center text-[10px] leading-tight font-medium text-white">
-                  {asset.floorNumber} эт.
-                </span>
-              ) : null}
-            </button>
-          ))}
-        </div>
       ) : null}
     </div>
   );
