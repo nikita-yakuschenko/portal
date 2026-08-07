@@ -12,12 +12,11 @@ export default function PartnerMessengerPage() {
     <PartnerShell
       currentPath="/partner/messenger"
       breadcrumbs={<MessengerSectionTitle />}
+      fluidContent
     >
-      <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-        <Suspense fallback={<Skeleton className="min-h-0 w-full flex-1 rounded-xl" />}>
-          <MessengerPageContent audience="partner" />
-        </Suspense>
-      </div>
+      <Suspense fallback={<Skeleton className="min-h-0 w-full flex-1 rounded-xl" />}>
+        <MessengerPageContent audience="partner" />
+      </Suspense>
     </PartnerShell>
   );
 }

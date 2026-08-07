@@ -58,6 +58,8 @@ export function DashboardShell(props: {
   breadcrumbs?: React.ReactNode;
   /** Контент справа в верхнем хедере */
   headerActions?: React.ReactNode;
+  /** Без паддингов, центрирующей колонки и скролла шелла — контент сам занимает всё пространство и сам скроллится (мессенджер) */
+  fluidContent?: boolean;
   children: React.ReactNode;
 }) {
   // Звук готовим заранее, а о блокировке браузером говорим прямо — молча терять сигнал нельзя
@@ -142,12 +144,16 @@ export function DashboardShell(props: {
           </div>
         </header>
 
-        <div className="cabinet-content-scroll flex min-h-0 flex-1 flex-col overflow-y-auto p-4 md:p-6">
-          {/* Колонка по центру: 980 → 1280 (≥1600) → 1366 (≥1920) */}
-          <div className="mx-auto flex w-full max-w-[980px] flex-1 flex-col gap-4 md:gap-6 min-[1600px]:max-w-[1280px] min-[1920px]:max-w-[1366px]">
-            {props.children}
+        {props.fluidContent ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{props.children}</div>
+        ) : (
+          <div className="cabinet-content-scroll flex min-h-0 flex-1 flex-col overflow-y-auto p-4 md:p-6">
+            {/* Колонка по центру: 980 → 1280 (≥1600) → 1366 (≥1920) */}
+            <div className="mx-auto flex w-full max-w-[980px] flex-1 flex-col gap-4 md:gap-6 min-[1600px]:max-w-[1280px] min-[1920px]:max-w-[1366px]">
+              {props.children}
+            </div>
           </div>
-        </div>
+        )}
       </SidebarInset>
     </SidebarProvider>
   );

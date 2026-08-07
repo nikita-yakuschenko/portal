@@ -1011,7 +1011,7 @@ export function MessengerPageContent({ audience }: { audience: MessengerAudience
       <PageAlert message={error} variant="destructive" />
 
       <Card
-        className="grid h-full min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden py-0 md:grid-cols-[minmax(280px,340px)_1fr]"
+        className="grid h-full min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden rounded-none border-0 py-0 shadow-none md:grid-cols-[minmax(280px,340px)_1fr]"
         onContextMenu={(e) => e.preventDefault()}
       >
         <div className="flex h-full min-h-0 flex-col overflow-hidden border-b md:border-r md:border-b-0">
