@@ -6,7 +6,7 @@ import { isPublicSiteRuntime } from "@/lib/partner-site-preview";
 export type { SocialPlatform, SocialProfileSnapshot };
 
 /** Площадки, у которых есть серверный провайдер данных */
-export const PLATFORMS_WITH_LIVE_DATA: SocialPlatform[] = ["telegram", "instagram"];
+export const PLATFORMS_WITH_LIVE_DATA: SocialPlatform[] = ["telegram", "instagram", "dzen"];
 
 export function hasLiveProvider(platform: string): platform is SocialPlatform {
   return (PLATFORMS_WITH_LIVE_DATA as string[]).includes(platform);
@@ -45,6 +45,25 @@ export function formatCount(value: number | undefined): string | undefined {
   return new Intl.NumberFormat("ru-RU", { notation: "compact", maximumFractionDigits: 1 }).format(
     value
   );
+}
+
+/** 1 → «подписчик», 2 → «подписчика», 47 → «подписчиков» */
+function subscriberWord(value: number): string {
+  const tens = value % 100;
+  if (tens >= 11 && tens <= 14) return "подписчиков";
+  const ones = value % 10;
+  if (ones === 1) return "подписчик";
+  if (ones >= 2 && ones <= 4) return "подписчика";
+  return "подписчиков";
+}
+
+/** «47 подписчиков», «1 подписчик», «11,7 тыс. подписчиков» */
+export function formatSubscribers(value: number | undefined): string | undefined {
+  const formatted = formatCount(value);
+  if (formatted === undefined || value === undefined) return undefined;
+  // Компактная запись («11,7 тыс.») согласуется только с формой «подписчиков»
+  const word = /\D/.test(formatted) ? "подписчиков" : subscriberWord(value);
+  return `${formatted} ${word}`;
 }
 
 /** «2 часа назад» / «12 марта» для подписи публикации */

@@ -3,8 +3,9 @@
 import { useSocialProfile } from "@/hooks/use-social-profile";
 import type { PartnerSiteSocialId } from "@/lib/partner-site-socials";
 
+import { DzenScreen } from "./dzen-screen";
 import { InstagramScreen } from "./instagram-screen";
-import { DzenScreen, MaxScreen, VkScreen, YoutubeScreen } from "./platform-shells";
+import { MaxScreen, VkScreen, YoutubeScreen } from "./platform-shells";
 import { TelegramScreen } from "./telegram-screen";
 
 /**
@@ -35,7 +36,7 @@ export function SocialAppScreen({
     case "youtube":
       return <YoutubeScreen brandName={brandName} brandLogo={brandLogo} />;
     case "dzen":
-      return <DzenScreen brandName={brandName} brandLogo={brandLogo} />;
+      return <DzenScreen snapshot={snapshot} loading={loading} fallbackTitle={brandName} />;
     case "max":
       return <MaxScreen brandName={brandName} brandLogo={brandLogo} />;
   }

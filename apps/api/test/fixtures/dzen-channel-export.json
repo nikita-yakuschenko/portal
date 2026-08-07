@@ -1,0 +1,171 @@
+{
+  "channel": {
+    "status": "ok",
+    "source": {
+      "publisher_id": "5db18ab93d008800af12b43e",
+      "title": "Авангард Строй",
+      "description": "Рассказываем обо всем самом интересном для тех, кто хочет жить за городом или уже там живет!",
+      "subscribers": 47,
+      "subscribers_formatted": "47 подписчиков",
+      "logo": "https://avatars.dzeninfra.ru/get-zen-logos/271828/pub_5db18ab93d008800af12b43e_6a2293c89804be60202b8e86/xxh",
+      "logo_sizes": {
+        "smart_crop_160": "https://avatars.dzeninfra.ru/get-zen-logos/271828/pub_5db18ab93d008800af12b43e_6a2293c89804be60202b8e86/smart_crop_160"
+      },
+      "main_external_link": "https://avgst.ru?utm_source=dzen",
+      "feed_share_link": "https://dzen.ru/avgstroy",
+      "is_verified": false
+    }
+  },
+  "items": [
+    {
+      "id": "-5632104794897331130",
+      "type": "card",
+      "item_type": "native",
+      "publication_object_id": "69e9efc2a28d5c05c142130d",
+      "title": "Сколько стоит построить каркасный дом под ключ в 2026 году: цены, от чего зависят, как сэкономить",
+      "text": "«Сколько стоит дом?» — первый вопрос, который задаёт каждый, кто думает о строительстве. Дать точный ответ без знания параметров проекта невозможно, но мы можем честно объяснить, из чего складывается цена и чего ожидать на рынке Нижнего Новгорода в 2025 году. \nДиапазон цен на рынке Нижнего Новгорода\nВ 2026 году стоимость каркасного дома под ключ в Нижегородской области начинается примерно от 1,5–4 млн рублей за небольшой одноэтажный дом 30–50 м² и доходит до 8-12 млн рублей и выше за просторный двухэтажный коттедж 150–200 м² с полной чистовой отделкой...",
+      "views": 9,
+      "publication_date": "1776939140",
+      "image": "https://avatars.dzeninfra.ru/get-zen_doc/271828/pub_69e9efc2a28d5c05c142130d_69e9f0645c04d63759db4796/scale_1200",
+      "image_squared": "https://avatars.dzeninfra.ru/get-zen_doc/271828/pub_69e9efc2a28d5c05c142130d_69e9f0645c04d63759db4796/smart_crop_500x500",
+      "share_link": "https://dzen.ru/a/aenvwqKNXAXBQhMN"
+    },
+    {
+      "id": "-6617035431817576778",
+      "type": "channel_short_video_floor",
+      "item_type": "channel_block_shorts",
+      "title": "Ролики",
+      "items": [
+        {
+          "item_type": "short_video",
+          "image": "https://avatars.dzeninfra.ru/get-zen_doc/271828/pub_69e88f306f7ab243b897b57b_69e88f57e6630d7aaa8d56b6/scale_720",
+          "share_link": "https://dzen.ru/shorts/69e88f306f7ab243b897b57b",
+          "publication_date": "1776848745",
+          "title": "подробнее avgst.ru"
+        }
+      ]
+    },
+    {
+      "id": "8745538083853797245",
+      "type": "card",
+      "item_type": "native",
+      "publication_object_id": "69e777c7539c41207e97c5ed",
+      "title": "Почему «обычные» дома оказываются самыми удобными",
+      "text": "Есть странная вещь, о которой редко говорят.\n\nТы строишь дом.\nВсё продумано, красиво на картинке, современно.\nА потом проходит месяц — и появляется ощущение, что что-то не так.\n \nНе критично.\nНо неудобно.\n\nГде-то лишний поворот.\nГде-то тесно.\nГде-то просто «не складывается».\n\nИ дело почти никогда не в площади. \n⸻\n\nЯ заметил одну закономерность.\n\nСамые комфортные дома — не те, где «много решений».\nА те, где их как будто вообще нет.\n\nТы заходишь —\nи не думаешь, куда идти.\n\nПросто идёшь.\n\n⸻ \n\nНедавно был как раз такой проект...",
+      "views": 125,
+      "publication_date": "1776777496",
+      "image": "https://avatars.dzeninfra.ru/get-zen_doc/271828/pub_69e777c7539c41207e97c5ed_69e778a2b92bda453e2104a1/scale_1200",
+      "image_squared": "https://avatars.dzeninfra.ru/get-zen_doc/271828/pub_69e777c7539c41207e97c5ed_69e778a2b92bda453e2104a1/smart_crop_500x500",
+      "share_link": "https://dzen.ru/a/aed3x1OcQSB-l8Xt"
+    },
+    {
+      "id": "7859733986434267047",
+      "type": "brief",
+      "item_type": "brief",
+      "publication_object_id": "69d645223b261363b8a1f27f",
+      "title": "",
+      "text": "",
+      "views": 1,
+      "modification_time": "1781072292656",
+      "share_link": "https://dzen.ru/b/adZFIjsmE2O4ofJ_",
+      "items": [
+        {
+          "image": {
+            "link": "https://avatars.dzeninfra.ru/get-zen_brief/271828/pub_69d645223b261363b8a1f27f_69d6456d10ba6257d47342d1/scale_720"
+          }
+        }
+      ]
+    },
+    {
+      "id": "2257421736629225453",
+      "type": "card",
+      "item_type": "native",
+      "publication_object_id": "69b29a5bddf44f2233988808",
+      "title": "Монтаж коммуникаций на заводе",
+      "text": "Друзья, представьте: вы заказываете дом, а коммуникации (вода, электрика, канализация, вентиляция) уже готовы и протестированы на производстве!  Точность 100%: Всё монтируют квалифицированные специалисты в цеху с профессиональным оборудованием. Никаких ошибок на вашем участке! Экономия времени: Дом привозим с готовыми системами — сборка на месте за 1–2 дня, а не недели...",
+      "views": 1,
+      "publication_date": "1773312732",
+      "image": "https://avatars.dzeninfra.ru/get-zen_doc/271828/pub_69b29a5bddf44f2233988808_69b29aba47f43e44243311a6/scale_1200",
+      "image_squared": "https://avatars.dzeninfra.ru/get-zen_doc/271828/pub_69b29a5bddf44f2233988808_69b29aba47f43e44243311a6/smart_crop_500x500",
+      "share_link": "https://dzen.ru/a/abKaW930TyIzmIgI"
+    },
+    {
+      "id": "4245027588900018840",
+      "type": "brief",
+      "item_type": "brief",
+      "publication_object_id": "698ae5d59a6d7071fa1dabe9",
+      "title": "",
+      "text": "",
+      "modification_time": "1781072280795",
+      "share_link": "https://dzen.ru/b/aYrl1ZptcHH6Havp",
+      "items": [
+        {
+          "image": {
+            "link": "https://avatars.dzeninfra.ru/get-zen_brief/271828/pub_698ae5d59a6d7071fa1dabe9_698ae63c99c69f413383f2fe/scale_720"
+          }
+        }
+      ]
+    },
+    {
+      "id": "8271856812553275660",
+      "type": "brief",
+      "item_type": "brief",
+      "publication_object_id": "69899801cf4f0767be7fe7e1",
+      "title": "",
+      "text": "",
+      "views": 2,
+      "modification_time": "1781072277328",
+      "share_link": "https://dzen.ru/b/aYmYAc9PB2e-f-fh",
+      "items": [
+        {
+          "image": {
+            "link": "https://avatars.dzeninfra.ru/get-zen_brief/271828/pub_69899801cf4f0767be7fe7e1_6989985a0cd3f93de7b8858f/scale_720"
+          }
+        }
+      ]
+    },
+    {
+      "id": "-1710715534550761184",
+      "type": "brief",
+      "item_type": "brief",
+      "publication_object_id": "6931694e8dee6c126178d617",
+      "title": "",
+      "text": "",
+      "modification_time": "1781072271218",
+      "share_link": "https://dzen.ru/b/aTFpTo3ubBJheNYX",
+      "items": [
+        {
+          "image": {
+            "link": "https://avatars.dzeninfra.ru/get-zen_brief/271828/pub_6931694e8dee6c126178d617_693169fa0764cb1abf61f38b/scale_720"
+          }
+        }
+      ]
+    },
+    {
+      "id": "1884882298871101867",
+      "type": "card",
+      "item_type": "native",
+      "publication_object_id": "6931690f9fdab026ce3e82c4",
+      "title": "завершаем строительство объекта",
+      "text": "Завершается работа над домом по проекту Норвегия 115.\nОчень скоро здесь начнётся чья-то новая загородная жизнь.\nПодробнее о проекте vk.cc/cEVtyz",
+      "views": 3,
+      "publication_date": "1764845884",
+      "image": "https://avatars.dzeninfra.ru/get-zen_doc/271828/pub_6931690f9fdab026ce3e82c4_6931691da53c0902048edae0/scale_1200",
+      "image_squared": "https://avatars.dzeninfra.ru/get-zen_doc/271828/pub_6931690f9fdab026ce3e82c4_6931691da53c0902048edae0/smart_crop_500x500",
+      "share_link": "https://dzen.ru/a/aTFpD5_asCbOPoLE"
+    },
+    {
+      "id": "5091900213521357902",
+      "type": "card",
+      "item_type": "native",
+      "publication_object_id": "693168c62e8beb1bfb626b9f",
+      "title": "Инженерка на заводе",
+      "text": "Мы ставим коммуникации, котлы и всю инженерную начинку прямо на производстве.\nНе ради скорости — ради контроля. Когда всё собрано заранее, дом приезжает на участок не как набор деталей,\nа как законченная система, в которой нет мелочей и случайных решений. Это снижает риски, упрощает монтаж и повышает качество...",
+      "views": 1,
+      "publication_date": "1764845802",
+      "image": "https://avatars.dzeninfra.ru/get-zen_doc/271828/pub_693168c62e8beb1bfb626b9f_693168d3afeab3198172641f/scale_1200",
+      "image_squared": "https://avatars.dzeninfra.ru/get-zen_doc/271828/pub_693168c62e8beb1bfb626b9f_693168d3afeab3198172641f/smart_crop_500x500",
+      "share_link": "https://dzen.ru/a/aTFoxi6L6xv7Ymuf"
+    }
+  ]
+}

@@ -28,6 +28,7 @@ export type SocialProfileSource =
   | "instagram_playwright"
   | "vk_api"
   | "youtube_data_api"
+  | "dzen_public_api"
   | "cache"
   | "none";
 

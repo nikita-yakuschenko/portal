@@ -4,6 +4,7 @@ import {
   describeUnavailable,
   formatCount,
   formatPublishedAt,
+  formatSubscribers,
   hasLiveProvider,
   proxiedMediaUrl
 } from "@/lib/social-profile";
@@ -45,6 +46,26 @@ describe("форматирование счётчиков", () => {
   });
 });
 
+describe("подписчики", () => {
+  it("согласует слово с числом", () => {
+    expect(formatSubscribers(1)).toBe("1 подписчик");
+    expect(formatSubscribers(2)).toBe("2 подписчика");
+    expect(formatSubscribers(47)).toBe("47 подписчиков");
+    expect(formatSubscribers(21)).toBe("21 подписчик");
+    expect(formatSubscribers(12)).toBe("12 подписчиков");
+    expect(formatSubscribers(0)).toBe("0 подписчиков");
+  });
+
+  it("для сокращённой записи всегда множественное число", () => {
+    expect(normalizeSpaces(formatSubscribers(11_700))).toBe("11,7 тыс. подписчиков");
+    expect(normalizeSpaces(formatSubscribers(1_000))).toBe("1 тыс. подписчиков");
+  });
+
+  it("без счётчика не выдумывает строку", () => {
+    expect(formatSubscribers(undefined)).toBeUndefined();
+  });
+});
+
 describe("дата публикации", () => {
   it("показывает относительное время для свежих публикаций", () => {
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
@@ -73,8 +94,9 @@ describe("площадки с живыми данными", () => {
   it("различает площадки с провайдером и без", () => {
     expect(hasLiveProvider("telegram")).toBe(true);
     expect(hasLiveProvider("instagram")).toBe(true);
+    expect(hasLiveProvider("dzen")).toBe(true);
     expect(hasLiveProvider("max")).toBe(false);
-    expect(hasLiveProvider("dzen")).toBe(false);
+    expect(hasLiveProvider("vk")).toBe(false);
   });
 });
 

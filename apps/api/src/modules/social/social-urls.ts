@@ -30,7 +30,8 @@ const RESERVED_SEGMENTS: Record<SocialPlatform, string[]> = {
   instagram: ["p", "reel", "reels", "tv", "explore", "stories", "accounts", "direct"],
   vk: ["video", "wall", "feed", "im", "away", "audio", "search"],
   youtube: ["watch", "shorts", "playlist", "results", "feed", "embed"],
-  dzen: ["video", "media", "profile", "suggest"],
+  // id — канал без короткого имени: витрина Дзена такие по имени не отдаёт
+  dzen: ["video", "media", "profile", "suggest", "id", "a", "b", "shorts", "suite"],
   max: ["join", "invite"]
 };
 
@@ -126,7 +127,7 @@ export function parseSocialUrl(rawUrl: string): ParsedSocialUrl | null {
 }
 
 /** Платформы, для которых реализован живой провайдер данных */
-export const PLATFORMS_WITH_PROVIDER: SocialPlatform[] = ["telegram", "instagram"];
+export const PLATFORMS_WITH_PROVIDER: SocialPlatform[] = ["telegram", "instagram", "dzen"];
 
 /** Поле конфига сайта партнёра, где лежит ссылка на площадку */
 export const SOCIAL_CONFIG_FIELD: Record<SocialPlatform, string> = {

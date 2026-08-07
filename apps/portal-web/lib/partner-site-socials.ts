@@ -61,7 +61,8 @@ export const DEMO_PARTNER_SITE_SOCIAL_URLS: Record<
   socialVk: "https://vk.com/avgst",
   socialInstagram: "https://instagram.com/avgst",
   socialYoutube: "https://youtube.com/@avgst",
-  socialDzen: "https://dzen.ru/avgst",
+  // Настоящий канал: dzen.ru/avgst — чужой профиль, показывать его нельзя
+  socialDzen: "https://dzen.ru/avgstroy",
   socialTelegram: "https://t.me/avgst",
   socialMax: "https://max.ru/"
 };

@@ -4,7 +4,7 @@ import { IosHomeIndicator, IosStatusBar } from "./ios-status-bar";
 import { PhoneScreenShell, SF_DISPLAY } from "./screen-shell";
 
 /**
- * Оболочки площадок без публичного API: ВКонтакте, YouTube, Дзен, MAX.
+ * Оболочки площадок без провайдера данных: ВКонтакте, YouTube, MAX.
  *
  * Интерфейс воспроизводит соответствующее приложение, но заполняется только
  * данными самого партнёра — названием и логотипом. Счётчиков и ленты здесь
@@ -149,51 +149,6 @@ export function YoutubeScreen({ brandName, brandLogo, noDataHint }: ShellProps) 
           hint={noDataHint ?? "YouTube отдаёт список видео только через Data API с ключом."}
         />
         <IosHomeIndicator dark />
-      </div>
-    </PhoneScreenShell>
-  );
-}
-
-export function DzenScreen({ brandName, brandLogo, noDataHint }: ShellProps) {
-  return (
-    <PhoneScreenShell background="#ffffff">
-      <div className="flex h-full flex-col">
-        <IosStatusBar />
-
-        <div className="flex h-[44px] items-center justify-center border-b border-black/5">
-          <span
-            className="text-[17px] leading-none font-bold text-black"
-            style={{ fontFamily: SF_DISPLAY }}
-          >
-            Дзен
-          </span>
-        </div>
-
-        <div className="flex flex-col items-center px-5 pt-6">
-          <BrandAvatar
-            brandLogo={brandLogo}
-            brandName={brandName}
-            size={84}
-            background="#000000"
-          />
-          <p
-            className="mt-3 line-clamp-2 text-center text-[20px] leading-tight font-semibold text-black"
-            style={{ fontFamily: SF_DISPLAY }}
-          >
-            {brandName}
-          </p>
-          <p className="mt-1 text-[13px] text-[rgba(60,60,67,0.6)]">Канал в Дзене</p>
-
-          <span className="mt-4 flex h-[40px] w-full items-center justify-center rounded-full bg-black text-[15px] font-semibold text-white">
-            Подписаться
-          </span>
-        </div>
-
-        <NoFeedNotice
-          dark={false}
-          hint={noDataHint ?? "У Дзена нет публичного API для ленты канала."}
-        />
-        <IosHomeIndicator />
       </div>
     </PhoneScreenShell>
   );

@@ -6,6 +6,8 @@ coverage/
 .env
 .env.local
 *.log
+# Кэш инкрементальной сборки TypeScript — машинный, шумит в каждом diff
+*.tsbuildinfo
 uploads/
 *.psd
 Август. Дилер 2026*.xlsx

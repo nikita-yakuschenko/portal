@@ -14,7 +14,9 @@ const ALLOWED_HOST_SUFFIXES = [
   ".telesco.pe",
   ".cdninstagram.com",
   ".fbcdn.net",
-  ".instagram.com"
+  ".instagram.com",
+  // Дзен: аватары каналов и обложки публикаций
+  ".dzeninfra.ru"
 ];
 
 const ALLOWED_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"];

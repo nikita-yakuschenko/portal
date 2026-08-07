@@ -6,6 +6,7 @@ import { config } from "../../config.js";
 import { db } from "../../db/client.js";
 import { socialProfileSnapshots } from "../../db/schema.js";
 import { createId } from "../../lib/ids.js";
+import { fetchDzenProfile } from "./dzen-provider.js";
 import { fetchInstagramProfile } from "./instagram-provider.js";
 import { fetchTelegramProfile, type ProviderResult } from "./telegram-provider.js";
 
@@ -24,7 +25,8 @@ type ProviderFn = (input: {
 
 const PROVIDERS: Partial<Record<SocialPlatform, ProviderFn>> = {
   telegram: fetchTelegramProfile,
-  instagram: fetchInstagramProfile
+  instagram: fetchInstagramProfile,
+  dzen: fetchDzenProfile
 };
 
 /** Один активный сбор на профиль: остальные ждут его результат */

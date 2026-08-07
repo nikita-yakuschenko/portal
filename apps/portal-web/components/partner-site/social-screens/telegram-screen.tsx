@@ -6,6 +6,7 @@ import {
   describeUnavailable,
   formatCount,
   formatPublishedAt,
+  formatSubscribers,
   proxiedMediaUrl,
   type SocialProfileSnapshot
 } from "@/lib/social-profile";
@@ -53,7 +54,7 @@ export function TelegramScreen({
   fallbackTitle: string;
 }) {
   const title = snapshot?.displayName ?? fallbackTitle;
-  const subscribers = formatCount(snapshot?.followersCount);
+  const subscribers = formatSubscribers(snapshot?.followersCount);
   const posts = (snapshot?.media ?? []).slice(0, 6);
   const showData = Boolean(snapshot && (snapshot.status === "live" || snapshot.status === "stale"));
   const unavailable = describeUnavailable(snapshot);
@@ -87,7 +88,7 @@ export function TelegramScreen({
                 {title}
               </span>
               <span className="block truncate text-[13px] leading-tight text-[rgba(60,60,67,0.6)]">
-                {subscribers ? `${subscribers} подписчиков` : "канал"}
+                {subscribers ?? "канал"}
               </span>
             </span>
           </div>

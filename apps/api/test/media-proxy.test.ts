@@ -4,15 +4,19 @@ import { isAllowedMediaUrl } from "../src/modules/social/media-proxy.js";
 import { socialProfileCacheKey } from "@b2b/domain";
 
 describe("allowlist медиа-прокси", () => {
-  it("пропускает CDN Telegram и Instagram", () => {
+  it("пропускает CDN Telegram, Instagram и Дзена", () => {
     expect(isAllowedMediaUrl("https://cdn4.telesco.pe/file/abc.jpg")).toBe(true);
     expect(isAllowedMediaUrl("https://t.me/i/userpic/320/abc.jpg")).toBe(true);
     expect(isAllowedMediaUrl("https://scontent-arn2-1.cdninstagram.com/v/t51.jpg")).toBe(true);
+    expect(isAllowedMediaUrl("https://avatars.dzeninfra.ru/get-zen_doc/1/pub_a/scale_1200")).toBe(
+      true
+    );
   });
 
   it("не пропускает произвольные адреса — это не универсальный прокси", () => {
     expect(isAllowedMediaUrl("https://evil.example.com/payload.jpg")).toBe(false);
     expect(isAllowedMediaUrl("https://telesco.pe.evil.com/a.jpg")).toBe(false);
+    expect(isAllowedMediaUrl("https://dzeninfra.ru.evil.com/a.jpg")).toBe(false);
   });
 
   it("не пропускает внутреннюю сеть и нестандартные схемы", () => {
