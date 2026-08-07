@@ -938,7 +938,7 @@ function FloorPlanExplication({
   }
 
   return (
-    <div className="flex flex-col gap-2 gallery-compact:h-[clamp(320px,52vh,560px)] gallery-compact:flex-row">
+    <div className="flex flex-col gap-2 gallery-split:flex-row gallery-split:items-stretch">
       {drawingRoomId && toolbarPos && typeof document !== "undefined"
         ? createPortal(
             <div
@@ -1029,12 +1029,12 @@ function FloorPlanExplication({
 
       <div
         ref={boxRef}
-        className="bg-muted relative overflow-hidden rounded-xl border gallery-compact:h-full gallery-compact:min-w-0 gallery-compact:flex-[2]"
+        className="bg-muted relative overflow-hidden rounded-xl border gallery-split:min-w-0 gallery-split:flex-[2]"
       >
         {current ? (
           <>
             {drawingRoomId ? (
-              <div className="bg-background relative block aspect-video w-full gallery-compact:aspect-auto gallery-compact:h-full">
+              <div className="bg-background relative block aspect-video w-full">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   ref={imgRef}
@@ -1050,7 +1050,7 @@ function FloorPlanExplication({
               <button
                 type="button"
                 onClick={() => onOpen(assetIndex)}
-                className="bg-background relative block aspect-video w-full cursor-zoom-in transition hover:opacity-95 gallery-compact:aspect-auto gallery-compact:h-full"
+                className="bg-background relative block aspect-video w-full cursor-zoom-in transition hover:opacity-95"
                 aria-label={`Открыть: ${assetLabel(current, projectName)}`}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1225,13 +1225,16 @@ function FloorPlanExplication({
             ) : null}
           </>
         ) : (
-          <div className="text-muted-foreground flex aspect-video w-full items-center justify-center text-center text-sm gallery-compact:aspect-auto gallery-compact:h-full">
+          <div className="text-muted-foreground flex aspect-video w-full items-center justify-center text-center text-sm">
             Схема {selectedFloor}-го этажа ещё не загружена
           </div>
         )}
       </div>
 
-      <div className="flex min-w-0 flex-col gap-2 gallery-compact:h-full gallery-compact:min-w-0 gallery-compact:flex-1">
+      {/* Высоту ряда задаёт медиа 16:9; колонка списка ловит её через stretch,
+          а absolute-слой не даёт длинному списку раздувать ряд обратно */}
+      <div className="min-w-0 gallery-split:relative gallery-split:min-w-0 gallery-split:flex-1">
+      <div className="flex min-w-0 flex-col gap-2 gallery-split:absolute gallery-split:inset-0">
         {floorNumbers.length > 1 ? (
           <div className="flex shrink-0 flex-wrap items-center justify-start gap-2">
             <Tabs
@@ -1249,7 +1252,7 @@ function FloorPlanExplication({
           </div>
         ) : null}
 
-        <div className="min-h-0 overflow-y-auto rounded-xl border gallery-compact:flex-1">
+        <div className="min-h-0 overflow-y-auto rounded-xl border gallery-split:flex-1">
           {canEditRooms ? (
             <>
               <div
@@ -1357,6 +1360,7 @@ function FloorPlanExplication({
           </Button>
         ) : null}
       </div>
+      </div>
     </div>
   );
 }
@@ -1387,7 +1391,7 @@ function AssetCarousel({
   const gridRef = useRef<HTMLDivElement>(null);
   const [gridScrollable, setGridScrollable] = useState(false);
 
-  // Переключение компактной раскладки (gallery-compact) меняет ширину слайда —
+  // Переключение раскладки в две колонки (gallery-split) меняет ширину слайда —
   // без пересчёта scrollLeft слайдер застревает между кадрами
   useEffect(() => {
     const el = scrollerRef.current;
@@ -1446,12 +1450,12 @@ function AssetCarousel({
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-col gap-2 gallery-compact:h-[clamp(320px,52vh,560px)] gallery-compact:flex-row">
-        <div className="bg-muted relative overflow-hidden rounded-xl border gallery-compact:h-full gallery-compact:min-w-0 gallery-compact:flex-[2]">
+      <div className="flex flex-col gap-2 gallery-split:flex-row gallery-split:items-stretch">
+        <div className="bg-muted relative overflow-hidden rounded-xl border gallery-split:min-w-0 gallery-split:flex-[2]">
           <div
             ref={scrollerRef}
             onScroll={syncActiveFromScroll}
-            className="scrollbar-none flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain gallery-compact:h-full gallery-compact:snap-none gallery-compact:overflow-hidden"
+            className="scrollbar-none flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain gallery-split:snap-none gallery-split:overflow-hidden"
           >
             {assets.map((asset, assetIndex) => (
               <button
@@ -1460,7 +1464,6 @@ function AssetCarousel({
                 onClick={() => onOpen(assetIndex)}
                 className={cn(
                   "relative aspect-video w-full min-w-full shrink-0 cursor-zoom-in snap-center snap-always transition hover:opacity-95",
-                  "gallery-compact:aspect-auto gallery-compact:h-full",
                   asset.type === "floor_plan" ? "bg-background" : "bg-muted",
                   asset.isHidden && "opacity-55"
                 )}
@@ -1505,14 +1508,14 @@ function AssetCarousel({
         </div>
 
         {assets.length > 1 ? (
-          <div className="relative gallery-compact:min-w-0 gallery-compact:flex-1">
+          <div className="relative gallery-split:min-w-0 gallery-split:flex-1">
             <div
               ref={gridRef}
               className={cn(
-                "scrollbar-none flex gap-2 overflow-x-auto pb-0.5 gallery-compact:h-full gallery-compact:content-start gallery-compact:gap-1.5 gallery-compact:overflow-x-hidden gallery-compact:overflow-y-auto gallery-compact:overscroll-contain gallery-compact:pr-0.5 gallery-compact:pb-0",
+                "scrollbar-none flex gap-2 overflow-x-auto pb-0.5 gallery-split:absolute gallery-split:inset-0 gallery-split:content-start gallery-split:gap-1.5 gallery-split:overflow-x-hidden gallery-split:overflow-y-auto gallery-split:overscroll-contain gallery-split:pr-0.5 gallery-split:pb-0",
                 assets.length > 8
-                  ? "gallery-compact:grid gallery-compact:grid-cols-3"
-                  : "gallery-compact:grid gallery-compact:grid-cols-2"
+                  ? "gallery-split:grid gallery-split:grid-cols-3"
+                  : "gallery-split:grid gallery-split:grid-cols-2"
               )}
             >
               {assets.map((asset, assetIndex) => (
@@ -1524,7 +1527,7 @@ function AssetCarousel({
                   aria-pressed={assetIndex === index}
                   className={cn(
                     "relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition sm:h-16 sm:w-24",
-                    "gallery-compact:h-auto gallery-compact:w-full gallery-compact:shrink gallery-compact:aspect-video",
+                    "gallery-split:h-auto gallery-split:w-full gallery-split:shrink gallery-split:aspect-video",
                     assetIndex === index
                       ? "border-primary"
                       : "border-border hover:border-muted-foreground/50",
@@ -1554,8 +1557,8 @@ function AssetCarousel({
             {/* Фейд по краям сетки — только когда она реально скроллится, и еле заметный */}
             {gridScrollable ? (
               <>
-                <div className="from-background/60 pointer-events-none absolute inset-x-0 top-0 hidden h-4 bg-gradient-to-b to-transparent gallery-compact:block" />
-                <div className="from-background/60 pointer-events-none absolute inset-x-0 bottom-0 hidden h-4 bg-gradient-to-t to-transparent gallery-compact:block" />
+                <div className="from-background/60 pointer-events-none absolute inset-x-0 top-0 hidden h-4 bg-gradient-to-b to-transparent gallery-split:block" />
+                <div className="from-background/60 pointer-events-none absolute inset-x-0 bottom-0 hidden h-4 bg-gradient-to-t to-transparent gallery-split:block" />
               </>
             ) : null}
           </div>
