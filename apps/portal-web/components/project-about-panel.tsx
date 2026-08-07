@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { IconEye, IconEyeOff, IconStar, IconStarFilled } from "@tabler/icons-react";
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconEye,
+  IconEyeOff,
+  IconStar,
+  IconStarFilled
+} from "@tabler/icons-react";
 
 import {
   ProjectMediaViewer,
@@ -18,6 +25,15 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { floorPlanLabel } from "@/lib/floor-plan";
 import { cn } from "@/lib/utils";
@@ -143,7 +159,6 @@ export function ProjectAboutPanel({
             return (
               <TabsTrigger key={tab.id} value={tab.id} disabled={count === 0}>
                 {tab.title}
-                <span className="text-muted-foreground ml-1 tabular-nums">({count})</span>
               </TabsTrigger>
             );
           })}
@@ -194,6 +209,15 @@ export function ProjectAboutPanel({
             <TabsContent key={tab.id} value={tab.id}>
               {items.length === 0 ? (
                 <p className="text-muted-foreground py-8 text-center text-sm">Пока пусто</p>
+              ) : tab.type === "floor_plan" ? (
+                <FloorPlanExplication
+                  assets={items}
+                  projectName={projectName}
+                  floors={floors}
+                  busyId={assetBusyId}
+                  onOpen={(index) => openViewer([items[index]!], 0)}
+                  {...(onPatchAsset ? { onPatch: onPatchAsset } : {})}
+                />
               ) : (
                 <AssetCarousel
                   title={tab.title}
@@ -245,6 +269,282 @@ export function ProjectAboutPanel({
           if (!open) setViewer(null);
         }}
       />
+    </div>
+  );
+}
+
+type ExplicationRoom = { name: string; area: number };
+
+// Мок на время прототипа — в будущем данные пойдут из БД (плюс подсветка геометрии на схеме по выбранной строке)
+const MOCK_ROOMS_BY_FLOOR: Record<number, ExplicationRoom[]> = {
+  1: [
+    { name: "Гостиная-кухня", area: 32.4 },
+    { name: "Спальня", area: 14.1 },
+    { name: "Санузел", area: 4.8 },
+    { name: "Прихожая", area: 6.2 },
+    { name: "Терраса", area: 12.5 },
+    { name: "Крыльцо", area: 3.1 }
+  ],
+  2: [
+    { name: "Спальня 1", area: 16.3 },
+    { name: "Спальня 2", area: 13.7 },
+    { name: "Санузел", area: 5.4 },
+    { name: "Балкон", area: 6.8 }
+  ]
+};
+
+function mockRoomsForFloor(floor: number): ExplicationRoom[] {
+  return MOCK_ROOMS_BY_FLOOR[floor] ?? MOCK_ROOMS_BY_FLOOR[1]!;
+}
+
+function formatArea(area: number) {
+  return `${area.toLocaleString("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} м²`;
+}
+
+/** Планировка: схема этажа слева + экспликация помещений справа (с переключателем этажей) */
+function FloorPlanExplication({
+  assets,
+  projectName,
+  floors,
+  busyId,
+  onOpen,
+  onPatch
+}: {
+  assets: AboutAsset[];
+  projectName: string;
+  floors: number | null;
+  busyId: string | null;
+  onOpen: (index: number) => void;
+  onPatch?: (assetId: string, patch: AboutAssetPatch) => void;
+}) {
+  // Таб-этажи ведём от floors проекта, а не от тегов ассетов — реальные фото планировок
+  // часто не размечены по этажу (особенно после синка из Tilda), и без этого второй этаж пропадал
+  const floorCount = Math.max(floors ?? 1, 1);
+  const floorNumbers = floorCount > 1 ? Array.from({ length: floorCount }, (_, i) => i + 1) : [1];
+  const [selectedFloor, setSelectedFloor] = useState(floorNumbers[0] ?? 1);
+  const [floorAssetIndex, setFloorAssetIndex] = useState(0);
+
+  useEffect(() => {
+    setFloorAssetIndex(0);
+  }, [selectedFloor]);
+
+  const taggedForFloor = assets.filter((asset) => asset.floorNumber === selectedFloor);
+  const untagged = assets.filter((asset) => asset.floorNumber == null);
+  // В редактировании неразмеченные фото — кандидаты на любой этаж, их нужно видеть и листать
+  // независимо от того, есть ли уже тегированное фото. В обычном просмотре показываем только тегированное
+  const floorAssets = onPatch ? [...taggedForFloor, ...untagged] : taggedForFloor;
+  const current = floorAssets[Math.min(floorAssetIndex, floorAssets.length - 1)];
+
+  function stepFloorAsset(delta: number) {
+    if (floorAssets.length < 2) return;
+    setFloorAssetIndex((prev) => (prev + delta + floorAssets.length) % floorAssets.length);
+  }
+
+  const assetIndex = current ? assets.indexOf(current) : -1;
+  const busy = current ? busyId === current.id : false;
+  const floorOptions = Array.from({ length: Math.max(floors ?? 0, 0) }, (_, i) => i + 1);
+  const rooms = mockRoomsForFloor(selectedFloor);
+  const totalArea = rooms.reduce((sum, room) => sum + room.area, 0);
+
+  return (
+    <div className="flex flex-col gap-2 gallery-compact:h-[clamp(320px,52vh,560px)] gallery-compact:flex-row">
+      <div className="bg-muted relative overflow-hidden rounded-xl border gallery-compact:h-full gallery-compact:min-w-0 gallery-compact:flex-[2]">
+        {current ? (
+          <>
+            <button
+              type="button"
+              onClick={() => onOpen(assetIndex)}
+              className="bg-background relative block aspect-video w-full cursor-zoom-in transition hover:opacity-95 gallery-compact:aspect-auto gallery-compact:h-full"
+              aria-label={`Открыть: ${assetLabel(current, projectName)}`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={current.sourceUrl}
+                alt={assetLabel(current, projectName)}
+                loading="eager"
+                decoding="async"
+                draggable={false}
+                className="absolute inset-0 size-full object-contain select-none"
+              />
+            </button>
+
+            <div className="pointer-events-none absolute top-3 left-3 flex flex-wrap gap-1">
+              {current.isPrimary ? <Badge>Главный</Badge> : null}
+              {current.isHidden ? <Badge variant="secondary">Скрыт</Badge> : null}
+            </div>
+
+            {onPatch && floorAssets.length > 1 ? (
+              <div
+                className="bg-background/90 absolute top-3 right-3 z-10 flex items-center gap-1 rounded-full p-1 shadow-sm backdrop-blur"
+                onClick={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-7 rounded-full"
+                  onClick={() => stepFloorAsset(-1)}
+                  aria-label="Предыдущий ассет"
+                >
+                  <IconChevronLeft className="size-4" />
+                </Button>
+                <span className="text-muted-foreground min-w-8 text-center text-xs tabular-nums">
+                  {Math.min(floorAssetIndex, floorAssets.length - 1) + 1} / {floorAssets.length}
+                </span>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-7 rounded-full"
+                  onClick={() => stepFloorAsset(1)}
+                  aria-label="Следующий ассет"
+                >
+                  <IconChevronRight className="size-4" />
+                </Button>
+              </div>
+            ) : null}
+
+            {onPatch ? (
+              <div
+                className="bg-background/90 absolute bottom-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1.5 rounded-lg p-1.5 shadow-sm backdrop-blur"
+                onClick={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <Select
+                  value={current.type}
+                  disabled={busy}
+                  onValueChange={(value) => onPatch(current.id, { type: value })}
+                >
+                  <SelectTrigger size="sm" className="h-8 w-36 text-xs" aria-label="Раздел">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ASSET_TYPE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {floorOptions.length > 1 ? (
+                  <Select
+                    value={current.floorNumber != null ? String(current.floorNumber) : "unset"}
+                    disabled={busy}
+                    onValueChange={(value) =>
+                      onPatch(current.id, {
+                        floorNumber: value === "unset" ? null : Number(value)
+                      })
+                    }
+                  >
+                    <SelectTrigger size="sm" className="h-8 w-36 text-xs" aria-label="Этаж">
+                      <SelectValue placeholder="Этаж" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unset">Этаж не указан</SelectItem>
+                      {floorOptions.map((floor) => (
+                        <SelectItem key={floor} value={String(floor)}>
+                          {floor}-й этаж
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : null}
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={current.isPrimary ? "default" : "outline"}
+                  className="h-8"
+                  disabled={busy || current.isPrimary}
+                  onClick={() => onPatch(current.id, { isPrimary: true })}
+                >
+                  {current.isPrimary ? (
+                    <IconStarFilled className="size-4" />
+                  ) : (
+                    <IconStar className="size-4" />
+                  )}
+                  Главный
+                </Button>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  disabled={busy}
+                  onClick={() => onPatch(current.id, { isHidden: !current.isHidden })}
+                >
+                  {current.isHidden ? (
+                    <IconEye className="size-4" />
+                  ) : (
+                    <IconEyeOff className="size-4" />
+                  )}
+                  {current.isHidden ? "Показать" : "Скрыть"}
+                </Button>
+
+                {busy ? <Spinner className="size-4" /> : null}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="text-muted-foreground flex aspect-video w-full items-center justify-center text-center text-sm gallery-compact:aspect-auto gallery-compact:h-full">
+            Схема {selectedFloor}-го этажа ещё не загружена
+          </div>
+        )}
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-2 gallery-compact:h-full gallery-compact:min-w-0 gallery-compact:flex-1">
+        {floorNumbers.length > 1 ? (
+          <div className="flex shrink-0 flex-wrap items-center justify-start gap-2">
+            <Tabs
+              value={String(selectedFloor)}
+              onValueChange={(value) => setSelectedFloor(Number(value))}
+            >
+              <TabsList className="h-8">
+                {floorNumbers.map((floor) => (
+                  <TabsTrigger key={floor} value={String(floor)} className="text-xs">
+                    {floor}-й этаж
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+        ) : null}
+
+        <div className="min-h-0 overflow-hidden rounded-xl border gallery-compact:flex-1 gallery-compact:overflow-y-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Помещение</TableHead>
+                <TableHead className="text-right">Площадь</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rooms.map((room) => (
+                <TableRow key={room.name}>
+                  <TableCell className="whitespace-normal">{room.name}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatArea(room.area)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableCell>Итого</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatArea(totalArea)}
+                </TableCell>
+              </TableRow>
+            </TableFooter>
+          </Table>
+        </div>
+        <p className="text-muted-foreground shrink-0 text-xs gallery-compact:hidden">
+          Данные для примера — экспликация ещё не подключена к проекту.
+        </p>
+      </div>
     </div>
   );
 }
