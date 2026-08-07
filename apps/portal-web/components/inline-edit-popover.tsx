@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
 import { createPortal } from "react-dom";
 import { IconCheck, IconX } from "@tabler/icons-react";
 
@@ -18,6 +26,13 @@ import { cn } from "@/lib/utils";
 
 type SelectOption = { value: string; label: string };
 
+function inputWidth(value: string, placeholder: string | undefined, type: "text" | "number") {
+  const visibleValue = value || placeholder || "";
+  const minChars = type === "number" ? 1 : 6;
+  const maxChars = type === "number" ? 16 : 32;
+  return Math.min(maxChars, Math.max(minChars, visibleValue.length));
+}
+
 type InlineEditPopoverProps = {
   /** false — только display, клик не открывает редактор */
   enabled: boolean;
@@ -30,6 +45,8 @@ type InlineEditPopoverProps = {
   ariaLabel: string;
   /** end — панель по правому краю триггера (растёт влево, удобно у правого края экрана) */
   align?: "start" | "end";
+  /** Одинаковая ширина поля для компактных характеристик карточки */
+  compact?: boolean;
   className?: string;
 };
 
@@ -44,6 +61,7 @@ export function InlineEditPopover({
   placeholder,
   ariaLabel,
   align = "start",
+  compact = false,
   className
 }: InlineEditPopoverProps) {
   const [open, setOpen] = useState(false);
@@ -70,18 +88,18 @@ export function InlineEditPopover({
     return () => window.clearTimeout(t);
   }, [open]);
 
-  function measurePanelPos() {
+  const measurePanelPos = useCallback(() => {
     // display:contents — у самого span box нет, меряем дочерний узел
     const el = triggerRef.current?.firstElementChild ?? triggerRef.current;
     if (!el) return null;
     const rect = el.getBoundingClientRect();
     const top = rect.bottom + 6;
     const margin = 8;
-    const panelW = panelRef.current?.offsetWidth ?? 220;
+    const panelW = panelRef.current?.offsetWidth ?? 160;
     let left = align === "end" ? rect.right - panelW : rect.left;
     left = Math.max(margin, Math.min(left, window.innerWidth - panelW - margin));
     return { top, left };
-  }
+  }, [align]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -94,7 +112,7 @@ export function InlineEditPopover({
       setPanelPos(measurePanelPos());
     });
     return () => window.cancelAnimationFrame(raf);
-  }, [open, align, draft, options]);
+  }, [open, draft, options, measurePanelPos]);
 
   useEffect(() => {
     if (!open) return;
@@ -124,7 +142,7 @@ export function InlineEditPopover({
       window.removeEventListener("scroll", onReposition, true);
       window.removeEventListener("resize", onReposition);
     };
-  }, [open, align]);
+  }, [open, measurePanelPos]);
 
   async function commit() {
     const next = draft.trim();
@@ -142,29 +160,38 @@ export function InlineEditPopover({
     <>
       <Button
         type="button"
-        size="icon-sm"
+        size="icon-xs"
+        variant="default"
+        className="rounded-full"
         disabled={saving}
         aria-label="Сохранить"
+        title="Сохранить"
         onClick={() => void commit()}
       >
-        {saving ? <Spinner className="size-3.5" /> : <IconCheck className="size-4" />}
+        {saving ? <Spinner className="size-3" /> : <IconCheck className="size-3.5" />}
       </Button>
       <Button
         type="button"
-        size="icon-sm"
-        variant="ghost"
+        size="icon-xs"
+        variant="destructive"
+        className="rounded-full"
         disabled={saving}
         aria-label="Отменить"
+        title="Отменить"
         onClick={() => setOpen(false)}
       >
-        <IconX className="size-4" />
+        <IconX className="size-3.5" />
       </Button>
     </>
   );
 
   const field = options ? (
     <Select value={draft || options[0]?.value || ""} onValueChange={setDraft}>
-      <SelectTrigger className="h-8 min-w-[10rem] flex-1" aria-label={ariaLabel}>
+      <SelectTrigger
+        size="sm"
+        className="bg-muted/50 h-7 w-auto max-w-[min(20rem,calc(100vw-6rem))] rounded-full border-0 px-2 text-xs shadow-none focus-visible:ring-0"
+        aria-label={ariaLabel}
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent position="popper">
@@ -182,7 +209,12 @@ export function InlineEditPopover({
       value={draft}
       placeholder={placeholder}
       aria-label={ariaLabel}
-      className="h-8 min-w-[8rem] flex-1"
+      className="h-7 min-w-0 max-w-[min(32rem,calc(100vw-6rem))] flex-none rounded-none border-0 bg-transparent px-1.5 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
+      style={{
+        width: compact
+          ? "3.5rem"
+          : `calc(${inputWidth(draft, placeholder, inputType)}ch + 0.75rem)`
+      }}
       onChange={(event) => setDraft(event.target.value)}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
@@ -207,7 +239,7 @@ export function InlineEditPopover({
           "contents",
           enabled && "[&>*]:cursor-pointer",
           enabled && "[&>*]:rounded-sm [&>*:hover]:bg-muted/60",
-          enabled && open && "[&>*]:bg-muted/60 [&>*]:ring-primary/30 [&>*]:ring-2"
+          enabled && open && "[&>*]:bg-muted/60 [&>*]:shadow-sm"
         )}
         onClick={
           enabled
@@ -239,7 +271,7 @@ export function InlineEditPopover({
               id={panelId}
               role="dialog"
               aria-label={ariaLabel}
-              className="bg-background/90 text-popover-foreground fixed z-50 flex max-w-[calc(100vw-1rem)] min-w-[12rem] items-center gap-1 rounded-full p-1.5 shadow-sm backdrop-blur"
+              className="bg-background/95 text-popover-foreground fixed z-50 flex w-fit max-w-[calc(100vw-1rem)] items-center gap-1 rounded-full border border-black/5 p-1 shadow-md backdrop-blur dark:border-white/10"
               style={{ top: panelPos.top, left: panelPos.left }}
             >
               {/* align=end: кнопки слева + панель у правого края триггера */}

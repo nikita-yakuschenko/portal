@@ -1,22 +1,8 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import {
-  DndContext,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  verticalListSortingStrategy,
-  useSortable
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { Reorder, useDragControls } from "framer-motion";
 import {
   IconArrowBackUp,
   IconCheck,
@@ -51,17 +37,13 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { floorPlanLabel } from "@/lib/floor-plan";
 import { cn } from "@/lib/utils";
+
+/** Одинаковые колонки в просмотре и редакторе: grip | название | действия | площадь */
+const ROOM_ROW_GRID =
+  "grid h-9 grid-cols-[1.5rem_minmax(0,1fr)_3.75rem_5.5rem] items-center gap-2 px-2 text-sm";
 
 export const ASSET_TYPE_OPTIONS = [
   { value: "exterior", label: "Экстерьер" },
@@ -439,51 +421,248 @@ function ContourNodeHandle({
   );
 }
 
-/** Строка экспликации с ручкой drag-and-drop слева (dnd-kit — тот же паттерн, что и в каталоге партнёра) */
-function SortableRoomRow({
-  id,
-  disabled,
+/** Строка экспликации: Framer Motion Reorder + drag только за grip */
+function ReorderRoomRow({
+  room,
+  roomBusy,
   isHighlighted,
   onMouseEnter,
   onMouseLeave,
-  children
+  onPatchRoom,
+  onStartDrawing,
+  onDeleteRoom,
+  onDragStart,
+  onDragEnd
 }: {
-  id: string;
-  disabled: boolean;
+  room: ProjectRoom;
+  roomBusy: boolean;
   isHighlighted: boolean;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
-  children: ReactNode;
+  onPatchRoom?: (roomId: string, patch: RoomPatch) => void;
+  onStartDrawing: (room: ProjectRoom) => void;
+  onDeleteRoom?: (roomId: string) => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id,
-    disabled
-  });
+  const controls = useDragControls();
+  // Стили drag только через React-state — whileDrag иногда «залипает» после drop
+  const [isDragging, setIsDragging] = useState(false);
 
   return (
-    <TableRow
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(isHighlighted && "bg-muted/60", isDragging && "bg-muted/50 relative z-20")}
+    <Reorder.Item
+      as="div"
+      value={room.id}
+      dragListener={false}
+      dragControls={controls}
+      dragElastic={0.08}
+      onDragStart={() => {
+        setIsDragging(true);
+        onDragStart();
+      }}
+      onDragEnd={() => {
+        setIsDragging(false);
+        onDragEnd();
+      }}
+      className={cn(
+        ROOM_ROW_GRID,
+        "relative border-b bg-background last:border-b-0",
+        isHighlighted && !isDragging && "bg-muted/60",
+        isDragging && "z-20 cursor-grabbing shadow-md"
+      )}
+      style={{ position: "relative" }}
+      transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.6 }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {!disabled ? (
-        <TableCell className="w-0 pr-0">
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-foreground flex cursor-grab items-center active:cursor-grabbing"
-            aria-label="Перетащить, чтобы изменить порядок"
-            title="Перетащить, чтобы изменить порядок"
-            {...attributes}
-            {...listeners}
+      <button
+        type="button"
+        className="text-muted-foreground hover:text-foreground flex cursor-grab items-center touch-none active:cursor-grabbing"
+        aria-label="Перетащить, чтобы изменить порядок"
+        title="Перетащить, чтобы изменить порядок"
+        onPointerDown={(event) => {
+          // Без preventDefault фокус может уехать в input и оборвать gesture
+          event.preventDefault();
+          controls.start(event);
+        }}
+      >
+        <IconGripVertical className="size-4" />
+      </button>
+      <div className="min-w-0 whitespace-normal">
+        <Input
+          key={`${room.id}-name`}
+          defaultValue={room.name}
+          disabled={roomBusy}
+          className="h-7 border-transparent bg-transparent px-1 text-sm shadow-none focus-visible:border-input focus-visible:bg-background"
+          onBlur={(event) => {
+            const next = event.target.value.trim();
+            if (next && next !== room.name) {
+              onPatchRoom?.(room.id, { name: next });
+            } else {
+              event.target.value = room.name;
+            }
+          }}
+        />
+      </div>
+      <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="size-7"
+          disabled={roomBusy}
+          onClick={() => onStartDrawing(room)}
+          aria-label="Обвести контур на схеме"
+          title="Обвести контур на схеме"
+        >
+          <IconVectorTriangle className="size-4" />
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="size-7"
+          disabled={roomBusy}
+          onClick={() => onDeleteRoom?.(room.id)}
+          aria-label="Удалить помещение"
+        >
+          {roomBusy ? <Spinner className="size-4" /> : <IconTrash className="size-4" />}
+        </Button>
+      </div>
+      <div className="flex justify-end text-right tabular-nums">
+        <Input
+          key={`${room.id}-area`}
+          type="number"
+          step="0.1"
+          min="0"
+          defaultValue={room.area}
+          disabled={roomBusy}
+          className="h-7 w-20 border-transparent bg-transparent px-1 text-right text-sm shadow-none focus-visible:border-input focus-visible:bg-background"
+          onBlur={(event) => {
+            const next = Number(event.target.value);
+            if (Number.isFinite(next) && next > 0 && next !== room.area) {
+              onPatchRoom?.(room.id, { area: next });
+            } else {
+              event.target.value = String(room.area);
+            }
+          }}
+        />
+      </div>
+    </Reorder.Item>
+  );
+}
+
+/** Компактная плоская панель управления ассетом */
+function AssetEditToolbar({
+  asset,
+  busy,
+  floorOptions,
+  showFloorSelect,
+  onPatch
+}: {
+  asset: AboutAsset;
+  busy: boolean;
+  floorOptions: number[];
+  showFloorSelect: boolean;
+  onPatch: (assetId: string, patch: AboutAssetPatch) => void;
+}) {
+  const visibilityLabel = asset.isHidden ? "Показать" : "Скрыть";
+
+  return (
+    <div
+      className="bg-background/90 absolute bottom-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1 rounded-full p-1.5 shadow-sm backdrop-blur"
+      aria-busy={busy}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <Select
+        value={asset.type}
+        disabled={busy}
+        onValueChange={(value) => onPatch(asset.id, { type: value })}
+      >
+        <SelectTrigger
+          size="sm"
+          className="h-8 w-auto max-w-40 rounded-full text-xs"
+          aria-label="Раздел"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {ASSET_TYPE_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {showFloorSelect && floorOptions.length > 1 ? (
+        <Select
+          value={asset.floorNumber != null ? String(asset.floorNumber) : "unset"}
+          disabled={busy}
+          onValueChange={(value) =>
+            onPatch(asset.id, {
+              floorNumber: value === "unset" ? null : Number(value)
+            })
+          }
+        >
+          <SelectTrigger
+            size="sm"
+            className="h-8 w-auto max-w-40 rounded-full text-xs"
+            aria-label="Этаж"
           >
-            <IconGripVertical className="size-4" />
-          </button>
-        </TableCell>
+            <SelectValue placeholder="Этаж" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="unset">Этаж не указан</SelectItem>
+            {floorOptions.map((floor) => (
+              <SelectItem key={floor} value={String(floor)}>
+                {floor}-й этаж
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       ) : null}
-      {children}
-    </TableRow>
+
+      <Button
+        type="button"
+        size="icon-sm"
+        variant={asset.isPrimary ? "default" : "ghost"}
+        className="rounded-full"
+        disabled={busy}
+        aria-label={asset.isPrimary ? "Главный ассет" : "Сделать главным"}
+        aria-pressed={asset.isPrimary}
+        title={asset.isPrimary ? "Главный ассет" : "Сделать главным"}
+        onClick={() => {
+          if (!asset.isPrimary) onPatch(asset.id, { isPrimary: true });
+        }}
+      >
+        {asset.isPrimary ? (
+          <IconStarFilled className="size-4" />
+        ) : (
+          <IconStar className="size-4" />
+        )}
+      </Button>
+
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
+        className="rounded-full"
+        disabled={busy}
+        aria-label={visibilityLabel}
+        title={visibilityLabel}
+        onClick={() => onPatch(asset.id, { isHidden: !asset.isHidden })}
+      >
+        {asset.isHidden ? (
+          <IconEye className="size-4" />
+        ) : (
+          <IconEyeOff className="size-4" />
+        )}
+      </Button>
+
+      {busy ? <Spinner className="mx-1 size-4" /> : null}
+    </div>
   );
 }
 
@@ -520,9 +699,6 @@ function FloorPlanExplication({
   const [selectedFloor, setSelectedFloor] = useState(floorNumbers[0] ?? 1);
   const [floorAssetIndex, setFloorAssetIndex] = useState(0);
   const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
-  const roomDragSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
-  );
   const [drawingRoomId, setDrawingRoomId] = useState<string | null>(null);
   const [drawTool, setDrawTool] = useState<DrawTool>("rectangle");
   const [draftPolygon, setDraftPolygon] = useState<RoomPoint[]>([]);
@@ -538,6 +714,15 @@ function FloorPlanExplication({
     setFloorAssetIndex(0);
   }, [selectedFloor]);
 
+  // Выход из общего edit mode должен закрывать и локальный режим рисования
+  useEffect(() => {
+    if (onPatchRoom) return;
+    setDrawingRoomId(null);
+    setDraftPolygon([]);
+    setRectStart(null);
+    setCursorPoint(null);
+  }, [onPatchRoom]);
+
   // Плашка инструментов — не оверлей ВНУТРИ схемы (перекрывает точки клика), а портал,
   // подвешенный чуть выше блока схемы; не зависит от overflow-hidden контейнера
   function measureToolbarPos() {
@@ -547,7 +732,7 @@ function FloorPlanExplication({
     const toolbarWidth = toolbarRef.current?.offsetWidth ?? 480;
     const toolbarHeight = toolbarRef.current?.offsetHeight ?? 44;
     return {
-      top: Math.max(8, boxRect.top - toolbarHeight - 8),
+      top: Math.max(8, boxRect.top - toolbarHeight),
       left: Math.min(
         Math.max(8, boxRect.left + boxRect.width / 2 - toolbarWidth / 2),
         window.innerWidth - toolbarWidth - 8
@@ -708,20 +893,44 @@ function FloorPlanExplication({
     .filter((room) => room.floorNumber === selectedFloor)
     .sort((a, b) => a.sortOrder - b.sortOrder);
   const canEditRooms = Boolean(onPatchRoom);
+  const floorRoomsById = useMemo(
+    () => new Map(floorRooms.map((room) => [room.id, room])),
+    [floorRooms]
+  );
+  // Локальный порядок для Reorder — анимация сразу, PATCH только по окончании drag
+  const [orderedRoomIds, setOrderedRoomIds] = useState<string[]>(() =>
+    floorRooms.map((room) => room.id)
+  );
+  const orderedRoomIdsRef = useRef(orderedRoomIds);
+  orderedRoomIdsRef.current = orderedRoomIds;
+  const isReorderingRef = useRef(false);
+  const roomsOrderKey = floorRooms.map((room) => `${room.id}:${room.sortOrder}`).join("|");
 
-  function handleRoomDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = floorRooms.findIndex((room) => room.id === active.id);
-    const newIndex = floorRooms.findIndex((room) => room.id === over.id);
-    if (oldIndex < 0 || newIndex < 0) return;
+  useEffect(() => {
+    if (isReorderingRef.current) return;
+    const next = rooms
+      .filter((room) => room.floorNumber === selectedFloor)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((room) => room.id);
+    setOrderedRoomIds((prev) =>
+      prev.length === next.length && prev.every((id, index) => id === next[index]) ? prev : next
+    );
+  }, [selectedFloor, roomsOrderKey, rooms]);
 
-    const reordered = arrayMove(floorRooms, oldIndex, newIndex);
-    reordered.forEach((room, index) => {
-      if (room.sortOrder !== index) {
-        onPatchRoom?.(room.id, { sortOrder: index });
+  function persistRoomOrder(ids: string[]) {
+    ids.forEach((id, index) => {
+      const room = floorRoomsById.get(id);
+      if (room && room.sortOrder !== index) {
+        onPatchRoom?.(id, { sortOrder: index });
       }
     });
+  }
+
+  function handleRoomDragEnd() {
+    isReorderingRef.current = false;
+    // PATCH после кадра — иначе remount от ответа API обрывает layout-анимацию и строка «залипает»
+    const ids = orderedRoomIdsRef.current;
+    requestAnimationFrame(() => persistRoomOrder(ids));
   }
 
   function polygonToSvgPoints(polygon: RoomPoint[]) {
@@ -1006,86 +1215,13 @@ function FloorPlanExplication({
             ) : null}
 
             {onPatch && !drawingRoomId ? (
-              <div
-                className="bg-background/90 absolute bottom-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1.5 rounded-full p-1.5 shadow-sm backdrop-blur"
-                onClick={(event) => event.stopPropagation()}
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <Select
-                  value={current.type}
-                  disabled={busy}
-                  onValueChange={(value) => onPatch(current.id, { type: value })}
-                >
-                  <SelectTrigger size="sm" className="h-8 w-36 text-xs" aria-label="Раздел">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ASSET_TYPE_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {floorOptions.length > 1 ? (
-                  <Select
-                    value={current.floorNumber != null ? String(current.floorNumber) : "unset"}
-                    disabled={busy}
-                    onValueChange={(value) =>
-                      onPatch(current.id, {
-                        floorNumber: value === "unset" ? null : Number(value)
-                      })
-                    }
-                  >
-                    <SelectTrigger size="sm" className="h-8 w-36 text-xs" aria-label="Этаж">
-                      <SelectValue placeholder="Этаж" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unset">Этаж не указан</SelectItem>
-                      {floorOptions.map((floor) => (
-                        <SelectItem key={floor} value={String(floor)}>
-                          {floor}-й этаж
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : null}
-
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={current.isPrimary ? "default" : "outline"}
-                  className="h-8"
-                  disabled={busy || current.isPrimary}
-                  onClick={() => onPatch(current.id, { isPrimary: true })}
-                >
-                  {current.isPrimary ? (
-                    <IconStarFilled className="size-4" />
-                  ) : (
-                    <IconStar className="size-4" />
-                  )}
-                  Главный
-                </Button>
-
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8"
-                  disabled={busy}
-                  onClick={() => onPatch(current.id, { isHidden: !current.isHidden })}
-                >
-                  {current.isHidden ? (
-                    <IconEye className="size-4" />
-                  ) : (
-                    <IconEyeOff className="size-4" />
-                  )}
-                  {current.isHidden ? "Показать" : "Скрыть"}
-                </Button>
-
-                {busy ? <Spinner className="size-4" /> : null}
-              </div>
+              <AssetEditToolbar
+                asset={current}
+                busy={busy}
+                floorOptions={floorOptions}
+                showFloorSelect
+                onPatch={onPatch}
+              />
             ) : null}
           </>
         ) : (
@@ -1113,134 +1249,99 @@ function FloorPlanExplication({
           </div>
         ) : null}
 
-        <div className="min-h-0 overflow-hidden rounded-xl border gallery-compact:flex-1 gallery-compact:overflow-y-auto">
-          <DndContext
-            sensors={roomDragSensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleRoomDragEnd}
-          >
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {canEditRooms ? <TableHead className="w-0" /> : null}
-                  <TableHead>Помещение</TableHead>
-                  <TableHead className="text-right">Площадь</TableHead>
-                  {canEditRooms ? <TableHead className="w-0" /> : null}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {floorRooms.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={canEditRooms ? 4 : 2}
-                      className="text-muted-foreground text-center text-xs"
-                    >
-                      Пока нет помещений
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  <SortableContext
-                    items={floorRooms.map((room) => room.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {floorRooms.map((room) => {
-                      const roomBusy = roomBusyId === room.id;
-                      const isHovered = hoveredRoomId === room.id;
-                      return (
-                        <SortableRoomRow
-                          key={room.id}
-                          id={room.id}
-                          disabled={!canEditRooms}
-                          isHighlighted={isHovered}
-                          onMouseEnter={() => setHoveredRoomId(room.id)}
-                          onMouseLeave={() =>
-                            setHoveredRoomId((prev) => (prev === room.id ? null : prev))
-                          }
-                        >
-                          <TableCell className="whitespace-normal">
-                            {canEditRooms ? (
-                              <Input
-                                key={`${room.id}-name`}
-                                defaultValue={room.name}
-                                disabled={roomBusy}
-                                className="h-7 border-transparent bg-transparent px-1 shadow-none focus-visible:border-input focus-visible:bg-background"
-                                onBlur={(event) => {
-                                  const next = event.target.value.trim();
-                                  if (next && next !== room.name) {
-                                    onPatchRoom?.(room.id, { name: next });
-                                  } else {
-                                    event.target.value = room.name;
-                                  }
-                                }}
-                              />
-                            ) : (
-                              room.name
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {canEditRooms ? (
-                              <Input
-                                key={`${room.id}-area`}
-                                type="number"
-                                step="0.1"
-                                min="0"
-                                defaultValue={room.area}
-                                disabled={roomBusy}
-                                className="h-7 w-20 border-transparent bg-transparent px-1 text-right shadow-none focus-visible:border-input focus-visible:bg-background"
-                                onBlur={(event) => {
-                                  const next = Number(event.target.value);
-                                  if (Number.isFinite(next) && next > 0 && next !== room.area) {
-                                    onPatchRoom?.(room.id, { area: next });
-                                  } else {
-                                    event.target.value = String(room.area);
-                                  }
-                                }}
-                              />
-                            ) : (
-                              formatArea(room.area)
-                            )}
-                          </TableCell>
-                          {canEditRooms ? (
-                            <TableCell className="whitespace-nowrap">
-                              <div className="flex items-center justify-end gap-1">
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="ghost"
-                                  className="size-7"
-                                  disabled={roomBusy}
-                                  onClick={() => startDrawing(room)}
-                                  aria-label="Обвести контур на схеме"
-                                  title="Обвести контур на схеме"
-                                >
-                                  <IconVectorTriangle className="size-4" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="ghost"
-                                  className="size-7"
-                                  disabled={roomBusy}
-                                  onClick={() => onDeleteRoom?.(room.id)}
-                                  aria-label="Удалить помещение"
-                                >
-                                  {roomBusy ? (
-                                    <Spinner className="size-4" />
-                                  ) : (
-                                    <IconTrash className="size-4" />
-                                  )}
-                                </Button>
-                              </div>
-                            </TableCell>
-                          ) : null}
-                        </SortableRoomRow>
-                      );
-                    })}
-                  </SortableContext>
+        <div className="min-h-0 overflow-y-auto rounded-xl border gallery-compact:flex-1">
+          {canEditRooms ? (
+            <>
+              <div
+                className={cn(
+                  ROOM_ROW_GRID,
+                  "text-foreground border-b font-medium"
                 )}
-              </TableBody>
-            </Table>
-          </DndContext>
+              >
+                <span aria-hidden />
+                <span>Помещение</span>
+                <span aria-hidden />
+                <span className="text-right">Площадь</span>
+              </div>
+
+              {floorRooms.length === 0 ? (
+                <div className="text-muted-foreground px-2 py-6 text-center text-sm">
+                  Пока нет помещений
+                </div>
+              ) : (
+                <Reorder.Group
+                  as="div"
+                  axis="y"
+                  values={orderedRoomIds}
+                  onReorder={setOrderedRoomIds}
+                  className="relative"
+                >
+                  {orderedRoomIds.map((roomId) => {
+                    const room = floorRoomsById.get(roomId);
+                    if (!room) return null;
+                    const roomBusy = roomBusyId === room.id;
+                    const isHovered = hoveredRoomId === room.id;
+                    return (
+                      <ReorderRoomRow
+                        key={room.id}
+                        room={room}
+                        roomBusy={roomBusy}
+                        isHighlighted={isHovered}
+                        onMouseEnter={() => setHoveredRoomId(room.id)}
+                        onMouseLeave={() =>
+                          setHoveredRoomId((prev) => (prev === room.id ? null : prev))
+                        }
+                        {...(onPatchRoom ? { onPatchRoom } : {})}
+                        onStartDrawing={startDrawing}
+                        {...(onDeleteRoom ? { onDeleteRoom } : {})}
+                        onDragStart={() => {
+                          isReorderingRef.current = true;
+                        }}
+                        onDragEnd={handleRoomDragEnd}
+                      />
+                    );
+                  })}
+                </Reorder.Group>
+              )}
+            </>
+          ) : (
+            <>
+              <div className={cn(ROOM_ROW_GRID, "text-foreground border-b font-medium")}>
+                <span aria-hidden />
+                <span>Помещение</span>
+                <span aria-hidden />
+                <span className="text-right">Площадь</span>
+              </div>
+              {floorRooms.length === 0 ? (
+                <div className="text-muted-foreground px-2 py-6 text-center text-sm">
+                  Пока нет помещений
+                </div>
+              ) : (
+                floorRooms.map((room) => {
+                  const isHovered = hoveredRoomId === room.id;
+                  return (
+                    <div
+                      key={room.id}
+                      className={cn(
+                        ROOM_ROW_GRID,
+                        "border-b last:border-b-0",
+                        isHovered && "bg-muted/60"
+                      )}
+                      onMouseEnter={() => setHoveredRoomId(room.id)}
+                      onMouseLeave={() =>
+                        setHoveredRoomId((prev) => (prev === room.id ? null : prev))
+                      }
+                    >
+                      <span aria-hidden />
+                      <div className="min-w-0 whitespace-normal">{room.name}</div>
+                      <span aria-hidden />
+                      <div className="text-right tabular-nums">{formatArea(room.area)}</div>
+                    </div>
+                  );
+                })
+              )}
+            </>
+          )}
         </div>
 
         {onCreateRoom ? (
@@ -1393,87 +1494,14 @@ function AssetCarousel({
           ) : null}
 
           {onPatch ? (
-            <div
-              className="bg-background/90 absolute bottom-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1.5 rounded-full p-1.5 shadow-sm backdrop-blur"
-              onClick={(event) => event.stopPropagation()}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-            <Select
-              value={current.type}
-              disabled={busy}
-              onValueChange={(value) => onPatch(current.id, { type: value })}
-            >
-              <SelectTrigger size="sm" className="h-8 w-36 text-xs" aria-label="Раздел">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ASSET_TYPE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {isPlan && floorOptions.length > 1 ? (
-              <Select
-                value={current.floorNumber != null ? String(current.floorNumber) : "unset"}
-                disabled={busy}
-                onValueChange={(value) =>
-                  onPatch(current.id, {
-                    floorNumber: value === "unset" ? null : Number(value)
-                  })
-                }
-              >
-                <SelectTrigger size="sm" className="h-8 w-36 text-xs" aria-label="Этаж">
-                  <SelectValue placeholder="Этаж" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unset">Этаж не указан</SelectItem>
-                  {floorOptions.map((floor) => (
-                    <SelectItem key={floor} value={String(floor)}>
-                      {floor}-й этаж
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : null}
-
-            <Button
-              type="button"
-              size="sm"
-              variant={current.isPrimary ? "default" : "outline"}
-              className="h-8"
-              disabled={busy || current.isPrimary}
-              onClick={() => onPatch(current.id, { isPrimary: true })}
-            >
-              {current.isPrimary ? (
-                <IconStarFilled className="size-4" />
-              ) : (
-                <IconStar className="size-4" />
-              )}
-              Главный
-            </Button>
-
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8"
-              disabled={busy}
-              onClick={() => onPatch(current.id, { isHidden: !current.isHidden })}
-            >
-              {current.isHidden ? (
-                <IconEye className="size-4" />
-              ) : (
-                <IconEyeOff className="size-4" />
-              )}
-              {current.isHidden ? "Показать" : "Скрыть"}
-            </Button>
-
-            {busy ? <Spinner className="size-4" /> : null}
-          </div>
-        ) : null}
+            <AssetEditToolbar
+              asset={current}
+              busy={busy}
+              floorOptions={floorOptions}
+              showFloorSelect={isPlan}
+              onPatch={onPatch}
+            />
+          ) : null}
         </div>
 
         {assets.length > 1 ? (

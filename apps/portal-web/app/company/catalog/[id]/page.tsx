@@ -200,9 +200,20 @@ export default function CompanyCatalogProjectPage() {
 
   async function patchRoom(
     roomId: string,
-    body: { name?: string; area?: number; polygon?: Array<{ x: number; y: number }> }
+    body: {
+      name?: string;
+      area?: number;
+      polygon?: Array<{ x: number; y: number }>;
+      sortOrder?: number;
+    }
   ) {
-    setRoomBusyId(roomId);
+    // Только sortOrder — без busy-спиннера, иначе при DnD мигает вся строка
+    const sortOnly =
+      body.sortOrder !== undefined &&
+      body.name === undefined &&
+      body.area === undefined &&
+      body.polygon === undefined;
+    if (!sortOnly) setRoomBusyId(roomId);
     try {
       const updated = await apiFetch<Project>(`/api/company/catalog/rooms/${roomId}`, {
         method: "PATCH",
@@ -212,7 +223,7 @@ export default function CompanyCatalogProjectPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось обновить помещение");
     } finally {
-      setRoomBusyId(null);
+      if (!sortOnly) setRoomBusyId(null);
     }
   }
 
@@ -351,7 +362,12 @@ export default function CompanyCatalogProjectPage() {
                           void createRoom(body),
                         onPatchRoom: (
                           roomId: string,
-                          patch: { name?: string; area?: number; polygon?: Array<{ x: number; y: number }> }
+                          patch: {
+                            name?: string;
+                            area?: number;
+                            polygon?: Array<{ x: number; y: number }>;
+                            sortOrder?: number;
+                          }
                         ) => void patchRoom(roomId, patch),
                         onDeleteRoom: (roomId: string) => void deleteRoom(roomId)
                       }

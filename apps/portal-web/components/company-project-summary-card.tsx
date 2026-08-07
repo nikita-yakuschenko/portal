@@ -151,6 +151,7 @@ export function CompanyProjectSummaryCard({
         ariaLabel={key}
         value={cfg.value}
         inputType={cfg.inputType}
+        compact
         onCommit={(next) => patch(cfg.body(next))}
         display={valueNode}
       />
