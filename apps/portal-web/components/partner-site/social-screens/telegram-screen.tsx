@@ -10,6 +10,7 @@ import {
   proxiedMediaUrl,
   type SocialProfileSnapshot
 } from "@/lib/social-profile";
+import type { SocialMediaItem } from "@b2b/domain";
 
 /** Обои чата Telegram для iOS — собственный градиент, не вырезка из скриншота */
 const CHAT_BACKGROUND =
@@ -36,6 +37,70 @@ function ViewsIcon() {
         fill="currentColor"
       />
     </svg>
+  );
+}
+
+/**
+ * Пузырь публикации канала.
+ *
+ * Видео показывается самим файлом: превью Telegram размыто намеренно, и
+ * растянутое на всю ширину оно выглядит как белое пятно. Пропорции берутся
+ * из разметки канала — кадры не режутся вслепую под общий формат.
+ */
+function PostBubble({ post }: { post: SocialMediaItem }) {
+  const videoSrc = proxiedMediaUrl(post.videoUrl);
+  const imageSrc = proxiedMediaUrl(post.thumbnailUrl);
+  const views = formatCount(post.views);
+  const date = formatPublishedAt(post.publishedAt);
+  // Крайности обрезаем: панорама и вертикальное сторис ломают ленту,
+  // а потолок высоты не даёт одному посту занять весь экран
+  const ratio = Math.min(Math.max(post.aspectRatio ?? 1.33, 0.85), 1.8);
+  const mediaStyle = { aspectRatio: ratio, maxHeight: 252 };
+
+  return (
+    <div className="max-w-[82%] self-start">
+      <div className="overflow-hidden rounded-[17px] rounded-bl-[5px] bg-white shadow-[0_1px_1.5px_rgba(0,0,0,0.14)]">
+        {videoSrc ? (
+          <span className="relative block overflow-hidden" style={mediaStyle}>
+            <video
+              src={videoSrc}
+              {...(imageSrc ? { poster: imageSrc } : {})}
+              className="size-full object-cover"
+              muted
+              loop
+              autoPlay
+              playsInline
+              preload="metadata"
+            />
+          </span>
+        ) : imageSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageSrc}
+            alt=""
+            className="block w-full object-cover"
+            style={mediaStyle}
+            draggable={false}
+          />
+        ) : null}
+
+        {post.caption ? (
+          <p className="line-clamp-3 px-[10px] pt-[6px] text-[15px] leading-[19px] text-black">
+            {post.caption}
+          </p>
+        ) : null}
+
+        <div className="flex items-center justify-end gap-[5px] px-[10px] pt-[3px] pb-[5px] text-[11px] text-[rgba(60,60,67,0.45)]">
+          {views ? (
+            <span className="flex items-center gap-[3px]">
+              <ViewsIcon />
+              {views}
+            </span>
+          ) : null}
+          {date ? <span>{date}</span> : null}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -118,53 +183,10 @@ export function TelegramScreen({
             hint="Telegram не отдал публичную ленту этого профиля."
           />
         ) : (
-          <div className="flex flex-1 flex-col justify-end gap-2 overflow-hidden px-2 pt-3 pb-2">
-            {posts.map((post) => {
-              const image = proxiedMediaUrl(post.thumbnailUrl);
-              const views = formatCount(post.views);
-              const date = formatPublishedAt(post.publishedAt);
-              return (
-                <div key={post.id} className="max-w-[86%]">
-                  <div className="overflow-hidden rounded-[18px] rounded-bl-[6px] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]">
-                    {image ? (
-                      <span className="relative block">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={image}
-                          alt=""
-                          className="block aspect-[4/3] w-full object-cover"
-                          draggable={false}
-                        />
-                        {post.type === "video" ? (
-                          <span className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-black/55 px-2 py-[3px] text-[11px] font-medium text-white backdrop-blur">
-                            <svg width="8" height="9" viewBox="0 0 8 9" fill="none" aria-hidden>
-                              <path d="M0 0l8 4.5L0 9V0Z" fill="currentColor" />
-                            </svg>
-                            Видео
-                          </span>
-                        ) : null}
-                      </span>
-                    ) : null}
-
-                    {post.caption ? (
-                      <p className="line-clamp-3 px-3 pt-2 text-[15px] leading-[20px] text-black">
-                        {post.caption}
-                      </p>
-                    ) : null}
-
-                    <div className="flex items-center justify-end gap-[6px] px-3 pt-1 pb-[6px] text-[11px] text-[rgba(60,60,67,0.5)]">
-                      {views ? (
-                        <span className="flex items-center gap-[3px]">
-                          <ViewsIcon />
-                          {views}
-                        </span>
-                      ) : null}
-                      {date ? <span>{date}</span> : null}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="flex flex-1 flex-col justify-end gap-[6px] overflow-hidden px-2 pt-3 pb-2">
+            {posts.map((post) => (
+              <PostBubble key={post.id} post={post} />
+            ))}
           </div>
         )}
 

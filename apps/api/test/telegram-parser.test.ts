@@ -57,6 +57,28 @@ describe("страница канала t.me/s/{username}", () => {
     }
   });
 
+  it("для видео отдаёт сам файл: превью Telegram размыто намеренно", () => {
+    const videos = (parsed?.media ?? []).filter((item) => item.type === "video");
+    expect(videos.length).toBeGreaterThan(0);
+    for (const item of videos) {
+      expect(item.videoUrl?.startsWith("https://")).toBe(true);
+      expect(item.videoUrl).toMatch(/\.mp4/);
+    }
+  });
+
+  it("берёт пропорции кадра из разметки, а не режет под общий формат", () => {
+    for (const item of parsed?.media ?? []) {
+      if (item.aspectRatio === undefined) continue;
+      expect(item.aspectRatio).toBeGreaterThanOrEqual(0.3);
+      expect(item.aspectRatio).toBeLessThanOrEqual(3.5);
+    }
+    // В канале есть вертикальные видео 3:4 — их формат должен отличаться от фото
+    const ratios = new Set(
+      (parsed?.media ?? []).map((item) => item.aspectRatio).filter((value) => value !== undefined)
+    );
+    expect(ratios.size).toBeGreaterThan(1);
+  });
+
   it("не выдумывает поля, которых нет в разметке", () => {
     for (const item of parsed?.media ?? []) {
       if (item.views !== undefined) expect(typeof item.views).toBe("number");

@@ -43,3 +43,9 @@ describe("ключ кэша профиля", () => {
     );
   });
 });
+
+describe("типы содержимого", () => {
+  it("видео Telegram разрешено: чёткий кадр есть только в файле", () => {
+    expect(isAllowedMediaUrl("https://cdn4.telesco.pe/file/clip.mp4")).toBe(true);
+  });
+});

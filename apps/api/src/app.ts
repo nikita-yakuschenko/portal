@@ -496,13 +496,19 @@ export async function buildApp() {
     }
 
     try {
-      const media = await fetchProxiedMedia(parsed.data.url);
-      return reply
+      const media = await fetchProxiedMedia(parsed.data.url, request.headers.range);
+      reply
+        .status(media.status)
         .header("Content-Type", media.contentType)
         .header("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800")
         .header("Content-Security-Policy", "default-src 'none'; sandbox")
         .header("X-Content-Type-Options", "nosniff")
-        .send(media.body);
+        // Без Accept-Ranges плеер не станет перематывать и часто вовсе не начнёт играть
+        .header("Accept-Ranges", "bytes");
+      if (media.contentRange) {
+        reply.header("Content-Range", media.contentRange);
+      }
+      return reply.send(media.body);
     } catch (error) {
       const errorClass = error instanceof OutboundError ? error.errorClass : "unexpected_error";
       request.log.info({ event: "social_media_proxy_rejected", errorClass });

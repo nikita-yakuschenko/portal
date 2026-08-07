@@ -48,6 +48,34 @@ function cleanText(raw: string | undefined): string | undefined {
   return text.length > MAX_TEXT_LENGTH ? `${text.slice(0, MAX_TEXT_LENGTH - 1)}…` : text;
 }
 
+/** Пропорции разумны в пределах панорамы и вертикального сторис */
+function sanitizeAspectRatio(value: number): number | undefined {
+  return Number.isFinite(value) && value >= 0.3 && value <= 3.5
+    ? Math.round(value * 1000) / 1000
+    : undefined;
+}
+
+/** width:453px;height:362px → 1.251 */
+function parseBoxAspectRatio(style: string | undefined): number | undefined {
+  if (!style) return undefined;
+  const width = /(?:^|;)\s*width\s*:\s*(\d+(?:\.\d+)?)px/i.exec(style);
+  const height = /(?:^|;)\s*height\s*:\s*(\d+(?:\.\d+)?)px/i.exec(style);
+  if (!width || !height) return undefined;
+  const h = Number(height[1]);
+  if (h <= 0) return undefined;
+  return sanitizeAspectRatio(Number(width[1]) / h);
+}
+
+/** padding-top:133.33% — приём вёрстки Telegram для соотношения сторон видео */
+function parsePaddingAspectRatio(style: string | undefined): number | undefined {
+  if (!style) return undefined;
+  const padding = /padding-top\s*:\s*(\d+(?:\.\d+)?)%/i.exec(style);
+  if (!padding) return undefined;
+  const percent = Number(padding[1]);
+  if (percent <= 0) return undefined;
+  return sanitizeAspectRatio(100 / percent);
+}
+
 /** background-image:url('https://…') → https://… */
 function extractBackgroundUrl(style: string | undefined): string | undefined {
   if (!style) return undefined;
@@ -104,24 +132,36 @@ export function parseTelegramFeedPage(html: string): TelegramProfileData | null 
     const views = parseCompactNumber(message.find(".tgme_widget_message_views").text());
     const caption = cleanText(message.find(".tgme_widget_message_text").first().text());
 
-    const photoUrls: string[] = [];
+    const photos: Array<{ url: string; aspectRatio?: number | undefined }> = [];
     message.find(".tgme_widget_message_photo_wrap").each((__, node) => {
-      const url = extractBackgroundUrl($(node).attr("style"));
-      if (url) photoUrls.push(url);
+      const style = $(node).attr("style");
+      const url = extractBackgroundUrl(style);
+      if (url) photos.push({ url, aspectRatio: parseBoxAspectRatio(style) });
     });
 
-    const videoThumb = extractBackgroundUrl(
+    // Превью видео у Telegram размыто намеренно — годится только как заглушка
+    const blurredVideoThumb = extractBackgroundUrl(
       message.find(".tgme_widget_message_video_thumb").first().attr("style")
     );
-    const isVideo = message.find(".tgme_widget_message_video_player").length > 0 || Boolean(videoThumb);
+    const videoUrl = message
+      .find(".tgme_widget_message_video_wrap video, video.tgme_widget_message_video")
+      .filter((__, node) => Boolean($(node).attr("src")))
+      .first()
+      .attr("src");
+    const videoAspectRatio = parsePaddingAspectRatio(
+      message.find(".tgme_widget_message_video_wrap").first().attr("style")
+    );
 
-    const thumbnailUrl = photoUrls[0] ?? videoThumb;
-    // Пост без единого изображения в сетку не попадает — иллюстрировать нечем
-    if (!thumbnailUrl) return;
+    const isVideo = Boolean(videoUrl) || message.find(".tgme_widget_message_video_player").length > 0;
+
+    const firstPhoto = photos[0];
+    const thumbnailUrl = firstPhoto?.url ?? blurredVideoThumb;
+    // Пост без единого кадра иллюстрировать нечем — в ленту не идёт
+    if (!thumbnailUrl && !videoUrl) return;
 
     const type: SocialMediaItem["type"] = isVideo
       ? "video"
-      : photoUrls.length > 1
+      : photos.length > 1
         ? "carousel"
         : "image";
 
@@ -130,6 +170,8 @@ export function parseTelegramFeedPage(html: string): TelegramProfileData | null 
       type,
       mediaUrl: thumbnailUrl,
       thumbnailUrl,
+      videoUrl: videoUrl && videoUrl.startsWith("https://") ? videoUrl : undefined,
+      aspectRatio: isVideo ? videoAspectRatio : firstPhoto?.aspectRatio,
       permalink: permalink ?? undefined,
       caption,
       publishedAt: publishedAt ?? undefined,

@@ -37,6 +37,13 @@ export type SocialMediaItem = {
   type: "image" | "video" | "carousel" | "unknown";
   mediaUrl?: string | undefined;
   thumbnailUrl?: string | undefined;
+  /**
+   * Файл видео. У Telegram превью видео — намеренно размытая заглушка,
+   * чёткий кадр есть только в самом файле.
+   */
+  videoUrl?: string | undefined;
+  /** Ширина / высота исходника: без неё кадры приходится резать вслепую */
+  aspectRatio?: number | undefined;
   permalink?: string | undefined;
   caption?: string | undefined;
   publishedAt?: string | undefined;
