@@ -45,7 +45,9 @@ services:
       META_APP_SECRET: ${META_APP_SECRET:-}
       META_ACCESS_TOKEN: ${META_ACCESS_TOKEN:-}
       META_IG_BUSINESS_ID: ${META_IG_BUSINESS_ID:-}
-      INSTAGRAM_COLLECTOR_URL: ${INSTAGRAM_COLLECTOR_URL:-http://instagram-collector:4100}
+      # Пусто → стадия коллектора пропускается. Включая профиль instagram,
+      # задай http://instagram-collector:4100
+      INSTAGRAM_COLLECTOR_URL: ${INSTAGRAM_COLLECTOR_URL:-}
       INSTAGRAM_COLLECTOR_TOKEN: ${INSTAGRAM_COLLECTOR_TOKEN:-}
     expose:
       - "4000"
@@ -102,7 +104,18 @@ services:
 
   # Браузерный сборщик Instagram: отдельный контейнер с Chromium.
   # Наружу не публикуется — только внутренняя сеть и общий токен с API.
+  #
+  # По умолчанию НЕ поднимается: из РФ www.instagram.com недоступен, без
+  # COLLECTOR_PROXY_URL сбор всегда даёт unavailable, а образ Playwright весит
+  # около 2 ГБ. Чтобы включить, задай в окружении Dokploy:
+  #   COMPOSE_PROFILES=instagram
+  #   INSTAGRAM_COLLECTOR_TOKEN=<общий секрет с API>
+  #   INSTAGRAM_COLLECTOR_URL=http://instagram-collector:4100
+  #   COLLECTOR_PROXY_URL=<исходящий прокси>
+  # Токен здесь без :? — иначе Compose падает на интерполяции даже когда
+  # профиль выключен. Пустой токен отсекает сам коллектор на старте.
   instagram-collector:
+    profiles: ["instagram"]
     build:
       context: .
       dockerfile: apps/instagram-collector/Dockerfile
@@ -110,7 +123,7 @@ services:
     networks:
       - default
     environment:
-      INSTAGRAM_COLLECTOR_TOKEN: ${INSTAGRAM_COLLECTOR_TOKEN:?INSTAGRAM_COLLECTOR_TOKEN required}
+      INSTAGRAM_COLLECTOR_TOKEN: ${INSTAGRAM_COLLECTOR_TOKEN:-}
       COLLECTOR_PORT: 4100
       COLLECTOR_CONCURRENCY: ${COLLECTOR_CONCURRENCY:-1}
       COLLECTOR_TRACE_TTL_MINUTES: ${COLLECTOR_TRACE_TTL_MINUTES:-60}
