@@ -13,6 +13,7 @@ import { db } from "../../db/client.js";
 import {
   auditLogs,
   catalogAssets,
+  catalogProjectRooms,
   catalogProjects,
   catalogSyncRuns,
   crmConnections,
@@ -960,8 +961,11 @@ export class PortalService {
       return null;
     }
 
-    const assets = await db.select().from(catalogAssets).where(eq(catalogAssets.projectId, project.id));
-    return this.mapCatalogProject(project, assets);
+    const [assets, rooms] = await Promise.all([
+      db.select().from(catalogAssets).where(eq(catalogAssets.projectId, project.id)),
+      db.select().from(catalogProjectRooms).where(eq(catalogProjectRooms.projectId, project.id))
+    ]);
+    return this.mapCatalogProject(project, assets, rooms);
   }
 
   /** Правка карточки проекта в кабинете компании (описание, характеристики) */
@@ -1255,9 +1259,93 @@ export class PortalService {
     return this.getCatalogProject(asset.projectId);
   }
 
+  /** Новая строка экспликации помещений — HQ добавляет вручную, площадь правится тут же */
+  async createProjectRoom(
+    projectId: string,
+    data: { floorNumber: number; name: string; area: number }
+  ) {
+    const project = await db.query.catalogProjects.findFirst({
+      where: eq(catalogProjects.id, projectId)
+    });
+    if (!project) {
+      return null;
+    }
+
+    const siblings = await db
+      .select()
+      .from(catalogProjectRooms)
+      .where(
+        and(
+          eq(catalogProjectRooms.projectId, projectId),
+          eq(catalogProjectRooms.floorNumber, data.floorNumber)
+        )
+      );
+    const nextSortOrder = siblings.reduce((max, room) => Math.max(max, room.sortOrder), -1) + 1;
+
+    await db.insert(catalogProjectRooms).values({
+      id: randomUUID(),
+      projectId,
+      floorNumber: data.floorNumber,
+      name: data.name,
+      area: data.area,
+      sortOrder: nextSortOrder,
+      polygon: []
+    });
+
+    return this.getCatalogProject(projectId);
+  }
+
+  /** Правка строки экспликации: название/площадь/контур на схеме */
+  async updateProjectRoom(
+    roomId: string,
+    patch: {
+      name?: string | undefined;
+      area?: number | undefined;
+      polygon?: Array<{ x: number; y: number }> | undefined;
+      sortOrder?: number | undefined;
+    }
+  ) {
+    const [room] = await db
+      .select()
+      .from(catalogProjectRooms)
+      .where(eq(catalogProjectRooms.id, roomId))
+      .limit(1);
+    if (!room) {
+      return null;
+    }
+
+    await db
+      .update(catalogProjectRooms)
+      .set({
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.area !== undefined ? { area: patch.area } : {}),
+        ...(patch.polygon !== undefined ? { polygon: patch.polygon } : {}),
+        ...(patch.sortOrder !== undefined ? { sortOrder: patch.sortOrder } : {})
+      })
+      .where(eq(catalogProjectRooms.id, roomId));
+
+    return this.getCatalogProject(room.projectId);
+  }
+
+  async deleteProjectRoom(roomId: string) {
+    const [room] = await db
+      .select()
+      .from(catalogProjectRooms)
+      .where(eq(catalogProjectRooms.id, roomId))
+      .limit(1);
+    if (!room) {
+      return null;
+    }
+
+    await db.delete(catalogProjectRooms).where(eq(catalogProjectRooms.id, roomId));
+
+    return this.getCatalogProject(room.projectId);
+  }
+
   private mapCatalogProject(
     project: typeof catalogProjects.$inferSelect,
-    assets: Array<typeof catalogAssets.$inferSelect>
+    assets: Array<typeof catalogAssets.$inferSelect>,
+    rooms: Array<typeof catalogProjectRooms.$inferSelect> = []
   ) {
     const technology = (project.technology === "panel_frame" ? "panel_frame" : "modular") as
       | "modular"
@@ -1314,6 +1402,18 @@ export class PortalService {
           sortOrder: asset.sortOrder,
           isPrimary: asset.isPrimary,
           isHidden: asset.isHidden
+        })),
+      rooms: rooms
+        .filter((room) => room.projectId === project.id)
+        .sort((a, b) => a.floorNumber - b.floorNumber || a.sortOrder - b.sortOrder)
+        .map((room) => ({
+          id: room.id,
+          projectId: room.projectId,
+          floorNumber: room.floorNumber,
+          name: room.name,
+          area: room.area,
+          sortOrder: room.sortOrder,
+          polygon: (room.polygon ?? []) as Array<{ x: number; y: number }>
         }))
     };
   }

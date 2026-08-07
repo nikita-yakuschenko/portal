@@ -5,6 +5,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  real,
   text,
   timestamp,
   uniqueIndex
@@ -163,6 +164,30 @@ export const catalogAssets = pgTable("catalog_assets", {
   isPrimary: boolean("is_primary").notNull().default(false),
   isHidden: boolean("is_hidden").notNull().default(false)
 });
+
+export const catalogProjectRooms = pgTable(
+  "catalog_project_rooms",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => catalogProjects.id, { onDelete: "cascade" }),
+    // Для одноэтажных домов всегда 1 — см. FloorPlanExplication
+    floorNumber: integer("floor_number").notNull().default(1),
+    name: text("name").notNull(),
+    area: real("area").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    // Контур помещения на схеме этажа: точки в относительных координатах 0..100 (% от картинки)
+    polygon: jsonb("polygon").notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    projectFloorIdx: index("catalog_project_rooms_project_floor_idx").on(
+      table.projectId,
+      table.floorNumber
+    )
+  })
+);
 
 export const catalogSyncRuns = pgTable("catalog_sync_runs", {
   id: text("id").primaryKey(),

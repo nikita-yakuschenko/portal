@@ -1,13 +1,38 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  verticalListSortingStrategy,
+  useSortable
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  IconArrowBackUp,
+  IconCheck,
   IconChevronLeft,
   IconChevronRight,
   IconEye,
   IconEyeOff,
+  IconGripVertical,
+  IconPlus,
+  IconRectangle,
+  IconShape3,
   IconStar,
-  IconStarFilled
+  IconStarFilled,
+  IconTrash,
+  IconVectorTriangle,
+  IconX
 } from "@tabler/icons-react";
 
 import {
@@ -16,6 +41,7 @@ import {
 } from "@/components/project-media-viewer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -29,7 +55,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableFooter,
   TableHead,
   TableHeader,
   TableRow
@@ -68,6 +93,29 @@ export type AboutAssetPatch = {
   isHidden?: boolean;
 };
 
+/** Точка контура помещения на схеме этажа — проценты 0..100 от картинки */
+export type RoomPoint = { x: number; y: number };
+
+/** Прямоугольник (2 клика) или ломаная с углами строго 90° */
+type DrawTool = "rectangle" | "orthogonal";
+
+export type ProjectRoom = {
+  id: string;
+  projectId: string;
+  floorNumber: number;
+  name: string;
+  area: number;
+  sortOrder: number;
+  polygon: RoomPoint[];
+};
+
+export type RoomPatch = {
+  name?: string;
+  area?: number;
+  polygon?: RoomPoint[];
+  sortOrder?: number;
+};
+
 function assetLabel(asset: AboutAsset, projectName: string) {
   return asset.type === "floor_plan" ? floorPlanLabel(asset.floorNumber) : projectName;
 }
@@ -87,18 +135,24 @@ export function ProjectAboutPanel({
   description,
   assets,
   floors,
+  rooms = [],
   editable = false,
   savingDescription = false,
   onSaveDescription,
   descriptionProtected = false,
   assetBusyId = null,
   onPatchAsset,
+  roomBusyId = null,
+  onCreateRoom,
+  onPatchRoom,
+  onDeleteRoom,
   extra
 }: {
   projectName: string;
   description: string;
   assets: AboutAsset[];
   floors: number | null;
+  rooms?: ProjectRoom[];
   editable?: boolean;
   savingDescription?: boolean;
   onSaveDescription?: (next: string) => void;
@@ -106,6 +160,10 @@ export function ProjectAboutPanel({
   descriptionProtected?: boolean;
   assetBusyId?: string | null;
   onPatchAsset?: (assetId: string, patch: AboutAssetPatch) => void;
+  roomBusyId?: string | null;
+  onCreateRoom?: (data: { floorNumber: number; name: string; area: number }) => void;
+  onPatchRoom?: (roomId: string, patch: RoomPatch) => void;
+  onDeleteRoom?: (roomId: string) => void;
   extra?: ReactNode;
 }) {
   const [viewer, setViewer] = useState<{ items: ViewerItem[]; index: number } | null>(
@@ -214,9 +272,14 @@ export function ProjectAboutPanel({
                   assets={items}
                   projectName={projectName}
                   floors={floors}
+                  rooms={rooms}
                   busyId={assetBusyId}
+                  roomBusyId={roomBusyId}
                   onOpen={(index) => openViewer([items[index]!], 0)}
                   {...(onPatchAsset ? { onPatch: onPatchAsset } : {})}
+                  {...(onCreateRoom ? { onCreateRoom } : {})}
+                  {...(onPatchRoom ? { onPatchRoom } : {})}
+                  {...(onDeleteRoom ? { onDeleteRoom } : {})}
                 />
               ) : (
                 <AssetCarousel
@@ -273,32 +336,155 @@ export function ProjectAboutPanel({
   );
 }
 
-type ExplicationRoom = { name: string; area: number };
+/** Прямоугольник, в который картинка реально вписывается внутри контейнера (object-contain) —
+ * нужен, чтобы точки контура (в % от картинки) совпадали с пикселями при леттербоксинге */
+function useContainedImageRect(
+  imgRef: React.RefObject<HTMLImageElement | null>,
+  boxRef: React.RefObject<HTMLElement | null>,
+  dep: string
+) {
+  const [rect, setRect] = useState<{ left: number; top: number; width: number; height: number } | null>(
+    null
+  );
 
-// Мок на время прототипа — в будущем данные пойдут из БД (плюс подсветка геометрии на схеме по выбранной строке)
-const MOCK_ROOMS_BY_FLOOR: Record<number, ExplicationRoom[]> = {
-  1: [
-    { name: "Гостиная-кухня", area: 32.4 },
-    { name: "Спальня", area: 14.1 },
-    { name: "Санузел", area: 4.8 },
-    { name: "Прихожая", area: 6.2 },
-    { name: "Терраса", area: 12.5 },
-    { name: "Крыльцо", area: 3.1 }
-  ],
-  2: [
-    { name: "Спальня 1", area: 16.3 },
-    { name: "Спальня 2", area: 13.7 },
-    { name: "Санузел", area: 5.4 },
-    { name: "Балкон", area: 6.8 }
-  ]
-};
+  useEffect(() => {
+    const img = imgRef.current;
+    const box = boxRef.current;
+    if (!img || !box) return;
 
-function mockRoomsForFloor(floor: number): ExplicationRoom[] {
-  return MOCK_ROOMS_BY_FLOOR[floor] ?? MOCK_ROOMS_BY_FLOOR[1]!;
+    function update() {
+      if (!img || !box) return;
+      const cw = box.clientWidth;
+      const ch = box.clientHeight;
+      const nw = img.naturalWidth;
+      const nh = img.naturalHeight;
+      if (!cw || !ch || !nw || !nh) return;
+      const scale = Math.min(cw / nw, ch / nh);
+      const width = nw * scale;
+      const height = nh * scale;
+      setRect({ left: (cw - width) / 2, top: (ch - height) / 2, width, height });
+    }
+
+    update();
+    if (!img.complete) img.addEventListener("load", update);
+    const resizeObserver = new ResizeObserver(update);
+    resizeObserver.observe(box);
+    return () => {
+      img.removeEventListener("load", update);
+      resizeObserver.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dep]);
+
+  return rect;
 }
 
 function formatArea(area: number) {
   return `${area.toLocaleString("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} м²`;
+}
+
+/** Следующая точка ломаной всегда либо строго по горизонтали, либо строго по вертикали от предыдущей */
+function snapOrthogonal(from: RoomPoint, to: RoomPoint): RoomPoint {
+  const dx = Math.abs(to.x - from.x);
+  const dy = Math.abs(to.y - from.y);
+  return dx >= dy ? { x: to.x, y: from.y } : { x: from.x, y: to.y };
+}
+
+function buildRectanglePolygon(a: RoomPoint, b: RoomPoint): RoomPoint[] {
+  return [
+    { x: a.x, y: a.y },
+    { x: b.x, y: a.y },
+    { x: b.x, y: b.y },
+    { x: a.x, y: b.y }
+  ];
+}
+
+/** Если последняя точка не выровнена с первой ни по одной оси — добавляем угол, чтобы замыкание тоже было под 90° */
+function closeOrthogonalPolygon(points: RoomPoint[]): RoomPoint[] {
+  if (points.length < 3) return points;
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  if (Math.abs(last.x - first.x) < 0.01 || Math.abs(last.y - first.y) < 0.01) {
+    return points;
+  }
+  return [...points, { x: first.x, y: last.y }];
+}
+
+/** Узел контура — обычный HTML-кружок поверх картинки, а не SVG-circle: иначе он сплющивается
+ * при preserveAspectRatio="none" на некватратной картинке */
+function ContourNodeHandle({
+  point,
+  containedRect,
+  variant = "default"
+}: {
+  point: RoomPoint;
+  containedRect: { left: number; top: number; width: number; height: number };
+  variant?: "default" | "closable";
+}) {
+  const size = variant === "closable" ? 16 : 10;
+  return (
+    <div
+      className={cn(
+        "pointer-events-none absolute rounded-full border-2 border-white shadow-[0_1px_4px_rgba(0,0,0,0.4)]",
+        variant === "closable" ? "bg-emerald-500 animate-pulse" : "bg-blue-600"
+      )}
+      style={{
+        left: containedRect.left + (point.x / 100) * containedRect.width,
+        top: containedRect.top + (point.y / 100) * containedRect.height,
+        width: size,
+        height: size,
+        transform: "translate(-50%, -50%)"
+      }}
+    />
+  );
+}
+
+/** Строка экспликации с ручкой drag-and-drop слева (dnd-kit — тот же паттерн, что и в каталоге партнёра) */
+function SortableRoomRow({
+  id,
+  disabled,
+  isHighlighted,
+  onMouseEnter,
+  onMouseLeave,
+  children
+}: {
+  id: string;
+  disabled: boolean;
+  isHighlighted: boolean;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  children: ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    disabled
+  });
+
+  return (
+    <TableRow
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(isHighlighted && "bg-muted/60", isDragging && "bg-muted/50 relative z-20")}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      {!disabled ? (
+        <TableCell className="w-0 pr-0">
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground flex cursor-grab items-center active:cursor-grabbing"
+            aria-label="Перетащить, чтобы изменить порядок"
+            title="Перетащить, чтобы изменить порядок"
+            {...attributes}
+            {...listeners}
+          >
+            <IconGripVertical className="size-4" />
+          </button>
+        </TableCell>
+      ) : null}
+      {children}
+    </TableRow>
+  );
 }
 
 /** Планировка: схема этажа слева + экспликация помещений справа (с переключателем этажей) */
@@ -306,16 +492,26 @@ function FloorPlanExplication({
   assets,
   projectName,
   floors,
+  rooms,
   busyId,
+  roomBusyId = null,
   onOpen,
-  onPatch
+  onPatch,
+  onCreateRoom,
+  onPatchRoom,
+  onDeleteRoom
 }: {
   assets: AboutAsset[];
   projectName: string;
   floors: number | null;
+  rooms: ProjectRoom[];
   busyId: string | null;
+  roomBusyId?: string | null;
   onOpen: (index: number) => void;
   onPatch?: (assetId: string, patch: AboutAssetPatch) => void;
+  onCreateRoom?: (data: { floorNumber: number; name: string; area: number }) => void;
+  onPatchRoom?: (roomId: string, patch: RoomPatch) => void;
+  onDeleteRoom?: (roomId: string) => void;
 }) {
   // Таб-этажи ведём от floors проекта, а не от тегов ассетов — реальные фото планировок
   // часто не размечены по этажу (особенно после синка из Tilda), и без этого второй этаж пропадал
@@ -323,10 +519,64 @@ function FloorPlanExplication({
   const floorNumbers = floorCount > 1 ? Array.from({ length: floorCount }, (_, i) => i + 1) : [1];
   const [selectedFloor, setSelectedFloor] = useState(floorNumbers[0] ?? 1);
   const [floorAssetIndex, setFloorAssetIndex] = useState(0);
+  const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
+  const roomDragSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  );
+  const [drawingRoomId, setDrawingRoomId] = useState<string | null>(null);
+  const [drawTool, setDrawTool] = useState<DrawTool>("rectangle");
+  const [draftPolygon, setDraftPolygon] = useState<RoomPoint[]>([]);
+  const [rectStart, setRectStart] = useState<RoomPoint | null>(null);
+  const [cursorPoint, setCursorPoint] = useState<RoomPoint | null>(null);
+
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const [toolbarPos, setToolbarPos] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => {
     setFloorAssetIndex(0);
   }, [selectedFloor]);
+
+  // Плашка инструментов — не оверлей ВНУТРИ схемы (перекрывает точки клика), а портал,
+  // подвешенный чуть выше блока схемы; не зависит от overflow-hidden контейнера
+  function measureToolbarPos() {
+    const box = boxRef.current;
+    if (!box) return null;
+    const boxRect = box.getBoundingClientRect();
+    const toolbarWidth = toolbarRef.current?.offsetWidth ?? 480;
+    const toolbarHeight = toolbarRef.current?.offsetHeight ?? 44;
+    return {
+      top: Math.max(8, boxRect.top - toolbarHeight - 8),
+      left: Math.min(
+        Math.max(8, boxRect.left + boxRect.width / 2 - toolbarWidth / 2),
+        window.innerWidth - toolbarWidth - 8
+      )
+    };
+  }
+
+  useLayoutEffect(() => {
+    if (!drawingRoomId) {
+      setToolbarPos(null);
+      return;
+    }
+    setToolbarPos(measureToolbarPos());
+    const raf = window.requestAnimationFrame(() => setToolbarPos(measureToolbarPos()));
+    return () => window.cancelAnimationFrame(raf);
+  }, [drawingRoomId, drawTool, rectStart, draftPolygon.length]);
+
+  useEffect(() => {
+    if (!drawingRoomId) return;
+    function reposition() {
+      setToolbarPos(measureToolbarPos());
+    }
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
+  }, [drawingRoomId]);
 
   // Дом одноэтажный — разметка по этажу не нужна, любой ассет планировки однозначно 1-й этаж.
   // Если этажность здания вырастет, ассеты автоматически перестанут маркироваться неявно.
@@ -340,46 +590,390 @@ function FloorPlanExplication({
   // независимо от того, есть ли уже тегированное фото. В обычном просмотре показываем только тегированное
   const floorAssets = onPatch ? [...taggedForFloor, ...untagged] : taggedForFloor;
   const current = floorAssets[Math.min(floorAssetIndex, floorAssets.length - 1)];
+  const containedRect = useContainedImageRect(imgRef, boxRef, `${current?.id ?? ""}`);
 
   function stepFloorAsset(delta: number) {
     if (floorAssets.length < 2) return;
     setFloorAssetIndex((prev) => (prev + delta + floorAssets.length) % floorAssets.length);
   }
 
+  function resetDraft() {
+    setDraftPolygon([]);
+    setRectStart(null);
+    setCursorPoint(null);
+  }
+
+  function startDrawing(room: ProjectRoom) {
+    setDrawingRoomId(room.id);
+    setDrawTool("rectangle");
+    resetDraft();
+  }
+
+  function cancelDrawing() {
+    setDrawingRoomId(null);
+    resetDraft();
+  }
+
+  function selectDrawTool(tool: DrawTool) {
+    if (tool === drawTool) return;
+    setDrawTool(tool);
+    resetDraft();
+  }
+
+  function commitPolygon(polygon: RoomPoint[]) {
+    if (!drawingRoomId) return;
+    onPatchRoom?.(drawingRoomId, { polygon });
+    setDrawingRoomId(null);
+    resetDraft();
+  }
+
+  function undoLastStep() {
+    if (drawTool === "rectangle") {
+      setRectStart(null);
+      return;
+    }
+    setDraftPolygon((prev) => prev.slice(0, -1));
+  }
+
+  function finishOrthogonal() {
+    if (draftPolygon.length < 3) return;
+    commitPolygon(closeOrthogonalPolygon(draftPolygon));
+  }
+
+  function pixelDistance(a: RoomPoint, b: RoomPoint): number {
+    if (!containedRect) return Infinity;
+    const dx = ((a.x - b.x) / 100) * containedRect.width;
+    const dy = ((a.y - b.y) / 100) * containedRect.height;
+    return Math.hypot(dx, dy);
+  }
+
+  // Мягкое примагничивание к вершинам соседних помещений — только пока курсор реально рядом,
+  // стоит увести мышь дальше — точка ставится там, где кликнули, без принуждения
+  function magnetSnap(point: RoomPoint): RoomPoint {
+    const threshold = 10;
+    let best = point;
+    let bestDist = threshold;
+    for (const room of floorRooms) {
+      if (room.id === drawingRoomId) continue;
+      for (const vertex of room.polygon) {
+        const dist = pixelDistance(point, vertex);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = vertex;
+        }
+      }
+    }
+    return best;
+  }
+
+  function pointFromEvent(event: React.MouseEvent<SVGSVGElement>): RoomPoint {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.min(100, Math.max(0, ((event.clientX - rect.left) / rect.width) * 100));
+    const y = Math.min(100, Math.max(0, ((event.clientY - rect.top) / rect.height) * 100));
+    return magnetSnap({ x, y });
+  }
+
+  function handleSvgMouseMove(event: React.MouseEvent<SVGSVGElement>) {
+    if (!drawingRoomId) return;
+    setCursorPoint(pointFromEvent(event));
+  }
+
+  function handleSvgClick(event: React.MouseEvent<SVGSVGElement>) {
+    if (!drawingRoomId) return;
+    const point = pointFromEvent(event);
+
+    if (drawTool === "rectangle") {
+      if (!rectStart) {
+        setRectStart(point);
+        return;
+      }
+      commitPolygon(buildRectanglePolygon(rectStart, point));
+      return;
+    }
+
+    // Ломаная: замыкаем клик по первой точке, иначе добавляем следующий угол под 90°
+    const first = draftPolygon[0];
+    if (first && draftPolygon.length >= 3 && pixelDistance(point, first) < 14) {
+      commitPolygon(closeOrthogonalPolygon(draftPolygon));
+      return;
+    }
+    const last = draftPolygon[draftPolygon.length - 1];
+    setDraftPolygon((prev) => [...prev, last ? snapOrthogonal(last, point) : point]);
+  }
+
   const assetIndex = current ? assets.indexOf(current) : -1;
   const busy = current ? busyId === current.id : false;
   const floorOptions = Array.from({ length: Math.max(floors ?? 0, 0) }, (_, i) => i + 1);
-  const rooms = mockRoomsForFloor(selectedFloor);
-  const totalArea = rooms.reduce((sum, room) => sum + room.area, 0);
+  const floorRooms = rooms
+    .filter((room) => room.floorNumber === selectedFloor)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const canEditRooms = Boolean(onPatchRoom);
+
+  function handleRoomDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = floorRooms.findIndex((room) => room.id === active.id);
+    const newIndex = floorRooms.findIndex((room) => room.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const reordered = arrayMove(floorRooms, oldIndex, newIndex);
+    reordered.forEach((room, index) => {
+      if (room.sortOrder !== index) {
+        onPatchRoom?.(room.id, { sortOrder: index });
+      }
+    });
+  }
+
+  function polygonToSvgPoints(polygon: RoomPoint[]) {
+    return polygon.map((point) => `${point.x},${point.y}`).join(" ");
+  }
 
   return (
     <div className="flex flex-col gap-2 gallery-compact:h-[clamp(320px,52vh,560px)] gallery-compact:flex-row">
-      <div className="bg-muted relative overflow-hidden rounded-xl border gallery-compact:h-full gallery-compact:min-w-0 gallery-compact:flex-[2]">
+      {drawingRoomId && toolbarPos && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={toolbarRef}
+              style={{ position: "fixed", top: toolbarPos.top, left: toolbarPos.left, zIndex: 9999 }}
+              className="flex flex-wrap items-center gap-1.5 rounded-full bg-background/95 p-1.5 shadow-md backdrop-blur"
+            >
+              <div className="bg-muted flex items-center gap-0.5 rounded-full p-0.5">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant={drawTool === "rectangle" ? "default" : "ghost"}
+                  className="size-7 rounded-full"
+                  onClick={() => selectDrawTool("rectangle")}
+                  aria-label="Прямоугольник"
+                  title="Прямоугольник"
+                >
+                  <IconRectangle className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant={drawTool === "orthogonal" ? "default" : "ghost"}
+                  className="size-7 rounded-full"
+                  onClick={() => selectDrawTool("orthogonal")}
+                  aria-label="Ломаная, углы 90°"
+                  title="Ломаная, углы 90°"
+                >
+                  <IconShape3 className="size-4" />
+                </Button>
+              </div>
+
+              <span className="text-muted-foreground w-96 shrink-0 px-1 text-center text-xs whitespace-nowrap">
+                {drawTool === "rectangle"
+                  ? rectStart
+                    ? "Кликните противоположный угол"
+                    : "Кликните первый угол прямоугольника"
+                  : draftPolygon.length === 0
+                    ? "Кликайте по углам — стороны выравниваются под 90°"
+                    : draftPolygon.length < 3
+                      ? `Точек: ${draftPolygon.length}`
+                      : "Кликните по первой точке или нажмите ✓, чтобы замкнуть"}
+              </span>
+
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-7 rounded-full"
+                disabled={drawTool === "rectangle" ? !rectStart : draftPolygon.length === 0}
+                onClick={undoLastStep}
+                aria-label="Отменить последний шаг"
+                title="Отменить последний шаг"
+              >
+                <IconArrowBackUp className="size-4" />
+              </Button>
+
+              {drawTool === "orthogonal" ? (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-7 rounded-full"
+                  disabled={draftPolygon.length < 3}
+                  onClick={finishOrthogonal}
+                  aria-label="Замкнуть контур"
+                  title="Замкнуть контур"
+                >
+                  <IconCheck className="size-4" />
+                </Button>
+              ) : null}
+
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-7 rounded-full"
+                onClick={cancelDrawing}
+                aria-label="Отменить рисование"
+                title="Отменить рисование"
+              >
+                <IconX className="size-4" />
+              </Button>
+            </div>,
+            document.body
+          )
+        : null}
+
+      <div
+        ref={boxRef}
+        className="bg-muted relative overflow-hidden rounded-xl border gallery-compact:h-full gallery-compact:min-w-0 gallery-compact:flex-[2]"
+      >
         {current ? (
           <>
-            <button
-              type="button"
-              onClick={() => onOpen(assetIndex)}
-              className="bg-background relative block aspect-video w-full cursor-zoom-in transition hover:opacity-95 gallery-compact:aspect-auto gallery-compact:h-full"
-              aria-label={`Открыть: ${assetLabel(current, projectName)}`}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={current.sourceUrl}
-                alt={assetLabel(current, projectName)}
-                loading="eager"
-                decoding="async"
-                draggable={false}
-                className="absolute inset-0 size-full object-contain select-none"
-              />
-            </button>
+            {drawingRoomId ? (
+              <div className="bg-background relative block aspect-video w-full gallery-compact:aspect-auto gallery-compact:h-full">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  ref={imgRef}
+                  src={current.sourceUrl}
+                  alt={assetLabel(current, projectName)}
+                  loading="eager"
+                  decoding="async"
+                  draggable={false}
+                  className="absolute inset-0 size-full object-contain select-none"
+                />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onOpen(assetIndex)}
+                className="bg-background relative block aspect-video w-full cursor-zoom-in transition hover:opacity-95 gallery-compact:aspect-auto gallery-compact:h-full"
+                aria-label={`Открыть: ${assetLabel(current, projectName)}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  ref={imgRef}
+                  src={current.sourceUrl}
+                  alt={assetLabel(current, projectName)}
+                  loading="eager"
+                  decoding="async"
+                  draggable={false}
+                  className="absolute inset-0 size-full object-contain select-none"
+                />
+              </button>
+            )}
+
+            {containedRect ? (
+              <svg
+                className="absolute"
+                style={{
+                  left: containedRect.left,
+                  top: containedRect.top,
+                  width: containedRect.width,
+                  height: containedRect.height,
+                  cursor: drawingRoomId ? "crosshair" : undefined
+                }}
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                onClick={drawingRoomId ? handleSvgClick : undefined}
+                onMouseMove={drawingRoomId ? handleSvgMouseMove : undefined}
+                onMouseLeave={drawingRoomId ? () => setCursorPoint(null) : undefined}
+              >
+                {floorRooms
+                  .filter((room) => room.polygon.length >= 3 && room.id !== drawingRoomId)
+                  .map((room) => {
+                    // Во время рисования — только тонкий ориентир контуром соседей, без интерактива
+                    if (drawingRoomId) {
+                      return (
+                        <polygon
+                          key={room.id}
+                          points={polygonToSvgPoints(room.polygon)}
+                          vectorEffect="non-scaling-stroke"
+                          fill="rgba(100,116,139,0.06)"
+                          stroke="rgba(100,116,139,0.45)"
+                          strokeDasharray="2 2"
+                          strokeWidth={1}
+                          style={{ pointerEvents: "none" }}
+                        />
+                      );
+                    }
+                    const active = hoveredRoomId === room.id;
+                    return (
+                      <polygon
+                        key={room.id}
+                        points={polygonToSvgPoints(room.polygon)}
+                        fill={active ? "rgba(37,99,235,0.28)" : "rgba(0,0,0,0)"}
+                        stroke="none"
+                        className="pointer-events-auto cursor-pointer transition-colors duration-150"
+                        onMouseEnter={() => setHoveredRoomId(room.id)}
+                        onMouseLeave={() => setHoveredRoomId((prev) => (prev === room.id ? null : prev))}
+                      />
+                    );
+                  })}
+
+                {drawingRoomId && drawTool === "rectangle" && rectStart && cursorPoint ? (
+                  <polygon
+                    points={polygonToSvgPoints(buildRectanglePolygon(rectStart, cursorPoint))}
+                    vectorEffect="non-scaling-stroke"
+                    fill="rgba(37,99,235,0.18)"
+                    stroke="rgba(37,99,235,0.85)"
+                    strokeDasharray="2 1.5"
+                    strokeWidth={1.5}
+                  />
+                ) : null}
+
+                {drawingRoomId && drawTool === "orthogonal" && draftPolygon.length > 0 ? (
+                  <>
+                    {draftPolygon.length >= 2 ? (
+                      <polyline
+                        points={polygonToSvgPoints(draftPolygon)}
+                        vectorEffect="non-scaling-stroke"
+                        fill="none"
+                        stroke="rgba(37,99,235,0.85)"
+                        strokeWidth={1.5}
+                      />
+                    ) : null}
+                    {cursorPoint
+                      ? (() => {
+                          const last = draftPolygon[draftPolygon.length - 1]!;
+                          const snapped = snapOrthogonal(last, cursorPoint);
+                          return (
+                            <line
+                              x1={last.x}
+                              y1={last.y}
+                              x2={snapped.x}
+                              y2={snapped.y}
+                              vectorEffect="non-scaling-stroke"
+                              stroke="rgba(37,99,235,0.5)"
+                              strokeDasharray="2 1.5"
+                              strokeWidth={1.5}
+                            />
+                          );
+                        })()
+                      : null}
+                  </>
+                ) : null}
+              </svg>
+            ) : null}
+
+            {drawingRoomId && containedRect ? (
+              <>
+                {drawTool === "rectangle" && rectStart ? (
+                  <ContourNodeHandle point={rectStart} containedRect={containedRect} />
+                ) : null}
+                {drawTool === "orthogonal"
+                  ? draftPolygon.map((point, index) => (
+                      <ContourNodeHandle
+                        key={index}
+                        point={point}
+                        containedRect={containedRect}
+                        variant={index === 0 && draftPolygon.length >= 3 ? "closable" : "default"}
+                      />
+                    ))
+                  : null}
+              </>
+            ) : null}
 
             <div className="pointer-events-none absolute top-3 left-3 flex flex-wrap gap-1">
               {current.isPrimary ? <Badge>Главный</Badge> : null}
               {current.isHidden ? <Badge variant="secondary">Скрыт</Badge> : null}
             </div>
 
-            {onPatch && floorAssets.length > 1 ? (
+            {onPatch && !drawingRoomId && floorAssets.length > 1 ? (
               <div
                 className="bg-background/90 absolute top-3 right-3 z-10 flex items-center gap-1 rounded-full p-1 shadow-sm backdrop-blur"
                 onClick={(event) => event.stopPropagation()}
@@ -411,9 +1005,9 @@ function FloorPlanExplication({
               </div>
             ) : null}
 
-            {onPatch ? (
+            {onPatch && !drawingRoomId ? (
               <div
-                className="bg-background/90 absolute bottom-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1.5 rounded-lg p-1.5 shadow-sm backdrop-blur"
+                className="bg-background/90 absolute bottom-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1.5 rounded-full p-1.5 shadow-sm backdrop-blur"
                 onClick={(event) => event.stopPropagation()}
                 onPointerDown={(event) => event.stopPropagation()}
               >
@@ -520,36 +1114,147 @@ function FloorPlanExplication({
         ) : null}
 
         <div className="min-h-0 overflow-hidden rounded-xl border gallery-compact:flex-1 gallery-compact:overflow-y-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Помещение</TableHead>
-                <TableHead className="text-right">Площадь</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rooms.map((room) => (
-                <TableRow key={room.name}>
-                  <TableCell className="whitespace-normal">{room.name}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatArea(room.area)}
-                  </TableCell>
+          <DndContext
+            sensors={roomDragSensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleRoomDragEnd}
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {canEditRooms ? <TableHead className="w-0" /> : null}
+                  <TableHead>Помещение</TableHead>
+                  <TableHead className="text-right">Площадь</TableHead>
+                  {canEditRooms ? <TableHead className="w-0" /> : null}
                 </TableRow>
-              ))}
-            </TableBody>
-            <TableFooter>
-              <TableRow>
-                <TableCell>Итого</TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {formatArea(totalArea)}
-                </TableCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {floorRooms.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={canEditRooms ? 4 : 2}
+                      className="text-muted-foreground text-center text-xs"
+                    >
+                      Пока нет помещений
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  <SortableContext
+                    items={floorRooms.map((room) => room.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {floorRooms.map((room) => {
+                      const roomBusy = roomBusyId === room.id;
+                      const isHovered = hoveredRoomId === room.id;
+                      return (
+                        <SortableRoomRow
+                          key={room.id}
+                          id={room.id}
+                          disabled={!canEditRooms}
+                          isHighlighted={isHovered}
+                          onMouseEnter={() => setHoveredRoomId(room.id)}
+                          onMouseLeave={() =>
+                            setHoveredRoomId((prev) => (prev === room.id ? null : prev))
+                          }
+                        >
+                          <TableCell className="whitespace-normal">
+                            {canEditRooms ? (
+                              <Input
+                                key={`${room.id}-name`}
+                                defaultValue={room.name}
+                                disabled={roomBusy}
+                                className="h-7 border-transparent bg-transparent px-1 shadow-none focus-visible:border-input focus-visible:bg-background"
+                                onBlur={(event) => {
+                                  const next = event.target.value.trim();
+                                  if (next && next !== room.name) {
+                                    onPatchRoom?.(room.id, { name: next });
+                                  } else {
+                                    event.target.value = room.name;
+                                  }
+                                }}
+                              />
+                            ) : (
+                              room.name
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {canEditRooms ? (
+                              <Input
+                                key={`${room.id}-area`}
+                                type="number"
+                                step="0.1"
+                                min="0"
+                                defaultValue={room.area}
+                                disabled={roomBusy}
+                                className="h-7 w-20 border-transparent bg-transparent px-1 text-right shadow-none focus-visible:border-input focus-visible:bg-background"
+                                onBlur={(event) => {
+                                  const next = Number(event.target.value);
+                                  if (Number.isFinite(next) && next > 0 && next !== room.area) {
+                                    onPatchRoom?.(room.id, { area: next });
+                                  } else {
+                                    event.target.value = String(room.area);
+                                  }
+                                }}
+                              />
+                            ) : (
+                              formatArea(room.area)
+                            )}
+                          </TableCell>
+                          {canEditRooms ? (
+                            <TableCell className="whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="size-7"
+                                  disabled={roomBusy}
+                                  onClick={() => startDrawing(room)}
+                                  aria-label="Обвести контур на схеме"
+                                  title="Обвести контур на схеме"
+                                >
+                                  <IconVectorTriangle className="size-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="size-7"
+                                  disabled={roomBusy}
+                                  onClick={() => onDeleteRoom?.(room.id)}
+                                  aria-label="Удалить помещение"
+                                >
+                                  {roomBusy ? (
+                                    <Spinner className="size-4" />
+                                  ) : (
+                                    <IconTrash className="size-4" />
+                                  )}
+                                </Button>
+                              </div>
+                            </TableCell>
+                          ) : null}
+                        </SortableRoomRow>
+                      );
+                    })}
+                  </SortableContext>
+                )}
+              </TableBody>
+            </Table>
+          </DndContext>
         </div>
-        <p className="text-muted-foreground shrink-0 text-xs gallery-compact:hidden">
-          Данные для примера — экспликация ещё не подключена к проекту.
-        </p>
+
+        {onCreateRoom ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => onCreateRoom({ floorNumber: selectedFloor, name: "Новое помещение", area: 1 })}
+          >
+            <IconPlus className="size-4" />
+            Добавить помещение
+          </Button>
+        ) : null}
       </div>
     </div>
   );
@@ -689,7 +1394,7 @@ function AssetCarousel({
 
           {onPatch ? (
             <div
-              className="bg-background/90 absolute bottom-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1.5 rounded-lg p-1.5 shadow-sm backdrop-blur"
+              className="bg-background/90 absolute bottom-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1.5 rounded-full p-1.5 shadow-sm backdrop-blur"
               onClick={(event) => event.stopPropagation()}
               onPointerDown={(event) => event.stopPropagation()}
             >

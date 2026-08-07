@@ -42,6 +42,16 @@ type Asset = {
   isHidden: boolean;
 };
 
+type Room = {
+  id: string;
+  projectId: string;
+  floorNumber: number;
+  name: string;
+  area: number;
+  sortOrder: number;
+  polygon: Array<{ x: number; y: number }>;
+};
+
 type SyncOverrides = Partial<
   Record<
     | "name"
@@ -80,6 +90,7 @@ type Project = {
   active: boolean;
   syncOverrides?: SyncOverrides;
   assets: Asset[];
+  rooms: Room[];
 };
 
 function Panel({ children }: { children: React.ReactNode }) {
@@ -102,6 +113,7 @@ export default function CompanyCatalogProjectPage() {
   const [savingDescription, setSavingDescription] = useState(false);
   const [savingOffer, setSavingOffer] = useState(false);
   const [assetBusyId, setAssetBusyId] = useState<string | null>(null);
+  const [roomBusyId, setRoomBusyId] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -170,6 +182,51 @@ export default function CompanyCatalogProjectPage() {
       toast.error(err instanceof Error ? err.message : "Не удалось обновить ассет");
     } finally {
       setAssetBusyId(null);
+    }
+  }
+
+  async function createRoom(body: { floorNumber: number; name: string; area: number }) {
+    if (!project) return;
+    try {
+      const updated = await apiFetch<Project>(`/api/company/catalog/projects/${project.id}/rooms`, {
+        method: "POST",
+        body: JSON.stringify(body)
+      });
+      setProject(updated);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось добавить помещение");
+    }
+  }
+
+  async function patchRoom(
+    roomId: string,
+    body: { name?: string; area?: number; polygon?: Array<{ x: number; y: number }> }
+  ) {
+    setRoomBusyId(roomId);
+    try {
+      const updated = await apiFetch<Project>(`/api/company/catalog/rooms/${roomId}`, {
+        method: "PATCH",
+        body: JSON.stringify(body)
+      });
+      setProject(updated);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось обновить помещение");
+    } finally {
+      setRoomBusyId(null);
+    }
+  }
+
+  async function deleteRoom(roomId: string) {
+    setRoomBusyId(roomId);
+    try {
+      const updated = await apiFetch<Project>(`/api/company/catalog/rooms/${roomId}`, {
+        method: "DELETE"
+      });
+      setProject(updated);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось удалить помещение");
+    } finally {
+      setRoomBusyId(null);
     }
   }
 
@@ -279,15 +336,24 @@ export default function CompanyCatalogProjectPage() {
                   description={project.description}
                   assets={project.assets}
                   floors={project.floors}
+                  rooms={project.rooms}
                   editable={editMode}
                   savingDescription={savingDescription}
                   onSaveDescription={(next) => void saveDescription(next)}
                   descriptionProtected={Boolean(project.syncOverrides?.description)}
                   assetBusyId={assetBusyId}
+                  roomBusyId={roomBusyId}
                   {...(editMode
                     ? {
                         onPatchAsset: (assetId: string, patch: AboutAssetPatch) =>
-                          void patchAsset(assetId, patch)
+                          void patchAsset(assetId, patch),
+                        onCreateRoom: (body: { floorNumber: number; name: string; area: number }) =>
+                          void createRoom(body),
+                        onPatchRoom: (
+                          roomId: string,
+                          patch: { name?: string; area?: number; polygon?: Array<{ x: number; y: number }> }
+                        ) => void patchRoom(roomId, patch),
+                        onDeleteRoom: (roomId: string) => void deleteRoom(roomId)
                       }
                     : {})}
                   extra={

@@ -141,6 +141,15 @@ type Project = {
     sortOrder: number;
     isPrimary: boolean;
   }>;
+  rooms: Array<{
+    id: string;
+    projectId: string;
+    floorNumber: number;
+    name: string;
+    area: number;
+    sortOrder: number;
+    polygon: Array<{ x: number; y: number }>;
+  }>;
 };
 
 const FAVORITES_KEY = "avgst.partner.catalog.favorites";
@@ -503,6 +512,7 @@ export default function PartnerCatalogProjectPage() {
                     description={project.description}
                     assets={project.assets}
                     floors={project.floors}
+                    rooms={project.rooms}
                   />
                 </Panel>
               </TabsContent>

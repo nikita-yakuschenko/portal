@@ -239,7 +239,7 @@ export function InlineEditPopover({
               id={panelId}
               role="dialog"
               aria-label={ariaLabel}
-              className="bg-popover text-popover-foreground fixed z-50 flex max-w-[calc(100vw-1rem)] min-w-[12rem] items-center gap-1 rounded-lg border p-1.5 shadow-md"
+              className="bg-background/90 text-popover-foreground fixed z-50 flex max-w-[calc(100vw-1rem)] min-w-[12rem] items-center gap-1 rounded-full p-1.5 shadow-sm backdrop-blur"
               style={{ top: panelPos.top, left: panelPos.left }}
             >
               {/* align=end: кнопки слева + панель у правого края триггера */}

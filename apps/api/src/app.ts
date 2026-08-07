@@ -156,6 +156,24 @@ const updateCatalogAssetSchema = z.object({
   isHidden: z.boolean().optional()
 });
 
+const roomPolygonPointSchema = z.object({
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100)
+});
+
+const createProjectRoomSchema = z.object({
+  floorNumber: z.number().int().positive(),
+  name: z.string().min(1),
+  area: z.number().positive()
+});
+
+const updateProjectRoomSchema = z.object({
+  name: z.string().min(1).optional(),
+  area: z.number().positive().optional(),
+  polygon: z.array(roomPolygonPointSchema).optional(),
+  sortOrder: z.number().int().nonnegative().optional()
+});
+
 const factoryOfferLineSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -750,6 +768,69 @@ export async function buildApp() {
     const project = await portalService.updateCatalogAsset(id, parsed.data);
     if (!project) {
       return reply.status(404).send({ message: "Ассет не найден" });
+    }
+    return project;
+  });
+
+  app.post("/api/company/catalog/projects/:id/rooms", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const parsed = createProjectRoomSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    const { id } = request.params as { id: string };
+    const project = await portalService.createProjectRoom(id, parsed.data);
+    if (!project) {
+      return reply.status(404).send({ message: "Проект не найден" });
+    }
+    return project;
+  });
+
+  app.patch("/api/company/catalog/rooms/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const parsed = updateProjectRoomSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    if (
+      parsed.data.name === undefined &&
+      parsed.data.area === undefined &&
+      parsed.data.polygon === undefined &&
+      parsed.data.sortOrder === undefined
+    ) {
+      return reply
+        .status(400)
+        .send({ message: "Нужно передать name, area, polygon и/или sortOrder" });
+    }
+
+    const { id } = request.params as { id: string };
+    const project = await portalService.updateProjectRoom(id, parsed.data);
+    if (!project) {
+      return reply.status(404).send({ message: "Помещение не найдено" });
+    }
+    return project;
+  });
+
+  app.delete("/api/company/catalog/rooms/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const { id } = request.params as { id: string };
+    const project = await portalService.deleteProjectRoom(id);
+    if (!project) {
+      return reply.status(404).send({ message: "Помещение не найдено" });
     }
     return project;
   });
