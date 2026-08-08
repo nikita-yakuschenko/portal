@@ -89,7 +89,7 @@ export function SocialQrCard({
   platform: PartnerSiteSocialId;
   profileUrl: string;
   brandName: string;
-  /** Логотип партнёра — в круге над карточкой */
+  /** Сокращённый знак партнёра (как favicon) — в круге над карточкой */
   brandLogo?: string | undefined;
 }) {
   const brand = PLATFORM_BRANDS[platform];
@@ -124,8 +124,10 @@ export function SocialQrCard({
               style={{ background: brand.ink }}
             >
               {brandLogo ? (
+                // contain, а не cover: если знака нет и подставился широкий
+                // логотип, cover срезал бы его до одной буквы
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={brandLogo} alt="" className="size-full object-cover" draggable={false} />
+                <img src={brandLogo} alt="" className="size-full object-contain" draggable={false} />
               ) : (
                 <span
                   className="text-[40px] leading-none font-semibold text-white"

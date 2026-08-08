@@ -515,7 +515,8 @@ export function PartnerSitePreviewChrome({ children }: { children: React.ReactNo
         brand={{
           name: draft.name,
           address: draft.address,
-          logoDataUrl: draft.logoDataUrl
+          logoDataUrl: draft.logoDataUrl,
+          faviconDataUrl: draft.faviconDataUrl
         }}
         postLeadSocialPool={resolvePostLeadSocialPool(draft)}
         onSubmitLead={submitLead}

@@ -203,6 +203,8 @@ export function ConsultationDialog({
     name: string;
     address: string;
     logoDataUrl: string;
+    /** Сокращённый знак: в круг на QR широкий логотип не влезает */
+    faviconDataUrl: string;
   };
   /** Пул для ротации: на каждую заявку берём следующую сеть */
   postLeadSocialPool: PartnerSiteSocialLink[];
@@ -318,6 +320,8 @@ export function ConsultationDialog({
   const brandName = brand.name.trim();
   const brandAddress = brand.address.trim();
   const brandLogo = brand.logoDataUrl.trim();
+  // Круг на QR-карточке квадратный — тот же выбор, что у favicon вкладки
+  const brandMark = brand.faviconDataUrl.trim() || brandLogo;
   // После формы справа — дом, если есть; иначе бренд. Экскурсия — всегда фото завода.
   const showProjectAside =
     !isFactoryTour && Boolean(projectImageUrl) && step !== "form";
@@ -590,7 +594,7 @@ export function ConsultationDialog({
                 <ConsultationSocialPhone
                   social={offeredSocial}
                   brandName={brandName}
-                  brandLogo={brandLogo}
+                  brandLogo={brandMark}
                   projectImageUrl={projectImageUrl}
                   projectName={projectName}
                 />
