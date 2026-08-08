@@ -125,9 +125,15 @@ export function SocialQrCard({
             >
               {brandLogo ? (
                 // contain, а не cover: если знака нет и подставился широкий
-                // логотип, cover срезал бы его до одной буквы
+                // логотип, cover срезал бы его до одной буквы. Отступ 14px даёт
+                // квадрат 64px — он вписан в круг, поэтому углы знака не срезаются
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={brandLogo} alt="" className="size-full object-contain" draggable={false} />
+                <img
+                  src={brandLogo}
+                  alt=""
+                  className="size-full object-contain p-[14px]"
+                  draggable={false}
+                />
               ) : (
                 <span
                   className="text-[40px] leading-none font-semibold text-white"
