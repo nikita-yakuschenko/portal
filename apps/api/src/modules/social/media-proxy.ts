@@ -19,18 +19,8 @@ const ALLOWED_HOST_SUFFIXES = [
   ".dzeninfra.ru"
 ];
 
-const ALLOWED_CONTENT_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "image/avif",
-  // Видео Telegram: чёткий кадр есть только в самом файле, превью размыто
-  "video/mp4"
-];
-
-/** Потолок на один кусок видео — плеер докачает остальное запросами Range */
-const VIDEO_CHUNK_LIMIT = 24 * 1024 * 1024;
+// Только изображения: экраны показывают аватар профиля, видео никуда не идёт
+const ALLOWED_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"];
 
 export function isAllowedMediaUrl(raw: string): boolean {
   let url: URL;
@@ -50,22 +40,9 @@ export function isAllowedMediaUrl(raw: string): boolean {
 export type ProxiedMedia = {
   contentType: string;
   body: Buffer;
-  /** 206 при отдаче диапазона — иначе браузер не станет играть видео */
-  status: number;
-  contentRange?: string | undefined;
 };
 
-/** Видео тяжелее картинок, но не бесконечно: потолок на один кусок */
-function limitFor(contentType: string): number {
-  return contentType.startsWith("video/")
-    ? Math.max(config.social.mediaMaxBytes, VIDEO_CHUNK_LIMIT)
-    : config.social.mediaMaxBytes;
-}
-
-export async function fetchProxiedMedia(
-  rawUrl: string,
-  range?: string | undefined
-): Promise<ProxiedMedia> {
+export async function fetchProxiedMedia(rawUrl: string): Promise<ProxiedMedia> {
   if (!isAllowedMediaUrl(rawUrl)) {
     throw new OutboundError("Домен не разрешён", "host_not_allowed");
   }
@@ -77,11 +54,7 @@ export async function fetchProxiedMedia(
     const response = await fetch(rawUrl, {
       signal: controller.signal,
       redirect: "follow",
-      headers: {
-        Accept: "image/*,video/*",
-        // Диапазон прокидываем как есть: плеер сам решает, что ему нужно
-        ...(range ? { Range: range } : {})
-      }
+      headers: { Accept: "image/*" }
     });
 
     if (!response.ok) {
@@ -93,7 +66,7 @@ export async function fetchProxiedMedia(
       throw new OutboundError(`Неподходящий тип ${contentType || "—"}`, "content_type_rejected");
     }
 
-    const maxBytes = limitFor(contentType);
+    const maxBytes = config.social.mediaMaxBytes;
     const declaredLength = Number(response.headers.get("content-length") ?? "0");
     if (declaredLength > maxBytes) {
       throw new OutboundError("Файл слишком большой", "response_too_large");
@@ -104,12 +77,7 @@ export async function fetchProxiedMedia(
       throw new OutboundError("Файл слишком большой", "response_too_large");
     }
 
-    return {
-      contentType,
-      body: buffer,
-      status: response.status === 206 ? 206 : 200,
-      contentRange: response.headers.get("content-range") ?? undefined
-    };
+    return { contentType, body: buffer };
   } catch (error) {
     if (error instanceof OutboundError) throw error;
     if (error instanceof Error && error.name === "AbortError") {

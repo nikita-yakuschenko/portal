@@ -35,6 +35,7 @@ export function ConsultationSocialPhone({
             partnerId={partnerId}
             brandName={brandName || social.label}
             brandLogo={brandLogo}
+            profileUrl={social.href}
           />
         </HandPhoneMockup>
       </div>
