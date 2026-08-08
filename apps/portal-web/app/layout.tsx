@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Inter } from "next/font/google";
+import { Geist, Inter, Roboto_Condensed } from "next/font/google";
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -17,6 +17,18 @@ const inter = Inter({
   display: "swap",
   variable: "--font-inter",
   weight: ["300", "400", "500", "600", "700"]
+});
+
+/**
+ * Подпись под QR-кодом на экране мокапа. Instagram печатает там имя аккаунта
+ * шрифтом Instagram Sans Condensed — он проприетарный и распространению не
+ * подлежит, поэтому берём ближайший по рисунку OFL-гротеск.
+ */
+const robotoCondensed = Roboto_Condensed({
+  subsets: ["latin", "cyrillic"],
+  display: "swap",
+  variable: "--font-qr-handle",
+  weight: ["700"]
 });
 
 const SITE_MODE = process.env.APP_ROLE === "site" || process.env.NEXT_PUBLIC_APP_ROLE === "site";
@@ -39,7 +51,7 @@ export const metadata: Metadata = SITE_MODE
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ru" className={`${geistSans.variable} ${inter.variable}`} suppressHydrationWarning>
+    <html lang="ru" className={`${geistSans.variable} ${inter.variable} ${robotoCondensed.variable}`} suppressHydrationWarning>
       <body>
         <ThemeProvider
           attribute="class"

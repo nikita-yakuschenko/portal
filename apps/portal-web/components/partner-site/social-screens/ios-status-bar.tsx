@@ -1,5 +1,7 @@
 "use client";
 
+import { SF_TEXT } from "./screen-shell";
+
 /**
  * Системная строка iOS — общая для всех экранов мокапа.
  *
@@ -12,10 +14,10 @@ export function IosStatusBar({ dark = false }: { dark?: boolean }) {
 
   return (
     <div
-      className="relative z-20 flex h-[54px] shrink-0 items-end justify-between px-[27px] pb-[6px] select-none"
-      style={{ color: tone }}
+      className="relative z-20 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-[8px] select-none"
+      style={{ color: tone, fontFamily: SF_TEXT }}
     >
-      <span className="w-[54px] text-[17px] leading-none font-semibold tracking-[-0.2px]">
+      <span className="w-[62px] text-[17px] leading-none font-semibold tracking-[-0.2px]">
         9:41
       </span>
 
@@ -25,38 +27,37 @@ export function IosStatusBar({ dark = false }: { dark?: boolean }) {
         className="absolute top-[11px] left-1/2 h-[37px] w-[125px] -translate-x-1/2 rounded-full bg-black"
       />
 
-      <span className="flex w-[78px] items-center justify-end gap-[5px]">
-        <svg width="18" height="12" viewBox="0 0 18 12" fill="none" aria-hidden>
-          <rect x="0" y="8" width="3" height="4" rx="1" fill={tone} />
-          <rect x="5" y="6" width="3" height="6" rx="1" fill={tone} />
-          <rect x="10" y="3" width="3" height="9" rx="1" fill={tone} />
-          <rect x="15" y="0" width="3" height="12" rx="1" fill={tone} />
+      <span className="flex items-center gap-[7px]">
+        {/* Уровень сигнала */}
+        <svg width="19" height="13" viewBox="0 0 19 13" fill="none" aria-hidden>
+          <rect x="0" y="9" width="3.4" height="4" rx="1.1" fill={tone} />
+          <rect x="5.2" y="6.4" width="3.4" height="6.6" rx="1.1" fill={tone} />
+          <rect x="10.4" y="3.4" width="3.4" height="9.6" rx="1.1" fill={tone} />
+          <rect x="15.6" y="0" width="3.4" height="13" rx="1.1" fill={tone} />
         </svg>
 
-        <svg width="16" height="12" viewBox="0 0 16 12" fill="none" aria-hidden>
+        {/* Wi-Fi */}
+        <svg width="17" height="13" viewBox="0 0 17 13" fill="none" aria-hidden>
           <path
-            d="M8 10.5 6.2 8.7a2.6 2.6 0 0 1 3.6 0L8 10.5Zm0-4.2a5.2 5.2 0 0 0-3.7 1.5L2.9 6.4a7.2 7.2 0 0 1 10.2 0l-1.4 1.4A5.2 5.2 0 0 0 8 6.3Zm0-3.8a9 9 0 0 0-6.4 2.6L.2 3.7a11 11 0 0 1 15.6 0l-1.4 1.4A9 9 0 0 0 8 2.5Z"
+            d="M8.5 12.6 6.3 10.2a3.1 3.1 0 0 1 4.4 0L8.5 12.6Zm-4-4.4a6.4 6.4 0 0 1 8 0l1.6-1.7a8.7 8.7 0 0 0-11.2 0l1.6 1.7Zm-3-3.2a10.9 10.9 0 0 1 14 0l1.6-1.7a13.2 13.2 0 0 0-17.2 0l1.6 1.7Z"
             fill={tone}
           />
         </svg>
 
-        {/* Цельная батарея iOS, без процентов и без состояния зарядки */}
-        <svg width="27" height="13" viewBox="0 0 27 13" fill="none" aria-hidden>
+        {/* Батарея: цельная, без процентов и состояния зарядки */}
+        <svg width="28" height="13" viewBox="0 0 28 13" fill="none" aria-hidden>
           <rect
-            x="0.5"
-            y="0.5"
-            width="23"
-            height="12"
-            rx="3.8"
+            x="0.6"
+            y="0.6"
+            width="24"
+            height="11.8"
+            rx="3.6"
             stroke={tone}
-            strokeOpacity="0.35"
+            strokeOpacity="0.38"
+            strokeWidth="1.1"
           />
-          <rect x="2" y="2" width="18" height="9" rx="2.5" fill={tone} />
-          <path
-            d="M25 4.5v4a2.1 2.1 0 0 0 0-4Z"
-            fill={tone}
-            fillOpacity="0.4"
-          />
+          <rect x="2.2" y="2.2" width="18.6" height="8.6" rx="2.3" fill={tone} />
+          <path d="M26.4 4.5v4a2.15 2.15 0 0 0 0-4Z" fill={tone} fillOpacity="0.42" />
         </svg>
       </span>
     </div>
@@ -66,10 +67,10 @@ export function IosStatusBar({ dark = false }: { dark?: boolean }) {
 /** Индикатор жеста «домой» — нижняя чёрточка */
 export function IosHomeIndicator({ dark = false }: { dark?: boolean }) {
   return (
-    <div className="flex h-[21px] shrink-0 items-center justify-center">
+    <div className="flex h-[24px] shrink-0 items-center justify-center">
       <span
         className="h-[5px] w-[139px] rounded-full"
-        style={{ background: dark ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.75)" }}
+        style={{ background: dark ? "rgba(255,255,255,0.75)" : "rgba(0,0,0,0.8)" }}
       />
     </div>
   );

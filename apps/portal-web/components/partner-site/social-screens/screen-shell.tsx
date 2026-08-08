@@ -6,10 +6,18 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 export const SCREEN_WIDTH = 393;
 export const SCREEN_HEIGHT = 852;
 
+/**
+ * Системные шрифты iOS.
+ *
+ * SF Pro — проприетарный шрифт Apple: его лицензия допускает использование в
+ * интерфейсах под платформы Apple, но раздавать файл шрифта с сайта нельзя.
+ * Поэтому стек: на устройствах Apple подхватывается настоящий SF, на остальных
+ * — Inter, который создавался как его аналог и уже подключён в проекте.
+ */
 export const SF_TEXT =
-  '"SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif';
+  '"SF Pro Text", -apple-system, BlinkMacSystemFont, var(--font-inter), "Segoe UI", Arial, sans-serif';
 export const SF_DISPLAY =
-  '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif';
+  '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, var(--font-inter), "Segoe UI", Arial, sans-serif';
 
 /**
  * Экран рисуется в натуральных размерах телефона и масштабируется целиком.

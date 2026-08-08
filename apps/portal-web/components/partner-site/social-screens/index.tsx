@@ -1,37 +1,28 @@
 "use client";
 
-import { useSocialProfile } from "@/hooks/use-social-profile";
 import type { PartnerSiteSocialId } from "@/lib/partner-site-socials";
 
-import { SocialProfileCard } from "./social-profile-card";
+import { SocialQrCard } from "./social-qr-card";
 
 /**
- * Экран площадки в мокапе: одна карточка профиля на все соцсети.
- *
- * Там, где у площадки есть провайдер, подставляются её данные — аватар,
- * название, подписчики, описание. Где провайдера нет, остаётся айдентика
- * партнёра. QR ведёт на профиль в обоих случаях.
+ * Экран площадки в мокапе телефона: фирменный фон и QR на профиль партнёра.
+ * Данные площадок не запрашиваются — экрану достаточно ссылки из конфига сайта.
  */
 export function SocialAppScreen({
   platform,
-  partnerId,
   brandName,
   brandLogo,
   profileUrl
 }: {
   platform: PartnerSiteSocialId;
-  partnerId: string | null;
   brandName: string;
-  brandLogo: string;
+  /** Логотип партнёра — в круге над карточкой кода */
+  brandLogo?: string | undefined;
   profileUrl: string;
 }) {
-  const { snapshot, loading } = useSocialProfile(platform, partnerId);
-
   return (
-    <SocialProfileCard
+    <SocialQrCard
       platform={platform}
-      snapshot={snapshot}
-      loading={loading}
       brandName={brandName}
       brandLogo={brandLogo}
       profileUrl={profileUrl}

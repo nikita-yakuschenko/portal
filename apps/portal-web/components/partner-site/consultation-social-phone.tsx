@@ -2,11 +2,10 @@
 
 import { HandPhoneMockup } from "@/components/partner-site/hand-phone-mockup";
 import { SocialAppScreen } from "@/components/partner-site/social-screens";
-import { usePartnerSitePreview } from "@/components/partner-site/preview-context";
 import type { PartnerSiteSocialLink } from "@/lib/partner-site-socials";
 
 /**
- * Правая колонка шага соцсети: фотомокап с живым интерфейсом площадки.
+ * Правая колонка шага соцсети: фотомокап с QR-экраном площадки.
  * Форма НЕ растёт — телефон absolute и торчит за её края.
  */
 export function ConsultationSocialPhone({
@@ -16,12 +15,10 @@ export function ConsultationSocialPhone({
 }: {
   social: PartnerSiteSocialLink;
   brandName: string;
-  brandLogo: string;
+  brandLogo?: string | undefined;
   projectImageUrl?: string | undefined;
   projectName?: string | undefined;
 }) {
-  const { partnerId } = usePartnerSitePreview();
-
   return (
     // h-full = высота колонки формы; overflow visible, чтобы телефон рисовался снаружи
     <aside className="relative h-full min-h-0 overflow-visible border-t border-white/10 bg-[#070809] md:border-t-0 md:border-l md:border-white/10">
@@ -32,7 +29,6 @@ export function ConsultationSocialPhone({
         <HandPhoneMockup className="w-full drop-shadow-[0_30px_60px_rgba(0,0,0,0.75)]">
           <SocialAppScreen
             platform={social.id}
-            partnerId={partnerId}
             brandName={brandName || social.label}
             brandLogo={brandLogo}
             profileUrl={social.href}
