@@ -149,6 +149,8 @@ export function postLeadSocialCopy(id: PartnerSiteSocialId): {
   title: string;
   description: string;
   cta: string;
+  /** Сноска к звёздочке в заголовке: нужна только там, где упомянута Meta */
+  note?: string;
 } {
   const description = "Проекты и ход строек — без спама в ленте.";
   const eyebrow = "Будьте на связи";
@@ -178,9 +180,10 @@ export function postLeadSocialCopy(id: PartnerSiteSocialId): {
     case "instagram":
       return {
         eyebrow,
-        title: "Подписывайтесь на наш Instagram",
+        title: "Подписывайтесь на наш Instagram*",
         description,
-        cta: "Перейти в Instagram"
+        cta: "Перейти в Instagram",
+        note: "*Принадлежит компании Meta Platforms, признанной экстремистской организацией на территории Российской Федерации, деятельность которой запрещена"
       };
     case "dzen":
       return {

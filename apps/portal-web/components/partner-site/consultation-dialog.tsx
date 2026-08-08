@@ -180,6 +180,15 @@ const SOCIAL_CTA_CLASS: Record<string, string> = {
   max: "bg-[#7B2BFF] text-white hover:bg-[#6A1FE6]"
 };
 
+/**
+ * Полоса под кнопками. Место держится во всех вариантах формы, поэтому уровень
+ * кнопок одинаков и не зависит от наличия сноски. Сноска идёт в потоке: на узких
+ * экранах она поднимает кнопки чуть выше, а не наезжает на них.
+ */
+function ActionsNote({ note }: { note?: string | undefined }) {
+  return <p className="mt-3 min-h-10 text-[0.625rem] leading-[1.35] text-white/40">{note}</p>;
+}
+
 export function ConsultationDialog({
   open,
   onOpenChange,
@@ -339,8 +348,10 @@ export function ConsultationDialog({
         showCloseButton={false}
         overlayClassName="bg-black/70 backdrop-blur-[2px]"
         className={cn(
-          // Высота формы фиксирована на всех шагах — телефон НЕ раздувает её
-          "h-[32rem] gap-0 overflow-hidden rounded-2xl border border-white/12 bg-[#0f1216] p-0 text-white shadow-2xl ring-0 sm:max-w-lg md:max-w-3xl",
+          // Высота формы фиксирована на всех шагах — телефон НЕ раздувает её.
+          // grid-rows-1 обязателен: DialogContent сам является grid, и без него
+          // его строка растёт под контент, а фиксированная высота просто режет низ
+          "h-[32rem] grid-rows-1 gap-0 overflow-hidden rounded-2xl border border-white/12 bg-[#0f1216] p-0 text-white shadow-2xl ring-0 sm:max-w-lg md:max-w-3xl",
           step === "socials" && "md:!overflow-visible"
         )}
       >
@@ -349,11 +360,15 @@ export function ConsultationDialog({
 
           <div
             className={cn(
-              "grid h-full md:grid-cols-2",
+              // grid-rows-1 = minmax(0, 1fr): без него строка растёт под контент
+              // и высокий вариант формы вылезает за фиксированную высоту диалога
+              "grid h-full grid-rows-1 md:grid-cols-2",
               step === "socials" && "md:!overflow-visible"
             )}
           >
-            <div className="flex h-full min-h-0 flex-col overflow-hidden px-7 py-8 sm:px-9 sm:py-9">
+            {/* Скролл, а не обрезка: с длинным списком выбранных опций иначе
+                теряется нижняя часть формы вместе с кнопкой отмены */}
+            <div className="flex h-full min-h-0 flex-col overflow-x-hidden overflow-y-auto px-7 py-8 sm:px-9 sm:py-9">
               <AnimatePresence mode="wait" initial={false}>
                 {step === "form" ? (
                   <motion.div key="form" {...leftMotion} className="flex h-full w-full flex-col">
@@ -424,6 +439,7 @@ export function ConsultationDialog({
                         >
                           Отмена
                         </button>
+                        <ActionsNote />
                       </div>
                     </form>
                   </motion.div>
@@ -472,6 +488,7 @@ export function ConsultationDialog({
                       >
                         Закрыть
                       </Button>
+                      <ActionsNote />
                     </div>
                   </motion.div>
                 ) : null}
@@ -535,6 +552,7 @@ export function ConsultationDialog({
                         >
                           Нет, спасибо
                         </button>
+                        <ActionsNote />
                       </div>
                     </form>
                   </motion.div>
@@ -582,6 +600,7 @@ export function ConsultationDialog({
                       >
                         Нет, спасибо
                       </button>
+                      <ActionsNote note={socialCopy.note} />
                     </div>
                   </motion.div>
                 ) : null}
