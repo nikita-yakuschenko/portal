@@ -53,9 +53,12 @@ export function HomeContactsSection({
         customerPhone: string;
         message?: string;
         projectId?: string;
+        formKind: "contact";
       } = {
         customerName: name.trim(),
-        customerPhone: phone
+        customerPhone: phone,
+        // Форма в подвале главной, а не всплывающая — отмечаем отдельно
+        formKind: "contact"
       };
       const msg = message.trim();
       if (msg) payload.message = msg;

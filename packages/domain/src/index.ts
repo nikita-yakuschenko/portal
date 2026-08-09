@@ -6,13 +6,8 @@ export type PartnerStatus = "pending" | "active" | "suspended";
 export type PartnerApplicationStatus = "new" | "under_review" | "approved" | "rejected";
 export type Role = "company_admin" | "company_manager" | "partner_owner" | "partner_member";
 export type SiteStatus = "draft" | "provisioning" | "published" | "archived";
-export type LeadEventType =
-  | "project_view"
-  | "price_request"
-  | "contact_request"
-  | "crm_delivery_succeeded"
-  | "crm_delivery_failed";
-export type LeadDeliveryStatus = "pending" | "sent" | "failed";
+/** Судьба заявки на пути в CRM: см. crm_delivery_status в схеме БД */
+export type CrmDeliveryStatus = "skipped" | "pending" | "sent" | "failed";
 export type CrmProvider = "amocrm" | "bitrix24";
 export type CatalogTechnology = "modular" | "panel_frame";
 
@@ -227,28 +222,24 @@ export interface AuthSession {
   partner?: Partner | null;
 }
 
-export interface LeadEvent {
+/** Заявка, отправленная с формы на сайте партнёра */
+export interface SiteRequest {
   id: string;
   partnerId: string;
-  siteId: string;
   projectId?: string;
-  type: LeadEventType;
+  /** Какая форма сработала */
+  formName: string;
   customerName: string;
   customerPhone: string;
   customerEmail?: string;
   message?: string;
-  metadata: Record<string, string>;
+  /** utm_source и прочие метки рекламы, если пришли с адресом страницы */
+  utm: Record<string, string>;
+  pageUrl?: string;
+  crmStatus: CrmDeliveryStatus;
+  crmError?: string;
+  crmSentAt?: string;
   createdAt: string;
-}
-
-export interface LeadDelivery {
-  id: string;
-  leadEventId: string;
-  crmConnectionId: string;
-  status: LeadDeliveryStatus;
-  externalLeadId?: string;
-  errorMessage?: string;
-  attemptedAt?: string;
 }
 
 export interface PartnerInquiry {
@@ -259,14 +250,6 @@ export interface PartnerInquiry {
   createdAt: string;
 }
 
-export interface AnalyticsSnapshot {
-  projectId: string;
-  projectName: string;
-  priceRequests: number;
-  contactRequests: number;
-  lastRequestedAt?: string;
-}
-
 export interface TildaSyncResult {
   created: number;
   updated: number;
@@ -274,15 +257,15 @@ export interface TildaSyncResult {
   errors: string[];
 }
 
-export interface CrmLeadPayload {
-  leadEvent: LeadEvent;
+export interface CrmRequestPayload {
+  request: SiteRequest;
   project?: CatalogProject;
   partner: Partner;
-  site: PartnerSite;
 }
 
 export interface CrmSendResult {
   success: boolean;
-  externalLeadId?: string;
+  /** Номер созданной сущности на стороне CRM */
+  externalId?: string;
   errorMessage?: string;
 }

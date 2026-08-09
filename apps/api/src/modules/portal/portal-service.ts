@@ -17,14 +17,13 @@ import {
   catalogProjects,
   catalogSyncRuns,
   crmConnections,
-  leadDeliveries,
-  leadEvents,
   partnerApplications,
   partnerInquiries,
   partnerProjectPrices,
   partners,
   partnerSites,
   passwordResetTokens,
+  siteRequests,
   users
 } from "../../db/schema.js";
 import { projectSlug } from "../../lib/slug.js";
@@ -1943,265 +1942,51 @@ export class PortalService {
     );
   }
 
-  async createLead(input: {
+  /**
+   * Заявка с формы на сайте партнёра. Передача в CRM ещё не реализована,
+   * поэтому статус честный: pending, когда CRM подключена и заявку предстоит
+   * отправить, skipped — когда отправлять некуда.
+   */
+  async createSiteRequest(input: {
     partnerId: string;
-    projectId?: string;
+    projectId?: string | undefined;
+    formName?: string | undefined;
     customerName: string;
     customerPhone: string;
-    customerEmail?: string;
-    message?: string;
+    customerEmail?: string | undefined;
+    message?: string | undefined;
+    utm?: Record<string, string> | undefined;
+    pageUrl?: string | undefined;
   }) {
-    const lead = {
-      id: randomUUID(),
-      partnerId: input.partnerId,
-      type: (input.projectId ? "price_request" : "contact_request") as
-        | "price_request"
-        | "contact_request",
-      customerName: input.customerName,
-      customerPhone: input.customerPhone,
-      metadata: {}
-    } as {
-      id: string;
-      partnerId: string;
-      projectId?: string;
-      type: "price_request" | "contact_request";
-      customerName: string;
-      customerPhone: string;
-      customerEmail?: string;
-      message?: string;
-      metadata: Record<string, never>;
-    };
-
-    if (input.projectId !== undefined) {
-      lead.projectId = input.projectId;
-    }
-    if (input.customerEmail !== undefined) {
-      lead.customerEmail = input.customerEmail;
-    }
-    if (input.message !== undefined) {
-      lead.message = input.message;
-    }
-
-    await db.insert(leadEvents).values(lead);
-
     const connection = await db.query.crmConnections.findFirst({
       where: and(eq(crmConnections.partnerId, input.partnerId), eq(crmConnections.isEnabled, true))
     });
 
-    if (!connection) {
-      return { lead };
-    }
-
-    const project = input.projectId
-      ? await db.query.catalogProjects.findFirst({
-          where: eq(catalogProjects.id, input.projectId)
-        })
-      : null;
-    const partner = await db.query.partners.findFirst({
-      where: eq(partners.id, input.partnerId)
-    });
-
-    if (!partner) {
-      return { lead };
-    }
-
-    const adapter = this.crmAdapters.get(connection.provider);
-    if (!adapter) {
-      return { lead };
-    }
-
-    const partnerPayload = {
-      id: partner.id,
-      companyName: partner.companyName,
-      status: partner.status,
-      region: partner.region,
-      email: partner.email,
-      phone: partner.phone,
-      createdAt: partner.createdAt.toISOString()
-    } as {
-      id: string;
-      companyName: string;
-      legalName?: string;
-      status: "pending" | "active" | "suspended";
-      region: string;
-      managerName?: string;
-      email: string;
-      phone: string;
-      createdAt: string;
-    };
-
-    if (partner.legalName !== null) {
-      partnerPayload.legalName = partner.legalName;
-    }
-    if (partner.managerName !== null) {
-      partnerPayload.managerName = partner.managerName;
-    }
-
-    const projectPayload = project
-      ? ({
-          id: project.id,
-          source: project.source,
-          sourceUid: project.sourceUid,
-          name: project.name,
-          slug: project.slug,
-          description: project.description,
-          technology:
-            project.technology === "panel_frame" ? ("panel_frame" as const) : ("modular" as const),
-          details: buildProjectDetails({
-            name: project.name,
-            technology:
-              project.technology === "panel_frame" ? "panel_frame" : "modular",
-            characteristics: []
-          }),
-          currency: project.currency,
-          projectUrl: project.projectUrl,
-          active: project.active,
-          sourcePayload: project.sourcePayload as Record<string, unknown>,
-          lastSyncedAt: project.lastSyncedAt.toISOString(),
-          assets: []
-        } as {
-          id: string;
-          source: "tilda";
-          sourceUid: string;
-          name: string;
-          slug: string;
-          description: string;
-          technology: "modular" | "panel_frame";
-          details: CatalogProjectDetails;
-          area?: number;
-          floors?: number;
-          bedrooms?: number;
-          bathrooms?: string;
-          basePrice?: number;
-          currency: string;
-          projectUrl: string;
-          active: boolean;
-          sourcePayload: Record<string, unknown>;
-          lastSyncedAt: string;
-          assets: never[];
-        })
-      : undefined;
-
-    if (projectPayload && project && project.area !== null) {
-      projectPayload.area = project.area;
-    }
-    if (projectPayload && project && project.floors !== null) {
-      projectPayload.floors = project.floors;
-    }
-    if (projectPayload && project && project.bedrooms !== null) {
-      projectPayload.bedrooms = project.bedrooms;
-    }
-    if (projectPayload && project && project.bathrooms !== null) {
-      projectPayload.bathrooms = project.bathrooms;
-    }
-    if (projectPayload && project && project.basePrice !== null) {
-      projectPayload.basePrice = project.basePrice;
-    }
-
-    const leadEventPayload = {
-      id: lead.id,
-      partnerId: lead.partnerId,
-      siteId: "portal",
-      type: lead.type,
-      customerName: lead.customerName,
-      customerPhone: lead.customerPhone,
-      metadata: {},
-      createdAt: new Date().toISOString()
-    } as {
-      id: string;
-      partnerId: string;
-      siteId: string;
-      projectId?: string;
-      type: "project_view" | "price_request" | "contact_request" | "crm_delivery_succeeded" | "crm_delivery_failed";
-      customerName: string;
-      customerPhone: string;
-      customerEmail?: string;
-      message?: string;
-      metadata: Record<string, string>;
-      createdAt: string;
-    };
-
-    if (lead.projectId !== undefined) {
-      leadEventPayload.projectId = lead.projectId;
-    }
-    if (lead.customerEmail !== undefined) {
-      leadEventPayload.customerEmail = lead.customerEmail;
-    }
-    if (lead.message !== undefined) {
-      leadEventPayload.message = lead.message;
-    }
-
-    const sendPayload = {
-      leadEvent: leadEventPayload,
-      partner: partnerPayload,
-      site: {
-        id: "portal",
-        partnerId: partner.id,
-        name: "portal",
-        status: "published" as const,
-        subdomain: "portal",
-        theme: "default",
-        contactPhone: partner.phone,
-        contactEmail: partner.email,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-    } as {
-      leadEvent: typeof leadEventPayload;
-      partner: typeof partnerPayload;
-      site: {
-        id: string;
-        partnerId: string;
-        name: string;
-        status: "published";
-        subdomain: string;
-        theme: string;
-        contactPhone: string;
-        contactEmail: string;
-        createdAt: string;
-        updatedAt: string;
-      };
-    };
-
-    const sendResult: CrmSendResult = await adapter.sendLead(
-      {
-        id: connection.id,
-        partnerId: connection.partnerId,
-        provider: connection.provider,
-        portalUrl: connection.portalUrl,
-        credentials: connection.credentials as Record<string, string>,
-        isEnabled: connection.isEnabled,
-        createdAt: connection.createdAt.toISOString()
-      },
-      projectPayload ? { ...sendPayload, project: projectPayload } : sendPayload
-    );
-
-    await db.insert(leadDeliveries).values({
+    const row = {
       id: randomUUID(),
-      leadEventId: lead.id,
-      crmConnectionId: connection.id,
-      status: sendResult.success ? "sent" : "failed",
-      externalLeadId: sendResult.externalLeadId,
-      errorMessage: sendResult.errorMessage,
-      attemptedAt: new Date()
-    });
+      partnerId: input.partnerId,
+      projectId: input.projectId ?? null,
+      formName: input.formName?.trim() || "Форма на сайте",
+      customerName: input.customerName,
+      customerPhone: input.customerPhone,
+      customerEmail: input.customerEmail ?? null,
+      message: input.message ?? null,
+      utm: input.utm ?? {},
+      pageUrl: input.pageUrl ?? null,
+      crmStatus: (connection ? "pending" : "skipped") as "pending" | "skipped"
+    };
 
-    return { lead, sendResult };
+    await db.insert(siteRequests).values(row);
+    return row;
   }
 
-  async listPartnerLeads(partnerId: string) {
-    const events = await db.select().from(leadEvents).where(eq(leadEvents.partnerId, partnerId));
-    const deliveries = await db
+  /** Заявки партнёра, свежие сверху */
+  async listSiteRequests(partnerId: string) {
+    return db
       .select()
-      .from(leadDeliveries)
-      .where(
-        inArray(
-          leadDeliveries.leadEventId,
-          events.map((event) => event.id).length > 0 ? events.map((event) => event.id) : ["__none__"]
-        )
-      );
-
-    return { events, deliveries };
+      .from(siteRequests)
+      .where(eq(siteRequests.partnerId, partnerId))
+      .orderBy(desc(siteRequests.createdAt));
   }
 
   async createInquiry(input: {

@@ -132,13 +132,48 @@ const upsertPartnerPriceSchema = z.object({
     .optional()
 });
 
-const createLeadSchema = z.object({
+/** Метки рекламы, которые имеет смысл сохранять вместе с заявкой */
+const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"] as const;
+
+const createSiteRequestSchema = z.object({
   projectId: z.string().optional(),
+  formName: z.string().max(120).optional(),
   customerName: z.string().min(2),
   customerPhone: z.string().min(5),
   customerEmail: z.email().optional(),
-  message: z.string().optional()
+  message: z.string().optional(),
+  utm: z.record(z.string(), z.string()).optional(),
+  pageUrl: z.string().max(2000).optional()
 });
+
+/** Из клиентского объекта берём только известные метки и подрезаем длину */
+function pickUtm(raw: Record<string, string> | undefined): Record<string, string> {
+  if (!raw) return {};
+  const out: Record<string, string> = {};
+  for (const key of UTM_KEYS) {
+    const value = raw[key]?.trim();
+    if (value) out[key] = value.slice(0, 200);
+  }
+  return out;
+}
+
+/** Общая сборка входа: тело формы приходит одинаковым с витрины и из превью */
+function toSiteRequestInput(
+  partnerId: string,
+  data: z.infer<typeof createSiteRequestSchema>
+) {
+  return {
+    partnerId,
+    customerName: data.customerName,
+    customerPhone: data.customerPhone,
+    utm: pickUtm(data.utm),
+    ...(data.projectId !== undefined ? { projectId: data.projectId } : {}),
+    ...(data.formName !== undefined ? { formName: data.formName } : {}),
+    ...(data.customerEmail !== undefined ? { customerEmail: data.customerEmail } : {}),
+    ...(data.message !== undefined ? { message: data.message } : {}),
+    ...(data.pageUrl !== undefined ? { pageUrl: data.pageUrl } : {})
+  };
+}
 
 const updatePartnerSiteSchema = z.object({
   config: partnerSiteDraftSchema,
@@ -378,32 +413,17 @@ export async function buildApp() {
     return project;
   });
 
-  app.post("/api/public/sites/:partnerId/leads", async (request, reply) => {
+  app.post("/api/public/sites/:partnerId/requests", async (request, reply) => {
     const { partnerId } = request.params as { partnerId: string };
     const published = await partnerSiteService.resolvePublishedByPartnerId(partnerId);
     if (!published) {
       return reply.status(404).send({ message: "Сайт не опубликован" });
     }
-    const parsed = createLeadSchema.safeParse(request.body);
+    const parsed = createSiteRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send(parsed.error.flatten());
     }
-    const leadInput = {
-      partnerId,
-      customerName: parsed.data.customerName,
-      customerPhone: parsed.data.customerPhone
-    } as {
-      partnerId: string;
-      projectId?: string;
-      customerName: string;
-      customerPhone: string;
-      customerEmail?: string;
-      message?: string;
-    };
-    if (parsed.data.projectId !== undefined) leadInput.projectId = parsed.data.projectId;
-    if (parsed.data.customerEmail !== undefined) leadInput.customerEmail = parsed.data.customerEmail;
-    if (parsed.data.message !== undefined) leadInput.message = parsed.data.message;
-    return portalService.createLead(leadInput);
+    return portalService.createSiteRequest(toSiteRequestInput(partnerId, parsed.data));
   });
 
   /** Диагностика остаётся в логе: наружу уходят только данные профиля и статус */
@@ -1662,47 +1682,27 @@ export async function buildApp() {
     }
   });
 
-  app.get("/api/partner/leads", async (request, reply) => {
+  app.get("/api/partner/requests", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
     if (roleCheck) {
       return roleCheck;
     }
-    return portalService.listPartnerLeads(getAuthUser(request)!.partnerId!);
+    return portalService.listSiteRequests(getAuthUser(request)!.partnerId!);
   });
 
-  app.post("/api/partner/leads", async (request, reply) => {
+  // Тот же приём для предпросмотра в кабинете: витрина там ходит под сессией
+  app.post("/api/partner/requests", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
     if (roleCheck) {
       return roleCheck;
     }
-    const parsed = createLeadSchema.safeParse(request.body);
+    const parsed = createSiteRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send(parsed.error.flatten());
     }
-    const leadInput = {
-      partnerId: getAuthUser(request)!.partnerId!,
-      customerName: parsed.data.customerName,
-      customerPhone: parsed.data.customerPhone
-    } as {
-      partnerId: string;
-      projectId?: string;
-      customerName: string;
-      customerPhone: string;
-      customerEmail?: string;
-      message?: string;
-    };
-
-    if (parsed.data.projectId !== undefined) {
-      leadInput.projectId = parsed.data.projectId;
-    }
-    if (parsed.data.customerEmail !== undefined) {
-      leadInput.customerEmail = parsed.data.customerEmail;
-    }
-    if (parsed.data.message !== undefined) {
-      leadInput.message = parsed.data.message;
-    }
-
-    return portalService.createLead(leadInput);
+    return portalService.createSiteRequest(
+      toSiteRequestInput(getAuthUser(request)!.partnerId!, parsed.data)
+    );
   });
 
   app.get("/api/partner/inquiries", async (request, reply) => {

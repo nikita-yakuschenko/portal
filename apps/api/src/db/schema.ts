@@ -27,14 +27,17 @@ export const roleEnum = pgEnum("role", [
 ]);
 export const catalogSourceEnum = pgEnum("catalog_source", ["tilda"]);
 export const crmProviderEnum = pgEnum("crm_provider", ["amocrm", "bitrix24"]);
-export const leadTypeEnum = pgEnum("lead_type", [
-  "project_view",
-  "price_request",
-  "contact_request",
-  "crm_delivery_succeeded",
-  "crm_delivery_failed"
+/**
+ * Судьба заявки на пути в CRM.
+ * skipped — CRM не подключена, передавать некуда; pending — подключена и
+ * заявка ждёт отправки; sent/failed — итог попытки.
+ */
+export const crmDeliveryStatusEnum = pgEnum("crm_delivery_status", [
+  "skipped",
+  "pending",
+  "sent",
+  "failed"
 ]);
-export const leadDeliveryStatusEnum = pgEnum("lead_delivery_status", ["pending", "sent", "failed"]);
 export const inquiryStatusEnum = pgEnum("inquiry_status", ["new", "answered"]);
 export const syncStatusEnum = pgEnum("sync_status", ["running", "completed", "failed"]);
 export const partnerSiteStatusEnum = pgEnum("partner_site_status", ["draft", "published"]);
@@ -212,33 +215,30 @@ export const crmConnections = pgTable("crm_connections", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
-export const leadEvents = pgTable("lead_events", {
+/**
+ * Заявка с сайта партнёра: одна строка на отправленную форму.
+ * Статус передачи в CRM держим здесь же — отдельная таблица доставок
+ * добавляла join ради одного поля.
+ */
+export const siteRequests = pgTable("site_requests", {
   id: text("id").primaryKey(),
   partnerId: text("partner_id")
     .notNull()
     .references(() => partners.id, { onDelete: "cascade" }),
   projectId: text("project_id").references(() => catalogProjects.id, { onDelete: "set null" }),
-  type: leadTypeEnum("type").notNull(),
+  /** Какая форма сработала: «Консультация», «Расчёт стоимости» и т.п. */
+  formName: text("form_name").notNull().default("Форма на сайте"),
   customerName: text("customer_name").notNull(),
   customerPhone: text("customer_phone").notNull(),
   customerEmail: text("customer_email"),
   message: text("message"),
-  metadata: jsonb("metadata").notNull().default({}),
+  /** utm_source и прочие метки рекламы — только если пришли с адресом страницы */
+  utm: jsonb("utm").notNull().default({}),
+  pageUrl: text("page_url"),
+  crmStatus: crmDeliveryStatusEnum("crm_status").notNull().default("skipped"),
+  crmError: text("crm_error"),
+  crmSentAt: timestamp("crm_sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
-});
-
-export const leadDeliveries = pgTable("lead_deliveries", {
-  id: text("id").primaryKey(),
-  leadEventId: text("lead_event_id")
-    .notNull()
-    .references(() => leadEvents.id, { onDelete: "cascade" }),
-  crmConnectionId: text("crm_connection_id")
-    .notNull()
-    .references(() => crmConnections.id, { onDelete: "cascade" }),
-  status: leadDeliveryStatusEnum("status").notNull(),
-  externalLeadId: text("external_lead_id"),
-  errorMessage: text("error_message"),
-  attemptedAt: timestamp("attempted_at", { withTimezone: true })
 });
 
 export const partnerInquiries = pgTable("partner_inquiries", {

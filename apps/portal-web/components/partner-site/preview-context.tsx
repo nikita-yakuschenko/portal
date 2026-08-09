@@ -28,7 +28,8 @@ import {
   socialLinks,
   type StorefrontProject
 } from "@/lib/partner-site-preview";
-import type { LeadFormKind } from "@/lib/partner-site-lead-forms";
+import { LEAD_FORMS, type LeadFormKind } from "@/lib/partner-site-lead-forms";
+import { captureUtmTags, readUtmTags } from "@/lib/utm";
 
 type MeResponse = {
   partner: {
@@ -79,6 +80,7 @@ type PreviewState = {
     customerPhone: string;
     message?: string;
     projectId?: string;
+    formKind?: LeadFormKind;
   }) => Promise<void>;
   loading: boolean;
   error: string;
@@ -120,6 +122,8 @@ export function PartnerSitePreviewProvider({ children }: { children: ReactNode }
   const host = draft ? publicSiteHost(draft) : "";
 
   useLayoutEffect(() => {
+    // Метки первого захода: до заявки посетитель успеет уйти с рекламного адреса
+    captureUtmTags();
     if (isPublicSiteRuntime) return;
     const stored = loadPartnerSiteDraft();
     if (stored) setDraft(stored);
@@ -219,30 +223,38 @@ export function PartnerSitePreviewProvider({ children }: { children: ReactNode }
       customerPhone: string;
       message?: string;
       projectId?: string;
+      /** Какая форма сработала; по умолчанию — открытая сейчас */
+      formKind?: LeadFormKind;
     }) => {
-      const body: Record<string, string> = {
+      const kind = input.formKind ?? leadFormKind;
+      const body: Record<string, unknown> = {
         customerName: input.customerName,
-        customerPhone: input.customerPhone
+        customerPhone: input.customerPhone,
+        formName: LEAD_FORMS[kind].title,
+        utm: readUtmTags()
       };
       const projectId = input.projectId ?? consultProjectId;
       if (projectId) body.projectId = projectId;
       if (input.message) body.message = input.message;
+      if (typeof window !== "undefined") {
+        body.pageUrl = window.location.href.slice(0, 2000);
+      }
 
       if (isPublicSiteRuntime) {
         if (!partnerId) throw new Error("Сайт не загружен");
-        await apiFetch(`/api/public/sites/${partnerId}/leads`, {
+        await apiFetch(`/api/public/sites/${partnerId}/requests`, {
           method: "POST",
           body: JSON.stringify(body)
         });
         return;
       }
 
-      await apiFetch("/api/partner/leads", {
+      await apiFetch("/api/partner/requests", {
         method: "POST",
         body: JSON.stringify(body)
       });
     },
-    [partnerId, consultProjectId]
+    [partnerId, consultProjectId, leadFormKind]
   );
 
   const value = useMemo<PreviewState>(

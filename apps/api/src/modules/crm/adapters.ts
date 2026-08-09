@@ -1,6 +1,14 @@
-import type { CrmConnection, CrmLeadPayload, CrmSendResult } from "@b2b/domain";
+import type { CrmConnection, CrmRequestPayload, CrmSendResult } from "@b2b/domain";
 
 import type { CrmAdapter } from "./crm-adapter.js";
+
+/**
+ * Адаптеры площадок. Отправка ещё не реализована: sendRequest честно
+ * возвращает отказ, чтобы заявка не помечалась доставленной. Настоящие
+ * вызовы появятся, когда будет доступ к реальным порталам — см. README.
+ */
+
+const NOT_IMPLEMENTED = "Передача заявок в CRM ещё не подключена.";
 
 function hasRequiredCredentials(connection: CrmConnection, requiredKeys: string[]): boolean {
   return requiredKeys.every((key) => Boolean(connection.credentials[key]));
@@ -14,57 +22,25 @@ abstract class BaseCrmAdapter implements CrmAdapter {
     return hasRequiredCredentials(connection, this.requiredKeys);
   }
 
-  async syncFields(): Promise<string[]> {
-    return ["name", "phone", "email", "message", "projectName"];
+  async sendRequest(
+    connection: CrmConnection,
+    _payload: CrmRequestPayload
+  ): Promise<CrmSendResult> {
+    if (!(await this.validateConnection(connection))) {
+      return { success: false, errorMessage: "Подключение заполнено не полностью." };
+    }
+    return { success: false, errorMessage: NOT_IMPLEMENTED };
   }
-
-  async healthcheck(connection: CrmConnection): Promise<boolean> {
-    return this.validateConnection(connection);
-  }
-
-  abstract sendLead(connection: CrmConnection, payload: CrmLeadPayload): Promise<CrmSendResult>;
 }
 
 export class AmoCrmAdapter extends BaseCrmAdapter {
   provider = "amocrm" as const;
   protected requiredKeys = ["clientId", "clientSecret", "refreshToken"];
-
-  async sendLead(connection: CrmConnection, payload: CrmLeadPayload): Promise<CrmSendResult> {
-    const isValid = await this.validateConnection(connection);
-
-    if (!isValid) {
-      return {
-        success: false,
-        errorMessage: "AmoCRM connection is not configured."
-      };
-    }
-
-    return {
-      success: true,
-      externalLeadId: `amocrm-${payload.leadEvent.id}`
-    };
-  }
 }
 
 export class Bitrix24Adapter extends BaseCrmAdapter {
   provider = "bitrix24" as const;
   protected requiredKeys = ["webhookUrl"];
-
-  async sendLead(connection: CrmConnection, payload: CrmLeadPayload): Promise<CrmSendResult> {
-    const isValid = await this.validateConnection(connection);
-
-    if (!isValid) {
-      return {
-        success: false,
-        errorMessage: "Bitrix24 connection is not configured."
-      };
-    }
-
-    return {
-      success: true,
-      externalLeadId: `bitrix24-${payload.leadEvent.id}`
-    };
-  }
 }
 
 export function createCrmAdapters(): Map<string, CrmAdapter> {
