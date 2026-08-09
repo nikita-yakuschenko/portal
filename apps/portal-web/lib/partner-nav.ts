@@ -16,7 +16,7 @@ export const partnerNavigation: NavigationItem[] = [
   { title: "Главная", href: "/partner", icon: IconLayoutDashboard },
   { title: "Сайт", href: "/partner/site", icon: IconWorld },
   { title: "Каталог", href: "/partner/catalog", icon: IconBook },
-  { title: "Заявки", href: "/partner/requests", icon: IconInbox },
+  { title: "Сделки", href: "/partner/deals", icon: IconInbox },
   { title: "Мессенджер", href: "/partner/messenger", icon: IconMessageCircle }
 ];
 

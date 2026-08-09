@@ -146,9 +146,18 @@ const createSiteRequestSchema = z.object({
   pageUrl: z.string().max(2000).optional()
 });
 
-const updateSiteRequestSchema = z.object({
+const updateDealSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
   status: z.enum(["new", "in_progress", "won", "lost"]).optional(),
-  note: z.string().max(2000).optional()
+  note: z.string().max(2000).optional(),
+  amount: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  assigneeUserId: z.string().nullable().optional()
+});
+
+const updateContactSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  phone: z.string().min(3).max(64).optional(),
+  email: z.string().max(200).nullable().optional()
 });
 
 /** Из клиентского объекта берём только известные метки и подрезаем длину */
@@ -428,7 +437,7 @@ export async function buildApp() {
     if (!parsed.success) {
       return reply.status(400).send(parsed.error.flatten());
     }
-    return portalService.createSiteRequest(toSiteRequestInput(partnerId, parsed.data));
+    return portalService.createDealFromSite(toSiteRequestInput(partnerId, parsed.data));
   });
 
   /** Диагностика остаётся в логе: наружу уходят только данные профиля и статус */
@@ -1687,51 +1696,91 @@ export async function buildApp() {
     }
   });
 
-  app.get("/api/partner/requests", async (request, reply) => {
+  app.get("/api/partner/deals", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
     if (roleCheck) {
       return roleCheck;
     }
-    return portalService.listSiteRequests(getAuthUser(request)!.partnerId!);
+    return portalService.listDeals(getAuthUser(request)!.partnerId!);
   });
 
-  app.get("/api/partner/requests/:id", async (request, reply) => {
+  /** Кого можно назначить ответственным — команда партнёра */
+  app.get("/api/partner/deals/assignees", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    return portalService.listDealAssignees(getAuthUser(request)!.partnerId!);
+  });
+
+  app.get("/api/partner/deals/:id", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
     if (roleCheck) {
       return roleCheck;
     }
     const { id } = request.params as { id: string };
     try {
-      return await portalService.getSiteRequest(getAuthUser(request)!.partnerId!, id);
+      return await portalService.getDeal(getAuthUser(request)!.partnerId!, id);
     } catch (error) {
       return reply
         .status(404)
-        .send({ message: error instanceof Error ? error.message : "Заявка не найдена" });
+        .send({ message: error instanceof Error ? error.message : "Сделка не найдена" });
     }
   });
 
-  app.patch("/api/partner/requests/:id", async (request, reply) => {
+  app.patch("/api/partner/deals/:id", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
     if (roleCheck) {
       return roleCheck;
     }
-    const parsed = updateSiteRequestSchema.safeParse(request.body);
+    const parsed = updateDealSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send(parsed.error.flatten());
     }
     const { id } = request.params as { id: string };
     try {
-      return await portalService.updateSiteRequest({
+      return await portalService.updateDeal({
         partnerId: getAuthUser(request)!.partnerId!,
-        requestId: id,
+        dealId: id,
         actorUserId: getAuthUser(request)!.sub,
+        ...(parsed.data.title !== undefined ? { title: parsed.data.title } : {}),
         ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
-        ...(parsed.data.note !== undefined ? { note: parsed.data.note } : {})
+        ...(parsed.data.note !== undefined ? { note: parsed.data.note } : {}),
+        ...(parsed.data.amount !== undefined ? { amount: parsed.data.amount } : {}),
+        ...(parsed.data.assigneeUserId !== undefined
+          ? { assigneeUserId: parsed.data.assigneeUserId }
+          : {})
       });
     } catch (error) {
       return reply
-        .status(404)
-        .send({ message: error instanceof Error ? error.message : "Заявка не найдена" });
+        .status(400)
+        .send({ message: error instanceof Error ? error.message : "Не удалось сохранить сделку" });
+    }
+  });
+
+  app.patch("/api/partner/contacts/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const parsed = updateContactSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const { id } = request.params as { id: string };
+    try {
+      return await portalService.updateContact({
+        partnerId: getAuthUser(request)!.partnerId!,
+        contactId: id,
+        actorUserId: getAuthUser(request)!.sub,
+        ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
+        ...(parsed.data.phone !== undefined ? { phone: parsed.data.phone } : {}),
+        ...(parsed.data.email !== undefined ? { email: parsed.data.email } : {})
+      });
+    } catch (error) {
+      return reply
+        .status(400)
+        .send({ message: error instanceof Error ? error.message : "Не удалось сохранить контакт" });
     }
   });
 
@@ -1745,7 +1794,7 @@ export async function buildApp() {
     if (!parsed.success) {
       return reply.status(400).send(parsed.error.flatten());
     }
-    return portalService.createSiteRequest(
+    return portalService.createDealFromSite(
       toSiteRequestInput(getAuthUser(request)!.partnerId!, parsed.data)
     );
   });

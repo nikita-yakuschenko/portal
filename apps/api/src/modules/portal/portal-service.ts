@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, or } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import type {
   CatalogProjectDetails,
@@ -16,15 +17,16 @@ import {
   catalogProjectRooms,
   catalogProjects,
   catalogSyncRuns,
+  contacts,
   crmConnections,
+  dealEvents,
+  deals,
   partnerApplications,
   partnerInquiries,
   partnerProjectPrices,
   partners,
   partnerSites,
   passwordResetTokens,
-  siteRequestEvents,
-  siteRequests,
   users
 } from "../../db/schema.js";
 import { projectSlug } from "../../lib/slug.js";
@@ -1947,8 +1949,12 @@ export class PortalService {
    * Заявка с формы на сайте партнёра. Передача в CRM ещё не реализована,
    * поэтому статус честный: pending, когда CRM подключена и заявку предстоит
    * отправить, skipped — когда отправлять некуда.
+  /**
+   * Заявка с формы на сайте становится сделкой. Контакт ищем по телефону:
+   * тот же покупатель оставляет заявки не по разу, и плодить его копии
+   * значит потерять историю общения.
    */
-  async createSiteRequest(input: {
+  async createDealFromSite(input: {
     partnerId: string;
     projectId?: string | undefined;
     formName?: string | undefined;
@@ -1963,24 +1969,38 @@ export class PortalService {
       where: and(eq(crmConnections.partnerId, input.partnerId), eq(crmConnections.isEnabled, true))
     });
 
+    const contact = await this.upsertContact({
+      partnerId: input.partnerId,
+      name: input.customerName,
+      phone: input.customerPhone,
+      ...(input.customerEmail !== undefined ? { email: input.customerEmail } : {})
+    });
+
+    const project = input.projectId
+      ? await db.query.catalogProjects.findFirst({
+          where: eq(catalogProjects.id, input.projectId)
+        })
+      : null;
+
+    const formName = input.formName?.trim() || "Форма на сайте";
     const row = {
       id: randomUUID(),
       partnerId: input.partnerId,
+      contactId: contact.id,
+      // Название по умолчанию — проект, иначе форма: партнёр потом правит
+      title: project?.name?.trim() || formName,
       projectId: input.projectId ?? null,
-      formName: input.formName?.trim() || "Форма на сайте",
-      customerName: input.customerName,
-      customerPhone: input.customerPhone,
-      customerEmail: input.customerEmail ?? null,
+      formName,
       message: input.message ?? null,
       utm: input.utm ?? {},
       pageUrl: input.pageUrl ?? null,
       crmStatus: (connection ? "pending" : "skipped") as "pending" | "skipped"
     };
 
-    await db.insert(siteRequests).values(row);
-    await this.addSiteRequestEvent(row.id, "created", { formName: row.formName });
+    await db.insert(deals).values(row);
+    await this.addDealEvent(row.id, "created", { formName, contactName: contact.name });
     if (connection) {
-      await this.addSiteRequestEvent(row.id, "crm_delivery", {
+      await this.addDealEvent(row.id, "crm_delivery", {
         crmStatus: "pending",
         provider: connection.provider
       });
@@ -1988,119 +2008,303 @@ export class PortalService {
     return row;
   }
 
+  /** Контакт по телефону: цифры телефона — ключ, имя и почту освежаем */
+  private async upsertContact(input: {
+    partnerId: string;
+    name: string;
+    phone: string;
+    email?: string | undefined;
+  }) {
+    const phoneKey = input.phone.replace(/\D/g, "");
+    const existing = phoneKey
+      ? await db.query.contacts.findFirst({
+          where: and(eq(contacts.partnerId, input.partnerId), eq(contacts.phoneKey, phoneKey))
+        })
+      : null;
+
+    if (existing) {
+      const patch: Partial<typeof contacts.$inferInsert> = {};
+      // Пустым новым значением затирать известное не будем
+      if (input.name.trim() && input.name.trim() !== existing.name) patch.name = input.name.trim();
+      if (input.email?.trim() && input.email.trim() !== existing.email) {
+        patch.email = input.email.trim();
+      }
+      if (Object.keys(patch).length > 0) {
+        await db.update(contacts).set(patch).where(eq(contacts.id, existing.id));
+        return { ...existing, ...patch };
+      }
+      return existing;
+    }
+
+    const row = {
+      id: randomUUID(),
+      partnerId: input.partnerId,
+      name: input.name.trim() || "Без имени",
+      phone: input.phone,
+      email: input.email?.trim() || null,
+      phoneKey: phoneKey || randomUUID()
+    };
+    await db.insert(contacts).values(row);
+    return row;
+  }
+
   /** Событие в ленту карточки. Автор null — покупатель или сама платформа */
-  private async addSiteRequestEvent(
-    requestId: string,
-    type: "created" | "status_changed" | "note" | "crm_delivery",
+  private async addDealEvent(
+    dealId: string,
+    type:
+      | "created"
+      | "status_changed"
+      | "note"
+      | "crm_delivery"
+      | "field_changed"
+      | "contact_changed",
     payload: Record<string, unknown>,
     authorUserId?: string | undefined
   ) {
-    await db.insert(siteRequestEvents).values({
+    await db.insert(dealEvents).values({
       id: randomUUID(),
-      requestId,
+      dealId,
       type,
       payload,
       authorUserId: authorUserId ?? null
     });
   }
 
-  /** Заявки партнёра, свежие сверху. Имя проекта — чтобы не тянуть каталог в кабинет */
-  async listSiteRequests(partnerId: string) {
+  /** Сделки партнёра, свежие сверху */
+  async listDeals(partnerId: string) {
+    const assignee = alias(users, "assignee");
     const rows = await db
       .select({
-        request: siteRequests,
-        projectName: catalogProjects.name
+        deal: deals,
+        contact: contacts,
+        projectName: catalogProjects.name,
+        assigneeName: assignee.fullName
       })
-      .from(siteRequests)
-      .leftJoin(catalogProjects, eq(catalogProjects.id, siteRequests.projectId))
-      .where(eq(siteRequests.partnerId, partnerId))
-      .orderBy(desc(siteRequests.createdAt));
+      .from(deals)
+      .leftJoin(contacts, eq(contacts.id, deals.contactId))
+      .leftJoin(catalogProjects, eq(catalogProjects.id, deals.projectId))
+      .leftJoin(assignee, eq(assignee.id, deals.assigneeUserId))
+      .where(eq(deals.partnerId, partnerId))
+      .orderBy(desc(deals.createdAt));
 
-    return rows.map((row) => ({ ...row.request, projectName: row.projectName }));
+    return rows.map((row) => ({
+      ...row.deal,
+      contact: row.contact,
+      projectName: row.projectName,
+      assigneeName: row.assigneeName
+    }));
   }
 
-  /** Заявка целиком: поля плюс лента событий для карточки */
-  async getSiteRequest(partnerId: string, requestId: string) {
-    const row = await db
-      .select({ request: siteRequests, projectName: catalogProjects.name })
-      .from(siteRequests)
-      .leftJoin(catalogProjects, eq(catalogProjects.id, siteRequests.projectId))
-      .where(and(eq(siteRequests.id, requestId), eq(siteRequests.partnerId, partnerId)))
+  /** Сделка целиком: поля, контакт и лента событий */
+  async getDeal(partnerId: string, dealId: string) {
+    const assignee = alias(users, "assignee");
+    const rows = await db
+      .select({
+        deal: deals,
+        contact: contacts,
+        projectName: catalogProjects.name,
+        assigneeName: assignee.fullName
+      })
+      .from(deals)
+      .leftJoin(contacts, eq(contacts.id, deals.contactId))
+      .leftJoin(catalogProjects, eq(catalogProjects.id, deals.projectId))
+      .leftJoin(assignee, eq(assignee.id, deals.assigneeUserId))
+      .where(and(eq(deals.id, dealId), eq(deals.partnerId, partnerId)))
       .limit(1);
 
-    const found = row[0];
+    const found = rows[0];
     if (!found) {
-      throw new Error("Заявка не найдена.");
+      throw new Error("Сделка не найдена.");
     }
 
     const events = await db
-      .select({ event: siteRequestEvents, authorName: users.fullName })
-      .from(siteRequestEvents)
-      .leftJoin(users, eq(users.id, siteRequestEvents.authorUserId))
-      .where(eq(siteRequestEvents.requestId, requestId))
-      .orderBy(desc(siteRequestEvents.createdAt));
+      .select({ event: dealEvents, authorName: users.fullName })
+      .from(dealEvents)
+      .leftJoin(users, eq(users.id, dealEvents.authorUserId))
+      .where(eq(dealEvents.dealId, dealId))
+      .orderBy(desc(dealEvents.createdAt));
 
     return {
-      ...found.request,
+      ...found.deal,
+      contact: found.contact,
       projectName: found.projectName,
+      assigneeName: found.assigneeName,
       events: events.map((row) => ({ ...row.event, authorName: row.authorName }))
     };
   }
 
-  /** Партнёр ведёт заявку: двигает по воронке и пишет, о чём договорились */
-  async updateSiteRequest(input: {
+  /** Команда партнёра — из кого выбирать ответственного */
+  async listDealAssignees(partnerId: string) {
+    const rows = await db
+      .select({ id: users.id, fullName: users.fullName })
+      .from(users)
+      .where(and(eq(users.partnerId, partnerId), eq(users.isActive, true)));
+    return rows;
+  }
+
+  /** Партнёр ведёт сделку: правит поля, двигает по воронке, пишет заметку */
+  async updateDeal(input: {
     partnerId: string;
-    requestId: string;
+    dealId: string;
     actorUserId: string;
+    title?: string | undefined;
     status?: "new" | "in_progress" | "won" | "lost" | undefined;
     note?: string | undefined;
+    amount?: number | null | undefined;
+    assigneeUserId?: string | null | undefined;
   }) {
-    const existing = await db.query.siteRequests.findFirst({
-      where: and(
-        eq(siteRequests.id, input.requestId),
-        eq(siteRequests.partnerId, input.partnerId)
-      )
+    const existing = await db.query.deals.findFirst({
+      where: and(eq(deals.id, input.dealId), eq(deals.partnerId, input.partnerId))
     });
     if (!existing) {
-      throw new Error("Заявка не найдена.");
+      throw new Error("Сделка не найдена.");
     }
 
-    const patch: Partial<typeof siteRequests.$inferInsert> = {};
+    const patch: Partial<typeof deals.$inferInsert> = {};
+    const events: Array<{
+      type: "status_changed" | "note" | "field_changed";
+      payload: Record<string, unknown>;
+    }> = [];
+
     if (input.status !== undefined && input.status !== existing.status) {
       patch.status = input.status;
       patch.statusChangedAt = new Date();
+      events.push({ type: "status_changed", payload: { from: existing.status, to: input.status } });
     }
+
+    const nextTitle = input.title?.trim();
+    if (nextTitle !== undefined && nextTitle !== existing.title) {
+      if (!nextTitle) {
+        throw new Error("Название сделки не может быть пустым.");
+      }
+      patch.title = nextTitle;
+      events.push({
+        type: "field_changed",
+        payload: { field: "title", from: existing.title, to: nextTitle }
+      });
+    }
+
+    if (input.amount !== undefined && input.amount !== existing.amount) {
+      patch.amount = input.amount;
+      events.push({
+        type: "field_changed",
+        payload: { field: "amount", from: existing.amount, to: input.amount }
+      });
+    }
+
+    if (input.assigneeUserId !== undefined && input.assigneeUserId !== existing.assigneeUserId) {
+      // Ответственный только из команды партнёра
+      if (input.assigneeUserId) {
+        const member = await db.query.users.findFirst({
+          where: and(eq(users.id, input.assigneeUserId), eq(users.partnerId, input.partnerId))
+        });
+        if (!member) {
+          throw new Error("Сотрудник не найден в вашей команде.");
+        }
+      }
+      patch.assigneeUserId = input.assigneeUserId;
+      events.push({
+        type: "field_changed",
+        payload: { field: "assignee", to: input.assigneeUserId }
+      });
+    }
+
     const nextNote = input.note?.trim() || null;
-    const noteChanged = input.note !== undefined && nextNote !== existing.note;
-    if (noteChanged) {
+    if (input.note !== undefined && nextNote !== existing.note) {
       patch.note = nextNote;
+      events.push({
+        type: "note",
+        payload: { text: nextNote ?? "", cleared: nextNote === null }
+      });
     }
+
     if (Object.keys(patch).length === 0) {
-      return this.getSiteRequest(input.partnerId, input.requestId);
+      return this.getDeal(input.partnerId, input.dealId);
     }
 
-    await db.update(siteRequests).set(patch).where(eq(siteRequests.id, input.requestId));
-
-    if (patch.status) {
-      await this.addSiteRequestEvent(
-        input.requestId,
-        "status_changed",
-        { from: existing.status, to: patch.status },
-        input.actorUserId
-      );
-    }
-    if (noteChanged) {
-      await this.addSiteRequestEvent(
-        input.requestId,
-        "note",
-        { text: nextNote ?? "", cleared: nextNote === null },
-        input.actorUserId
-      );
+    await db.update(deals).set(patch).where(eq(deals.id, input.dealId));
+    for (const event of events) {
+      await this.addDealEvent(input.dealId, event.type, event.payload, input.actorUserId);
     }
 
-    return this.getSiteRequest(input.partnerId, input.requestId);
+    return this.getDeal(input.partnerId, input.dealId);
   }
 
+  /** Правка контакта: она видна во всех сделках этого человека */
+  async updateContact(input: {
+    partnerId: string;
+    contactId: string;
+    actorUserId: string;
+    name?: string | undefined;
+    phone?: string | undefined;
+    email?: string | null | undefined;
+  }) {
+    const existing = await db.query.contacts.findFirst({
+      where: and(eq(contacts.id, input.contactId), eq(contacts.partnerId, input.partnerId))
+    });
+    if (!existing) {
+      throw new Error("Контакт не найден.");
+    }
+
+    const patch: Partial<typeof contacts.$inferInsert> = {};
+    const changed: string[] = [];
+
+    const nextName = input.name?.trim();
+    if (nextName !== undefined && nextName !== existing.name) {
+      if (!nextName) throw new Error("Имя контакта не может быть пустым.");
+      patch.name = nextName;
+      changed.push("имя");
+    }
+
+    const nextPhone = input.phone?.trim();
+    if (nextPhone !== undefined && nextPhone !== existing.phone) {
+      const phoneKey = nextPhone.replace(/\D/g, "");
+      if (!phoneKey) throw new Error("Телефон не может быть пустым.");
+      const clash = await db.query.contacts.findFirst({
+        where: and(
+          eq(contacts.partnerId, input.partnerId),
+          eq(contacts.phoneKey, phoneKey),
+          ne(contacts.id, input.contactId)
+        )
+      });
+      if (clash) {
+        throw new Error("Контакт с таким телефоном уже есть.");
+      }
+      patch.phone = nextPhone;
+      patch.phoneKey = phoneKey;
+      changed.push("телефон");
+    }
+
+    if (input.email !== undefined) {
+      const nextEmail = input.email?.trim() || null;
+      if (nextEmail !== existing.email) {
+        patch.email = nextEmail;
+        changed.push("почту");
+      }
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return existing;
+    }
+
+    await db.update(contacts).set(patch).where(eq(contacts.id, input.contactId));
+
+    // Правка контакта касается всех его сделок — отмечаем в каждой ленте
+    const related = await db
+      .select({ id: deals.id })
+      .from(deals)
+      .where(and(eq(deals.partnerId, input.partnerId), eq(deals.contactId, input.contactId)));
+    for (const deal of related) {
+      await this.addDealEvent(
+        deal.id,
+        "contact_changed",
+        { changed, name: patch.name ?? existing.name },
+        input.actorUserId
+      );
+    }
+
+    return { ...existing, ...patch };
+  }
 
   async createInquiry(input: {
     actorUserId: string;

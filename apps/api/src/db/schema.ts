@@ -39,18 +39,20 @@ export const crmDeliveryStatusEnum = pgEnum("crm_delivery_status", [
   "failed"
 ]);
 /** Воронка дилера по заявке — намеренно короткая */
-export const siteRequestStatusEnum = pgEnum("site_request_status", [
+export const dealStatusEnum = pgEnum("site_request_status", [
   "new",
   "in_progress",
   "won",
   "lost"
 ]);
 /** Что произошло с заявкой: лента в карточке собирается отсюда */
-export const siteRequestEventTypeEnum = pgEnum("site_request_event_type", [
+export const dealEventTypeEnum = pgEnum("site_request_event_type", [
   "created",
   "status_changed",
   "note",
-  "crm_delivery"
+  "crm_delivery",
+  "field_changed",
+  "contact_changed"
 ]);
 export const inquiryStatusEnum = pgEnum("inquiry_status", ["new", "answered"]);
 export const syncStatusEnum = pgEnum("sync_status", ["running", "completed", "failed"]);
@@ -230,26 +232,58 @@ export const crmConnections = pgTable("crm_connections", {
 });
 
 /**
- * Заявка с сайта партнёра: одна строка на отправленную форму.
+ * Человек, который к нам обратился. Отдельно от сделки: один и тот же
+ * покупатель оставляет заявки не по разу, и его контакты правятся один раз
+ * для всех его сделок.
+ */
+export const contacts = pgTable(
+  "crm_contacts",
+  {
+    id: text("id").primaryKey(),
+    partnerId: text("partner_id")
+      .notNull()
+      .references(() => partners.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    phone: text("phone").notNull(),
+    email: text("email"),
+    /** Только цифры — по ней узнаём, что это тот же человек */
+    phoneKey: text("phone_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    partnerPhoneIdx: uniqueIndex("crm_contacts_partner_phone_idx").on(
+      table.partnerId,
+      table.phoneKey
+    )
+  })
+);
+
+/**
+ * Сделка. Физическое имя таблицы осталось site_requests: переименовывать её
+ * при живых данных — риск без выгоды, а в коде и интерфейсе это сделка.
  * Статус передачи в CRM держим здесь же — отдельная таблица доставок
  * добавляла join ради одного поля.
  */
-export const siteRequests = pgTable("site_requests", {
+export const deals = pgTable("site_requests", {
   id: text("id").primaryKey(),
   partnerId: text("partner_id")
     .notNull()
     .references(() => partners.id, { onDelete: "cascade" }),
+  contactId: text("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+  /** Название сделки: партнёр правит его под себя */
+  title: text("title").notNull().default(""),
+  /** Ожидаемая сумма, рубли. null — ещё не оценивали */
+  amount: integer("amount"),
+  /** Кто ведёт сделку */
+  assigneeUserId: text("assignee_user_id").references(() => users.id, { onDelete: "set null" }),
   projectId: text("project_id").references(() => catalogProjects.id, { onDelete: "set null" }),
   /** Какая форма сработала: «Консультация», «Расчёт стоимости» и т.п. */
   formName: text("form_name").notNull().default("Форма на сайте"),
-  customerName: text("customer_name").notNull(),
-  customerPhone: text("customer_phone").notNull(),
-  customerEmail: text("customer_email"),
   message: text("message"),
   /** utm_source и прочие метки рекламы — только если пришли с адресом страницы */
   utm: jsonb("utm").notNull().default({}),
   pageUrl: text("page_url"),
-  status: siteRequestStatusEnum("status").notNull().default("new"),
+  status: dealStatusEnum("status").notNull().default("new"),
   statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
   /** Заметка менеджера: о чём договорились */
   note: text("note"),
@@ -264,14 +298,14 @@ export const siteRequests = pgTable("site_requests", {
  * Пишем сюда, а не в общий аудит-лог: события показываются партнёру в
  * карточке, а аудит-лог — служебный и хранит действия по всей платформе.
  */
-export const siteRequestEvents = pgTable(
+export const dealEvents = pgTable(
   "site_request_events",
   {
     id: text("id").primaryKey(),
-    requestId: text("request_id")
+    dealId: text("request_id")
       .notNull()
-      .references(() => siteRequests.id, { onDelete: "cascade" }),
-    type: siteRequestEventTypeEnum("type").notNull(),
+      .references(() => deals.id, { onDelete: "cascade" }),
+    type: dealEventTypeEnum("type").notNull(),
     /** Подробности события: прежний и новый статус, текст заметки, ошибка CRM */
     payload: jsonb("payload").notNull().default({}),
     /** Кто сделал; null — покупатель с сайта или сама платформа */
@@ -279,7 +313,7 @@ export const siteRequestEvents = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
   },
   (table) => ({
-    requestIdx: index("site_request_events_request_idx").on(table.requestId, table.createdAt)
+    dealIdx: index("site_request_events_request_idx").on(table.dealId, table.createdAt)
   })
 );
 
