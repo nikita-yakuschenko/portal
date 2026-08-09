@@ -51,6 +51,11 @@ const patchCrmConnectionSchema = z.object({
   isEnabled: z.boolean()
 });
 
+const updateCrmCredentialsSchema = z.object({
+  portalUrl: z.string().min(1).optional(),
+  credentials: z.record(z.string(), z.string())
+});
+
 const createTeamUserSchema = z.object({
   fullName: z.string().min(2),
   email: z.email(),
@@ -1611,6 +1616,31 @@ export async function buildApp() {
       });
     } catch (error) {
       return reply.status(404).send({ message: error instanceof Error ? error.message : "Not found" });
+    }
+  });
+
+  app.put("/api/partner/crm-connections/:id/credentials", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const parsed = updateCrmCredentialsSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const { id } = request.params as { id: string };
+    try {
+      return await portalService.updateCrmConnectionCredentials({
+        actorUserId: getAuthUser(request)!.sub,
+        partnerId: getAuthUser(request)!.partnerId!,
+        connectionId: id,
+        ...(parsed.data.portalUrl !== undefined ? { portalUrl: parsed.data.portalUrl } : {}),
+        credentials: parsed.data.credentials
+      });
+    } catch (error) {
+      return reply
+        .status(400)
+        .send({ message: error instanceof Error ? error.message : "Не удалось обновить ключи" });
     }
   });
 

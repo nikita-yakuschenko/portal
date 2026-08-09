@@ -93,6 +93,20 @@ function normalizeOptionalNumber(value: number | null): number | undefined {
   return value ?? undefined;
 }
 
+/** Поле credentials, по которому владелец узнаёт своё подключение */
+const SECRET_KEY_BY_PROVIDER: Record<"amocrm" | "bitrix24", string> = {
+  bitrix24: "webhookUrl",
+  amocrm: "clientId"
+};
+
+/** Хвост секрета — достаточно, чтобы отличить своё подключение, и мало для доступа */
+function maskSecret(value: string): string {
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  const tail = trimmed.slice(-4);
+  return `…${tail}`;
+}
+
 function normalizeOptionalString(value: string | null): string | undefined {
   return value ?? undefined;
 }
@@ -1774,11 +1788,97 @@ export class PortalService {
     await this.writeAuditLog(input.actorUserId, "crm.connection.created", "crm_connection", connection.id, {
       provider: input.provider
     });
-    return connection;
+    // Секреты обратно не возвращаем — их только что прислал сам клиент
+    const { credentials: _credentials, ...safe } = connection;
+    return { ...safe, secretHint: maskSecret(input.credentials[SECRET_KEY_BY_PROVIDER[input.provider]] ?? "") };
   }
 
+  /**
+   * Замена секрета без пересоздания подключения: ключи протухают, а удалять
+   * ради этого подключение — значит терять его историю и идентификатор.
+   */
+  async updateCrmConnectionCredentials(input: {
+    actorUserId: string;
+    partnerId: string;
+    connectionId: string;
+    portalUrl?: string | undefined;
+    credentials: Record<string, string>;
+  }) {
+    const existing = await db.query.crmConnections.findFirst({
+      where: and(
+        eq(crmConnections.id, input.connectionId),
+        eq(crmConnections.partnerId, input.partnerId)
+      )
+    });
+    if (!existing) {
+      throw new Error("Подключение CRM не найдено.");
+    }
+
+    const adapter = this.crmAdapters.get(existing.provider);
+    if (!adapter) {
+      throw new Error("CRM provider is not supported.");
+    }
+
+    const portalUrl = input.portalUrl?.trim() || existing.portalUrl;
+    const isValid = await adapter.validateConnection({
+      id: existing.id,
+      partnerId: existing.partnerId,
+      provider: existing.provider,
+      portalUrl,
+      credentials: input.credentials,
+      isEnabled: existing.isEnabled,
+      createdAt: existing.createdAt.toISOString()
+    });
+    if (!isValid) {
+      throw new Error("Заполнены не все поля подключения.");
+    }
+
+    await db
+      .update(crmConnections)
+      .set({ portalUrl, credentials: input.credentials })
+      .where(eq(crmConnections.id, input.connectionId));
+    await this.writeAuditLog(
+      input.actorUserId,
+      "crm.connection.credentials_updated",
+      "crm_connection",
+      input.connectionId,
+      { provider: existing.provider }
+    );
+
+    return {
+      id: existing.id,
+      partnerId: existing.partnerId,
+      provider: existing.provider,
+      portalUrl,
+      isEnabled: existing.isEnabled,
+      createdAt: existing.createdAt,
+      secretHint: maskSecret(input.credentials[SECRET_KEY_BY_PROVIDER[existing.provider]] ?? "")
+    };
+  }
+
+  /**
+   * Наружу отдаём подключения без секретов: вебхук Bitrix24 и токены amoCRM —
+   * это полный доступ к CRM партнёра, в браузере им делать нечего. Вместо
+   * значения уходит подсказка вида «…a1b2», чтобы владелец узнал свой ключ.
+   */
   async listCrmConnections(partnerId: string) {
-    return db.select().from(crmConnections).where(eq(crmConnections.partnerId, partnerId));
+    const rows = await db
+      .select()
+      .from(crmConnections)
+      .where(eq(crmConnections.partnerId, partnerId));
+
+    return rows.map((row) => {
+      const credentials = (row.credentials ?? {}) as Record<string, string>;
+      return {
+        id: row.id,
+        partnerId: row.partnerId,
+        provider: row.provider,
+        portalUrl: row.portalUrl,
+        isEnabled: row.isEnabled,
+        createdAt: row.createdAt,
+        secretHint: maskSecret(credentials[SECRET_KEY_BY_PROVIDER[row.provider]] ?? "")
+      };
+    });
   }
 
   async setCrmConnectionEnabled(input: {
@@ -1807,7 +1907,16 @@ export class PortalService {
       input.connectionId,
       { isEnabled: input.isEnabled }
     );
-    return { ...existing, isEnabled: input.isEnabled };
+    const credentials = (existing.credentials ?? {}) as Record<string, string>;
+    return {
+      id: existing.id,
+      partnerId: existing.partnerId,
+      provider: existing.provider,
+      portalUrl: existing.portalUrl,
+      isEnabled: input.isEnabled,
+      createdAt: existing.createdAt,
+      secretHint: maskSecret(credentials[SECRET_KEY_BY_PROVIDER[existing.provider]] ?? "")
+    };
   }
 
   async deleteCrmConnection(input: {
