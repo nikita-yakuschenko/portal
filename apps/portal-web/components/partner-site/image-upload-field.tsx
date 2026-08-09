@@ -103,14 +103,20 @@ export function ImageUploadField({
           "hover:border-ring/60 hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
           "motion-safe:active:scale-[0.98]",
           dragging && "border-ring bg-accent",
-          shape === "wide" ? "h-28" : "aspect-square max-h-36"
+          // Одна высота у всех зон: колонки разной ширины, и пропорции
+          // разъезжались бы по вертикали
+          "h-32"
         )}
       >
         {value ? (
           <img
             src={value}
             alt=""
-            className={cn("object-contain p-3", shape === "wide" ? "max-h-full" : "size-full")}
+            className={cn(
+              "max-h-full object-contain p-3",
+              // Квадратной картинке хватает высоты, широкая тянется по ширине
+              shape === "wide" ? "max-w-full" : "max-w-[60%]"
+            )}
           />
         ) : (
           <span className="text-muted-foreground flex flex-col items-center gap-1 text-xs">
