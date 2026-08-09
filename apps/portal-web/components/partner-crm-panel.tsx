@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { CrmProviderLogo } from "@/components/crm-logos";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -69,7 +70,6 @@ type CredentialField = {
 type ProviderMeta = {
   id: ProviderId;
   label: string;
-  mark: string;
   purpose: string;
   /** Куда идти в самой CRM за ключом */
   steps: string[];
@@ -89,7 +89,6 @@ const PROVIDERS: ProviderMeta[] = [
   {
     id: "bitrix24",
     label: "Bitrix24",
-    mark: "B24",
     purpose: "Заявки с сайта становятся лидами на вашем портале.",
     steps: [
       "В Битрикс24 откройте «Приложения» → «Разработчикам».",
@@ -127,7 +126,6 @@ const PROVIDERS: ProviderMeta[] = [
   {
     id: "amocrm",
     label: "amoCRM",
-    mark: "amo",
     purpose: "Заявки с сайта становятся сделками в вашем аккаунте.",
     steps: [
       "В amoCRM откройте «Настройки» → «Интеграции».",
@@ -174,19 +172,6 @@ function providerHost(portalUrl: string): string {
     .replace(/\/+$/, "");
 }
 
-function ProviderMark({ mark, muted }: { mark: string; muted?: boolean }) {
-  return (
-    <span
-      className={cn(
-        "flex size-9 shrink-0 items-center justify-center rounded-lg border text-xs font-semibold tracking-tight",
-        muted ? "bg-muted/60 text-muted-foreground" : "bg-muted text-foreground"
-      )}
-      aria-hidden
-    >
-      {mark}
-    </span>
-  );
-}
 
 /** Форма ключей: одна и та же на подключение и на замену протухшего ключа */
 function CredentialsDialog({
@@ -423,12 +408,12 @@ export function PartnerCrmPanel({ canManage }: { canManage: boolean }) {
 
   return (
     <div className="space-y-4">
-      {/* Пока адаптеры не отправляют заявки — интерфейс не должен обещать обратное */}
+      {/* Адаптеры пока ничего не отправляют — интерфейс не должен обещать обратное */}
       <Alert>
         <IconAlertCircle />
         <AlertDescription>
-          Заявки с сайта сейчас собираются в кабинете. Автоматическая передача в CRM ещё не
-          включена — подключение сохранится и заработает, как только мы её включим.
+          Передача заявок в CRM ещё не включена: заявки с сайта пока только сохраняются в
+          портале. Подключение останется на месте и заработает, как только мы её включим.
         </AlertDescription>
       </Alert>
 
@@ -460,7 +445,7 @@ export function PartnerCrmPanel({ canManage }: { canManage: boolean }) {
                   )}
                 >
                   <div className="flex items-start gap-3">
-                    <ProviderMark mark={provider.mark} muted={!connection} />
+                    <CrmProviderLogo provider={provider.id} />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium">{provider.label}</p>
                       <p className="text-muted-foreground text-sm">
@@ -531,21 +516,17 @@ export function PartnerCrmPanel({ canManage }: { canManage: boolean }) {
                         />
                       ) : null}
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-muted-foreground text-sm">Не подключено</p>
-                      {canManage ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setDialog({ provider, mode: "create" })}
-                        >
-                          Подключить
-                        </Button>
-                      ) : null}
-                    </div>
-                  )}
+                  ) : canManage ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-fit"
+                      onClick={() => setDialog({ provider, mode: "create" })}
+                    >
+                      Подключить
+                    </Button>
+                  ) : null}
 
                   {connection?.isEnabled && otherEnabled ? (
                     <p className="text-muted-foreground text-xs">
@@ -562,31 +543,6 @@ export function PartnerCrmPanel({ canManage }: { canManage: boolean }) {
               Подключения меняет владелец кабинета.
             </p>
           ) : null}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Что настраивается в другом месте</CardTitle>
-          <CardDescription>
-            Эти вещи относятся к сайту, поэтому живут в его разделе.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="divide-y text-sm">
-            <li className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0">
-              <span className="text-muted-foreground">Копии заявок на почту</span>
-              <Button variant="link" size="sm" className="h-auto p-0" asChild>
-                <a href="/partner/site?tab=leads">Сайт → Заявки</a>
-              </Button>
-            </li>
-            <li className="flex flex-wrap items-center justify-between gap-3 py-3 last:pb-0">
-              <span className="text-muted-foreground">Яндекс Метрика и Google Tag Manager</span>
-              <Button variant="link" size="sm" className="h-auto p-0" asChild>
-                <a href="/partner/site?tab=seo">Сайт → Продвижение</a>
-              </Button>
-            </li>
-          </ul>
         </CardContent>
       </Card>
 

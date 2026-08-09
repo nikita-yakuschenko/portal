@@ -96,6 +96,7 @@ function PartnerSettingsContent() {
   }, []);
 
   const canManage = me?.user.role === "partner_owner";
+  const legalFilled = Boolean(me?.partner?.legalName?.trim() || me?.partner?.inn?.trim());
   const dirty = useMemo(() => {
     if (!savedForm) return false;
     return (
@@ -272,16 +273,16 @@ function PartnerSettingsContent() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Юр. реквизиты</CardTitle>
+              <CardTitle>Юридические реквизиты</CardTitle>
               <CardDescription>
-                Юр. название и ИНН меняет администратор завода по запросу и при подтверждающих
-                документах.
+                Берутся из заявки на подключение и попадают в договоры и в подвал сайта. Партнёр
+                их не редактирует: менять — администратору завода и только по документам.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <Skeleton className="h-16 w-full" />
-              ) : (
+              ) : legalFilled ? (
                 <dl className="divide-border divide-y text-sm">
                   <div className="flex justify-between gap-4 py-2 first:pt-0">
                     <dt className="text-muted-foreground">Юр. название</dt>
@@ -291,11 +292,22 @@ function PartnerSettingsContent() {
                   </div>
                   <div className="flex justify-between gap-4 py-2 last:pb-0">
                     <dt className="text-muted-foreground">ИНН</dt>
-                    <dd className="text-right font-medium">
+                    <dd className="text-right font-medium tabular-nums">
                       {me?.partner?.inn?.trim() || "—"}
                     </dd>
                   </div>
                 </dl>
+              ) : (
+                // Прочерки ничего не объясняли: партнёр не знает, кто их вносит
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-muted-foreground max-w-prose text-sm">
+                    Реквизиты пока не заполнены — в договорах и в подвале сайта будет только
+                    коммерческое название. Пришлите карточку компании заводу, и их внесут.
+                  </p>
+                  <Button type="button" variant="outline" asChild>
+                    <a href="/partner/messenger">Написать заводу</a>
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
