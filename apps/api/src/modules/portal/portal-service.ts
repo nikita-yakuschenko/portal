@@ -1980,13 +1980,52 @@ export class PortalService {
     return row;
   }
 
-  /** Заявки партнёра, свежие сверху */
+  /** Заявки партнёра, свежие сверху. Имя проекта — чтобы не тянуть каталог в кабинет */
   async listSiteRequests(partnerId: string) {
-    return db
-      .select()
+    const rows = await db
+      .select({
+        request: siteRequests,
+        projectName: catalogProjects.name
+      })
       .from(siteRequests)
+      .leftJoin(catalogProjects, eq(catalogProjects.id, siteRequests.projectId))
       .where(eq(siteRequests.partnerId, partnerId))
       .orderBy(desc(siteRequests.createdAt));
+
+    return rows.map((row) => ({ ...row.request, projectName: row.projectName }));
+  }
+
+  /** Партнёр ведёт заявку: двигает по воронке и пишет, о чём договорились */
+  async updateSiteRequest(input: {
+    partnerId: string;
+    requestId: string;
+    status?: "new" | "in_progress" | "won" | "lost" | undefined;
+    note?: string | undefined;
+  }) {
+    const existing = await db.query.siteRequests.findFirst({
+      where: and(
+        eq(siteRequests.id, input.requestId),
+        eq(siteRequests.partnerId, input.partnerId)
+      )
+    });
+    if (!existing) {
+      throw new Error("Заявка не найдена.");
+    }
+
+    const patch: Partial<typeof siteRequests.$inferInsert> = {};
+    if (input.status !== undefined && input.status !== existing.status) {
+      patch.status = input.status;
+      patch.statusChangedAt = new Date();
+    }
+    if (input.note !== undefined) {
+      patch.note = input.note.trim() || null;
+    }
+    if (Object.keys(patch).length === 0) {
+      return existing;
+    }
+
+    await db.update(siteRequests).set(patch).where(eq(siteRequests.id, input.requestId));
+    return { ...existing, ...patch };
   }
 
   async createInquiry(input: {

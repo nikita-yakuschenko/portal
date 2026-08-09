@@ -146,6 +146,11 @@ const createSiteRequestSchema = z.object({
   pageUrl: z.string().max(2000).optional()
 });
 
+const updateSiteRequestSchema = z.object({
+  status: z.enum(["new", "in_progress", "won", "lost"]).optional(),
+  note: z.string().max(2000).optional()
+});
+
 /** Из клиентского объекта берём только известные метки и подрезаем длину */
 function pickUtm(raw: Record<string, string> | undefined): Record<string, string> {
   if (!raw) return {};
@@ -1688,6 +1693,30 @@ export async function buildApp() {
       return roleCheck;
     }
     return portalService.listSiteRequests(getAuthUser(request)!.partnerId!);
+  });
+
+  app.patch("/api/partner/requests/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const parsed = updateSiteRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const { id } = request.params as { id: string };
+    try {
+      return await portalService.updateSiteRequest({
+        partnerId: getAuthUser(request)!.partnerId!,
+        requestId: id,
+        ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
+        ...(parsed.data.note !== undefined ? { note: parsed.data.note } : {})
+      });
+    } catch (error) {
+      return reply
+        .status(404)
+        .send({ message: error instanceof Error ? error.message : "Заявка не найдена" });
+    }
   });
 
   // Тот же приём для предпросмотра в кабинете: витрина там ходит под сессией

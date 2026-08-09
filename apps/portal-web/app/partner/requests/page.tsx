@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 
 import { PartnerShell } from "@/components/partner-shell";
 import { PageAlert } from "@/components/page-alert";
+import { RequestDetailsSheet } from "@/components/partner-requests/request-details-sheet";
+import { RequestsBoard } from "@/components/partner-requests/requests-board";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,60 +20,38 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiFetch } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import {
+  CRM_STATUS_LABEL,
+  CRM_STATUS_VARIANT,
+  REQUEST_STATUS_DOT,
+  REQUEST_STATUS_LABEL,
+  formatRequestDate,
+  formatUtm,
+  telHref,
+  type SiteRequest,
+  type SiteRequestStatus
+} from "@/lib/site-requests";
 
-type CrmStatus = "skipped" | "pending" | "sent" | "failed";
+const VIEWS = ["board", "table"] as const;
+type RequestsView = (typeof VIEWS)[number];
 
-type SiteRequest = {
-  id: string;
-  formName: string;
-  customerName: string;
-  customerPhone: string;
-  customerEmail: string | null;
-  message: string | null;
-  utm: Record<string, string>;
-  pageUrl: string | null;
-  crmStatus: CrmStatus;
-  crmError: string | null;
-  createdAt: string;
-};
-
-const CRM_LABEL: Record<Exclude<CrmStatus, "skipped">, string> = {
-  pending: "Ждёт передачи",
-  sent: "Передана",
-  failed: "Ошибка"
-};
-
-const CRM_VARIANT: Record<Exclude<CrmStatus, "skipped">, "secondary" | "default" | "destructive"> = {
-  pending: "secondary",
-  sent: "default",
-  failed: "destructive"
-};
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(date);
+function parseView(value: string | null): RequestsView {
+  return value === "table" ? "table" : "board";
 }
 
-/** utm_source=ya, utm_campaign=spring → «ya · spring» */
-function formatUtm(utm: Record<string, string>): string {
-  const parts = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"]
-    .map((key) => utm[key])
-    .filter((value): value is string => Boolean(value));
-  return parts.join(" · ");
-}
+function PartnerRequestsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const view = parseView(searchParams.get("view"));
 
-export default function PartnerRequestsPage() {
   const [items, setItems] = useState<SiteRequest[]>([]);
   const [crmConnected, setCrmConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -88,8 +70,60 @@ export default function PartnerRequestsPage() {
     })();
   }, []);
 
+  const openRequest = useMemo(
+    () => items.find((item) => item.id === openId) ?? null,
+    [items, openId]
+  );
+
+  function changeView(next: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (parseView(next) === "board") params.delete("view");
+    else params.set("view", "table");
+    const query = params.toString();
+    router.replace(query ? `/partner/requests?${query}` : "/partner/requests", { scroll: false });
+  }
+
+  const applyUpdate = useCallback((next: SiteRequest) => {
+    setItems((prev) => prev.map((item) => (item.id === next.id ? { ...item, ...next } : item)));
+  }, []);
+
+  /** Двигаем карточку сразу, откатываем — если сервер не принял */
+  const moveRequest = useCallback(
+    async (request: SiteRequest, status: SiteRequestStatus) => {
+      const previous = request.status;
+      setItems((prev) =>
+        prev.map((item) => (item.id === request.id ? { ...item, status } : item))
+      );
+      try {
+        await apiFetch(`/api/partner/requests/${request.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ status })
+        });
+      } catch (err) {
+        setItems((prev) =>
+          prev.map((item) => (item.id === request.id ? { ...item, status: previous } : item))
+        );
+        toast.error(err instanceof Error ? err.message : "Не удалось перенести заявку");
+      }
+    },
+    []
+  );
+
   return (
-    <PartnerShell currentPath="/partner/requests" title="Заявки">
+    <PartnerShell
+      currentPath="/partner/requests"
+      title="Заявки"
+      headerActions={
+        !loading && items.length > 0 ? (
+          <Tabs value={view} onValueChange={changeView}>
+            <TabsList>
+              <TabsTrigger value="board">Доска</TabsTrigger>
+              <TabsTrigger value="table">Таблица</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        ) : null
+      }
+    >
       <PageAlert message={error} variant="destructive" />
 
       {/* Про CRM говорим один раз, а не бейджем в каждой строке */}
@@ -113,6 +147,12 @@ export default function PartnerRequestsPage() {
             Заявок пока нет. Сюда попадёт всё, что отправят через формы на вашем сайте.
           </CardContent>
         </Card>
+      ) : view === "board" ? (
+        <RequestsBoard
+          requests={items}
+          onOpen={(request) => setOpenId(request.id)}
+          onMove={(request, status) => void moveRequest(request, status)}
+        />
       ) : (
         <Card className="py-0">
           <CardContent className="px-0">
@@ -125,6 +165,7 @@ export default function PartnerRequestsPage() {
                     <TableHead>Телефон</TableHead>
                     <TableHead>Форма</TableHead>
                     <TableHead>Метки</TableHead>
+                    <TableHead>Статус</TableHead>
                     {crmConnected ? <TableHead className="pr-6">CRM</TableHead> : null}
                   </TableRow>
                 </TableHeader>
@@ -132,15 +173,20 @@ export default function PartnerRequestsPage() {
                   {items.map((item) => {
                     const utm = formatUtm(item.utm);
                     return (
-                      <TableRow key={item.id}>
+                      <TableRow
+                        key={item.id}
+                        className="cursor-pointer"
+                        onClick={() => setOpenId(item.id)}
+                      >
                         <TableCell className="text-muted-foreground pl-6 whitespace-nowrap tabular-nums">
-                          {formatDate(item.createdAt)}
+                          {formatRequestDate(item.createdAt)}
                         </TableCell>
                         <TableCell className="font-medium">{item.customerName}</TableCell>
                         <TableCell className="whitespace-nowrap tabular-nums">
                           <a
-                            href={`tel:${item.customerPhone.replace(/[^\d+]/g, "")}`}
+                            href={telHref(item.customerPhone)}
                             className="underline-offset-4 hover:underline"
+                            onClick={(event) => event.stopPropagation()}
                           >
                             {item.customerPhone}
                           </a>
@@ -149,16 +195,28 @@ export default function PartnerRequestsPage() {
                         <TableCell className="text-muted-foreground max-w-[16rem] truncate">
                           {utm || "—"}
                         </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <span className="flex items-center gap-2">
+                            <span
+                              className={cn(
+                                "size-1.5 shrink-0 rounded-full",
+                                REQUEST_STATUS_DOT[item.status]
+                              )}
+                              aria-hidden
+                            />
+                            {REQUEST_STATUS_LABEL[item.status]}
+                          </span>
+                        </TableCell>
                         {crmConnected ? (
                           <TableCell className="pr-6">
                             {item.crmStatus === "skipped" ? (
                               <span className="text-muted-foreground">—</span>
                             ) : (
                               <Badge
-                                variant={CRM_VARIANT[item.crmStatus]}
+                                variant={CRM_STATUS_VARIANT[item.crmStatus]}
                                 title={item.crmError ?? undefined}
                               >
-                                {CRM_LABEL[item.crmStatus]}
+                                {CRM_STATUS_LABEL[item.crmStatus]}
                               </Badge>
                             )}
                           </TableCell>
@@ -172,6 +230,29 @@ export default function PartnerRequestsPage() {
           </CardContent>
         </Card>
       )}
+
+      <RequestDetailsSheet
+        request={openRequest}
+        open={Boolean(openRequest)}
+        onOpenChange={(next) => {
+          if (!next) setOpenId(null);
+        }}
+        onUpdated={applyUpdate}
+      />
     </PartnerShell>
+  );
+}
+
+export default function PartnerRequestsPage() {
+  return (
+    <Suspense
+      fallback={
+        <PartnerShell currentPath="/partner/requests" title="Заявки">
+          <Skeleton className="h-64 w-full" />
+        </PartnerShell>
+      }
+    >
+      <PartnerRequestsContent />
+    </Suspense>
   );
 }

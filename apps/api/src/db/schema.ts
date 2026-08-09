@@ -38,6 +38,13 @@ export const crmDeliveryStatusEnum = pgEnum("crm_delivery_status", [
   "sent",
   "failed"
 ]);
+/** Воронка дилера по заявке — намеренно короткая */
+export const siteRequestStatusEnum = pgEnum("site_request_status", [
+  "new",
+  "in_progress",
+  "won",
+  "lost"
+]);
 export const inquiryStatusEnum = pgEnum("inquiry_status", ["new", "answered"]);
 export const syncStatusEnum = pgEnum("sync_status", ["running", "completed", "failed"]);
 export const partnerSiteStatusEnum = pgEnum("partner_site_status", ["draft", "published"]);
@@ -235,6 +242,10 @@ export const siteRequests = pgTable("site_requests", {
   /** utm_source и прочие метки рекламы — только если пришли с адресом страницы */
   utm: jsonb("utm").notNull().default({}),
   pageUrl: text("page_url"),
+  status: siteRequestStatusEnum("status").notNull().default("new"),
+  statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
+  /** Заметка менеджера: о чём договорились */
+  note: text("note"),
   crmStatus: crmDeliveryStatusEnum("crm_status").notNull().default("skipped"),
   crmError: text("crm_error"),
   crmSentAt: timestamp("crm_sent_at", { withTimezone: true }),
