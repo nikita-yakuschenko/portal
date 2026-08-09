@@ -3,6 +3,7 @@ import {
   normalizePartnerSiteDraft as schemaNormalize,
   publicSiteHost as schemaPublicHost,
   draftDefaultsFromPartner as schemaDefaults,
+  slugifySubdomain as schemaSlugify,
   type PartnerSiteDraft
 } from "@b2b/site-schema";
 
@@ -12,6 +13,7 @@ export type { PartnerSiteDraft };
 export const PARTNER_SITE_DRAFT_KEY = "avgst.partner.site.draft";
 export const emptyPartnerSiteDraft: PartnerSiteDraft = schemaEmpty;
 export const publicSiteHost = schemaPublicHost;
+export const slugifySubdomain = schemaSlugify;
 
 export function savePartnerSiteDraft(draft: PartnerSiteDraft): void {
   try {

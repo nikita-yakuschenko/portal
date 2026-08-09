@@ -302,7 +302,13 @@ export const partnerSites = pgTable(
     subdomain: text("subdomain").notNull(),
     domain: text("domain"),
     status: partnerSiteStatusEnum("status").notNull().default("draft"),
+    /** Черновик кабинета: правки партнёра, публике не видны */
     config: jsonb("config").notNull().default({}),
+    /**
+     * Живая версия сайта. Отделена от черновика, иначе сохранение в кабинете
+     * немедленно меняет то, что видят покупатели. null — сайт ещё не публиковался.
+     */
+    publishedConfig: jsonb("published_config"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     // HQ снял с публикации — партнёр не может опубликовать без одобрения/разблокировки
     publishLocked: boolean("publish_locked").notNull().default(false),

@@ -151,6 +151,23 @@ export function normalizePartnerSiteDraft(
   };
 }
 
+/**
+ * Приводит ввод к поддомену, который реально уйдёт в адрес сайта.
+ * Общая для кабинета и API: иначе партнёр вводит одно, а получает другое.
+ */
+export function slugifySubdomain(value: string): string {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-zа-яё0-9]+/gi, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 32);
+  const ascii = slug
+    .replace(/[а-яё]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return ascii || "partner";
+}
+
 export function publicSiteHost(draft: Pick<PartnerSiteDraft, "domain" | "subdomain">): string {
   const custom = draft.domain.trim();
   if (custom) return custom.replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase();

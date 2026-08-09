@@ -6,6 +6,7 @@ import {
   draftDefaultsFromPartner,
   emptyPartnerSiteDraft,
   normalizePartnerSiteDraft,
+  slugifySubdomain,
   type PartnerSiteDraft,
   type PartnerSiteStatus
 } from "@b2b/site-schema";
@@ -20,7 +21,12 @@ export type PartnerSiteRecord = {
   subdomain: string;
   domain: string | null;
   status: PartnerSiteStatus;
+  /** Черновик кабинета — то, что редактирует партнёр */
   config: PartnerSiteDraft;
+  /** Живая версия сайта; null — сайт ещё не публиковался */
+  publishedConfig: PartnerSiteDraft | null;
+  /** Черновик разошёлся с опубликованной версией: есть что публиковать */
+  hasUnpublishedChanges: boolean;
   publishedAt: string | null;
   publishLocked: boolean;
   publishLockedAt: string | null;
@@ -75,17 +81,23 @@ function normalizeHost(host: string): string {
   }
 }
 
-function slugifySubdomain(value: string): string {
-  const slug = value
-    .toLowerCase()
-    .replace(/[^a-zа-яё0-9]+/gi, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 32);
-  const ascii = slug
-    .replace(/[а-яё]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-  return ascii || "partner";
+/**
+ * Готовит запись к публичной выдаче: наружу под `config` уходит опубликованная
+ * версия, а не черновик кабинета. Сайты, опубликованные до появления
+ * `published_config`, отдаются как раньше — иначе они бы обнулились.
+ */
+function asPublicRecord(record: PartnerSiteRecord): PartnerSiteRecord {
+  const live = record.publishedConfig ?? record.config;
+  return {
+    ...record,
+    config: {
+      ...live,
+      subdomain: record.subdomain,
+      domain: record.domain ?? ""
+    },
+    publishedConfig: live,
+    hasUnpublishedChanges: false
+  };
 }
 
 async function withPartner(row: typeof partnerSites.$inferSelect): Promise<PartnerSiteRecord> {
@@ -110,17 +122,29 @@ function mapRow(row: typeof partnerSites.$inferSelect): PartnerSiteRecord {
       (row.config ?? {}) as Partial<PartnerSiteDraft> & Record<string, unknown>
     ) ?? emptyPartnerSiteDraft;
 
+  const draft: PartnerSiteDraft = {
+    ...config,
+    subdomain: row.subdomain,
+    domain: row.domain ?? ""
+  };
+
+  const publishedConfig = row.publishedConfig
+    ? (normalizePartnerSiteDraft(
+        row.publishedConfig as Partial<PartnerSiteDraft> & Record<string, unknown>
+      ) ?? null)
+    : null;
+
   return {
     id: row.id,
     partnerId: row.partnerId,
     subdomain: row.subdomain,
     domain: row.domain,
     status: row.status,
-    config: {
-      ...config,
-      subdomain: row.subdomain,
-      domain: row.domain ?? ""
-    },
+    config: draft,
+    publishedConfig,
+    // Сравниваем по значению: партнёр должен видеть, есть ли что публиковать
+    hasUnpublishedChanges:
+      row.status === "published" && JSON.stringify(publishedConfig) !== JSON.stringify(draft),
     publishedAt: row.publishedAt?.toISOString() ?? null,
     ...mapLockFields(row),
     createdAt: row.createdAt.toISOString(),
@@ -158,6 +182,7 @@ export class PartnerSiteService {
       domain: null as string | null,
       status: "draft" as const,
       config: { ...defaults, subdomain, domain: "" },
+      publishedConfig: null as PartnerSiteDraft | null,
       publishedAt: null as Date | null,
       publishLocked: false,
       publishLockedAt: null as Date | null,
@@ -232,6 +257,9 @@ export class PartnerSiteService {
         subdomain,
         domain,
         config,
+        // Живую версию трогает только публикация: сохранение в кабинете
+        // не должно менять то, что видят покупатели
+        ...(input.publish ? { publishedConfig: config } : {}),
         status: nextStatus,
         publishedAt,
         updatedAt: new Date()
@@ -395,6 +423,9 @@ export class PartnerSiteService {
       .update(partnerSites)
       .set({
         status: "published",
+        // Партнёр правил черновик под замечания HQ: одобрение должно вернуть в
+        // эфир исправленную версию, а не ту, из-за которой сайт сняли
+        publishedConfig: site.config,
         publishedAt: site.publishedAt ? new Date(site.publishedAt) : new Date(),
         publishLocked: false,
         publishLockedAt: null,
@@ -449,7 +480,12 @@ export class PartnerSiteService {
     return this.getByPartnerId(input.partnerId);
   }
 
-  /** Резолв публичного сайта по Host (только published) */
+  /**
+   * Резолв публичного сайта по Host (только published).
+   *
+   * Наружу отдаётся опубликованная версия, а не черновик кабинета: партнёр
+   * правит config, и покупатель не должен видеть незаконченные правки.
+   */
   async resolveByHost(host: string): Promise<PartnerSiteRecord | null> {
     const normalized = normalizeHost(host);
     if (!normalized) return null;
@@ -457,7 +493,7 @@ export class PartnerSiteService {
     const byDomain = await db.query.partnerSites.findFirst({
       where: and(eq(partnerSites.domain, normalized), eq(partnerSites.status, "published"))
     });
-    if (byDomain) return withPartner(byDomain);
+    if (byDomain) return asPublicRecord(await withPartner(byDomain));
 
     const suffix = ".avgst.ru";
     if (normalized.endsWith(suffix)) {
@@ -466,19 +502,19 @@ export class PartnerSiteService {
         const bySub = await db.query.partnerSites.findFirst({
           where: and(eq(partnerSites.subdomain, sub), eq(partnerSites.status, "published"))
         });
-        if (bySub) return withPartner(bySub);
+        if (bySub) return asPublicRecord(await withPartner(bySub));
       }
     }
 
     return null;
   }
 
-  /** Резолв для превью: любой статус по partnerId */
+  /** Публичная выдача по partnerId: тоже только опубликованная версия */
   async resolvePublishedByPartnerId(partnerId: string): Promise<PartnerSiteRecord | null> {
     const site = await db.query.partnerSites.findFirst({
       where: and(eq(partnerSites.partnerId, partnerId), eq(partnerSites.status, "published"))
     });
-    return site ? mapRow(site) : null;
+    return site ? asPublicRecord(mapRow(site)) : null;
   }
 
   private async allocateSubdomain(preferred: string, partnerId: string): Promise<string> {
