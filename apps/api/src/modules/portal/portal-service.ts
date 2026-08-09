@@ -23,6 +23,7 @@ import {
   partners,
   partnerSites,
   passwordResetTokens,
+  siteRequestEvents,
   siteRequests,
   users
 } from "../../db/schema.js";
@@ -1977,7 +1978,30 @@ export class PortalService {
     };
 
     await db.insert(siteRequests).values(row);
+    await this.addSiteRequestEvent(row.id, "created", { formName: row.formName });
+    if (connection) {
+      await this.addSiteRequestEvent(row.id, "crm_delivery", {
+        crmStatus: "pending",
+        provider: connection.provider
+      });
+    }
     return row;
+  }
+
+  /** Событие в ленту карточки. Автор null — покупатель или сама платформа */
+  private async addSiteRequestEvent(
+    requestId: string,
+    type: "created" | "status_changed" | "note" | "crm_delivery",
+    payload: Record<string, unknown>,
+    authorUserId?: string | undefined
+  ) {
+    await db.insert(siteRequestEvents).values({
+      id: randomUUID(),
+      requestId,
+      type,
+      payload,
+      authorUserId: authorUserId ?? null
+    });
   }
 
   /** Заявки партнёра, свежие сверху. Имя проекта — чтобы не тянуть каталог в кабинет */
@@ -1995,10 +2019,39 @@ export class PortalService {
     return rows.map((row) => ({ ...row.request, projectName: row.projectName }));
   }
 
+  /** Заявка целиком: поля плюс лента событий для карточки */
+  async getSiteRequest(partnerId: string, requestId: string) {
+    const row = await db
+      .select({ request: siteRequests, projectName: catalogProjects.name })
+      .from(siteRequests)
+      .leftJoin(catalogProjects, eq(catalogProjects.id, siteRequests.projectId))
+      .where(and(eq(siteRequests.id, requestId), eq(siteRequests.partnerId, partnerId)))
+      .limit(1);
+
+    const found = row[0];
+    if (!found) {
+      throw new Error("Заявка не найдена.");
+    }
+
+    const events = await db
+      .select({ event: siteRequestEvents, authorName: users.fullName })
+      .from(siteRequestEvents)
+      .leftJoin(users, eq(users.id, siteRequestEvents.authorUserId))
+      .where(eq(siteRequestEvents.requestId, requestId))
+      .orderBy(desc(siteRequestEvents.createdAt));
+
+    return {
+      ...found.request,
+      projectName: found.projectName,
+      events: events.map((row) => ({ ...row.event, authorName: row.authorName }))
+    };
+  }
+
   /** Партнёр ведёт заявку: двигает по воронке и пишет, о чём договорились */
   async updateSiteRequest(input: {
     partnerId: string;
     requestId: string;
+    actorUserId: string;
     status?: "new" | "in_progress" | "won" | "lost" | undefined;
     note?: string | undefined;
   }) {
@@ -2017,16 +2070,37 @@ export class PortalService {
       patch.status = input.status;
       patch.statusChangedAt = new Date();
     }
-    if (input.note !== undefined) {
-      patch.note = input.note.trim() || null;
+    const nextNote = input.note?.trim() || null;
+    const noteChanged = input.note !== undefined && nextNote !== existing.note;
+    if (noteChanged) {
+      patch.note = nextNote;
     }
     if (Object.keys(patch).length === 0) {
-      return existing;
+      return this.getSiteRequest(input.partnerId, input.requestId);
     }
 
     await db.update(siteRequests).set(patch).where(eq(siteRequests.id, input.requestId));
-    return { ...existing, ...patch };
+
+    if (patch.status) {
+      await this.addSiteRequestEvent(
+        input.requestId,
+        "status_changed",
+        { from: existing.status, to: patch.status },
+        input.actorUserId
+      );
+    }
+    if (noteChanged) {
+      await this.addSiteRequestEvent(
+        input.requestId,
+        "note",
+        { text: nextNote ?? "", cleared: nextNote === null },
+        input.actorUserId
+      );
+    }
+
+    return this.getSiteRequest(input.partnerId, input.requestId);
   }
+
 
   async createInquiry(input: {
     actorUserId: string;

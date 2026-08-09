@@ -22,18 +22,35 @@ import {
   REQUEST_STATUS_LABEL,
   formatRequestDate,
   formatUtm,
-  telHref,
   type SiteRequest,
   type SiteRequestStatus
 } from "@/lib/site-requests";
 
 /** Лицо карточки: одинаково в колонке и под курсором при перетаскивании */
-function CardFace({ request }: { request: SiteRequest }) {
+function CardFace({
+  request,
+  onOpen
+}: {
+  request: SiteRequest;
+  onOpen?: (request: SiteRequest) => void;
+}) {
   const utm = formatUtm(request.utm);
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="min-w-0 truncate text-sm font-medium">{request.customerName}</p>
+        {onOpen ? (
+          // Имя — единственная кликабельная часть: остальное тянется
+          <button
+            type="button"
+            className="min-w-0 truncate text-left text-sm font-medium underline-offset-4 hover:underline"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => onOpen(request)}
+          >
+            {request.customerName}
+          </button>
+        ) : (
+          <p className="min-w-0 truncate text-sm font-medium">{request.customerName}</p>
+        )}
         <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
           {formatRequestDate(request.createdAt)}
         </span>
@@ -60,43 +77,26 @@ function RequestCard({
     data: { status: request.status }
   });
 
+  // role="button" от dnd-kit сделал бы карточку интерактивной, а её содержимое —
+  // presentational: кнопка с именем пропала бы из дерева доступности
+  const { role: _role, ...dragAttributes } = attributes;
+
   return (
     <li
       ref={setNodeRef}
+      // Тянем за карточку целиком; имя внутри останавливает pointerdown,
+      // поэтому клик по нему открывает карточку, а не начинает перенос
       className={cn(
-        "bg-card rounded-lg border p-3",
+        "bg-card cursor-grab touch-none rounded-lg border p-3 active:cursor-grabbing",
         "transition-[border-color,opacity] duration-150",
         "hover:border-ring/50",
+        "outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
         isDragging && "opacity-35"
       )}
+      {...listeners}
+      {...dragAttributes}
     >
-      <div className="flex items-start gap-2">
-        {/* Тянем за всю карточку, а открываем кнопкой: клик и drag не спорят */}
-        <button
-          type="button"
-          className="min-w-0 flex-1 cursor-grab text-left outline-none active:cursor-grabbing"
-          aria-label={`Перетащить заявку: ${request.customerName}`}
-          {...listeners}
-          {...attributes}
-        >
-          <CardFace request={request} />
-        </button>
-      </div>
-      <div className="mt-2 flex items-center gap-3">
-        <button
-          type="button"
-          className="text-primary text-xs underline-offset-4 hover:underline"
-          onClick={() => onOpen(request)}
-        >
-          Открыть
-        </button>
-        <a
-          href={telHref(request.customerPhone)}
-          className="text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline"
-        >
-          Позвонить
-        </a>
-      </div>
+      <CardFace request={request} onOpen={onOpen} />
     </li>
   );
 }

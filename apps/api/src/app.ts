@@ -1695,6 +1695,21 @@ export async function buildApp() {
     return portalService.listSiteRequests(getAuthUser(request)!.partnerId!);
   });
 
+  app.get("/api/partner/requests/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const { id } = request.params as { id: string };
+    try {
+      return await portalService.getSiteRequest(getAuthUser(request)!.partnerId!, id);
+    } catch (error) {
+      return reply
+        .status(404)
+        .send({ message: error instanceof Error ? error.message : "Заявка не найдена" });
+    }
+  });
+
   app.patch("/api/partner/requests/:id", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
     if (roleCheck) {
@@ -1709,6 +1724,7 @@ export async function buildApp() {
       return await portalService.updateSiteRequest({
         partnerId: getAuthUser(request)!.partnerId!,
         requestId: id,
+        actorUserId: getAuthUser(request)!.sub,
         ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
         ...(parsed.data.note !== undefined ? { note: parsed.data.note } : {})
       });

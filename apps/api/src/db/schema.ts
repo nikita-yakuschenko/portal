@@ -45,6 +45,13 @@ export const siteRequestStatusEnum = pgEnum("site_request_status", [
   "won",
   "lost"
 ]);
+/** Что произошло с заявкой: лента в карточке собирается отсюда */
+export const siteRequestEventTypeEnum = pgEnum("site_request_event_type", [
+  "created",
+  "status_changed",
+  "note",
+  "crm_delivery"
+]);
 export const inquiryStatusEnum = pgEnum("inquiry_status", ["new", "answered"]);
 export const syncStatusEnum = pgEnum("sync_status", ["running", "completed", "failed"]);
 export const partnerSiteStatusEnum = pgEnum("partner_site_status", ["draft", "published"]);
@@ -251,6 +258,30 @@ export const siteRequests = pgTable("site_requests", {
   crmSentAt: timestamp("crm_sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
+
+/**
+ * Лента событий заявки: кто и когда что сделал.
+ * Пишем сюда, а не в общий аудит-лог: события показываются партнёру в
+ * карточке, а аудит-лог — служебный и хранит действия по всей платформе.
+ */
+export const siteRequestEvents = pgTable(
+  "site_request_events",
+  {
+    id: text("id").primaryKey(),
+    requestId: text("request_id")
+      .notNull()
+      .references(() => siteRequests.id, { onDelete: "cascade" }),
+    type: siteRequestEventTypeEnum("type").notNull(),
+    /** Подробности события: прежний и новый статус, текст заметки, ошибка CRM */
+    payload: jsonb("payload").notNull().default({}),
+    /** Кто сделал; null — покупатель с сайта или сама платформа */
+    authorUserId: text("author_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    requestIdx: index("site_request_events_request_idx").on(table.requestId, table.createdAt)
+  })
+);
 
 export const partnerInquiries = pgTable("partner_inquiries", {
   id: text("id").primaryKey(),

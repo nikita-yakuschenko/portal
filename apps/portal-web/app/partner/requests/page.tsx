@@ -1,13 +1,13 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { PartnerShell } from "@/components/partner-shell";
 import { PageAlert } from "@/components/page-alert";
-import { RequestDetailsSheet } from "@/components/partner-requests/request-details-sheet";
+import { RequestCardDialog } from "@/components/partner-requests/request-card-dialog";
 import { RequestsBoard } from "@/components/partner-requests/requests-board";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,7 +30,6 @@ import {
   REQUEST_STATUS_LABEL,
   formatRequestDate,
   formatUtm,
-  telHref,
   type SiteRequest,
   type SiteRequestStatus
 } from "@/lib/site-requests";
@@ -69,11 +68,6 @@ function PartnerRequestsContent() {
       }
     })();
   }, []);
-
-  const openRequest = useMemo(
-    () => items.find((item) => item.id === openId) ?? null,
-    [items, openId]
-  );
 
   function changeView(next: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -173,23 +167,21 @@ function PartnerRequestsContent() {
                   {items.map((item) => {
                     const utm = formatUtm(item.utm);
                     return (
-                      <TableRow
-                        key={item.id}
-                        className="cursor-pointer"
-                        onClick={() => setOpenId(item.id)}
-                      >
+                      <TableRow key={item.id}>
                         <TableCell className="text-muted-foreground pl-6 whitespace-nowrap tabular-nums">
                           {formatRequestDate(item.createdAt)}
                         </TableCell>
-                        <TableCell className="font-medium">{item.customerName}</TableCell>
-                        <TableCell className="whitespace-nowrap tabular-nums">
-                          <a
-                            href={telHref(item.customerPhone)}
-                            className="underline-offset-4 hover:underline"
-                            onClick={(event) => event.stopPropagation()}
+                        <TableCell>
+                          <button
+                            type="button"
+                            className="font-medium underline-offset-4 hover:underline"
+                            onClick={() => setOpenId(item.id)}
                           >
-                            {item.customerPhone}
-                          </a>
+                            {item.customerName}
+                          </button>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums">
+                          {item.customerPhone}
                         </TableCell>
                         <TableCell className="text-muted-foreground">{item.formName}</TableCell>
                         <TableCell className="text-muted-foreground max-w-[16rem] truncate">
@@ -231,13 +223,13 @@ function PartnerRequestsContent() {
         </Card>
       )}
 
-      <RequestDetailsSheet
-        request={openRequest}
-        open={Boolean(openRequest)}
-        onOpenChange={(next) => {
+      <RequestCardDialog
+        requestId={openId}
+        open={Boolean(openId)}
+        onOpenChange={(next: boolean) => {
           if (!next) setOpenId(null);
         }}
-        onUpdated={applyUpdate}
+        onChanged={applyUpdate}
       />
     </PartnerShell>
   );
