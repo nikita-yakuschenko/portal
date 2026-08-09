@@ -1,14 +1,28 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { IconExternalLink, IconUpload } from "@tabler/icons-react";
+import { IconExternalLink } from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { PartnerShell } from "@/components/partner-shell";
 import { PageAlert } from "@/components/page-alert";
+import { ImageUploadField } from "@/components/partner-site/image-upload-field";
 import { PopularProjectsPicker } from "@/components/partner-site/popular-projects-picker";
-import { Badge } from "@/components/ui/badge";
+import { SettingRow, SettingRows } from "@/components/partner-site/setting-row";
+import { SiteStatusCard } from "@/components/partner-site/site-status-card";
+import { PartnerSiteSocialGlyph } from "@/components/partner-site/social-icons";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,9 +33,10 @@ import {
   CardTitle
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/api";
@@ -30,23 +45,85 @@ import {
   emptyPartnerSiteDraft,
   loadPartnerSiteDraft,
   normalizePartnerSiteDraft,
+  publicSiteHost,
   savePartnerSiteDraft,
+  slugifySubdomain,
   type PartnerSiteDraft
 } from "@/lib/partner-site-draft";
+import { filterStorefrontProjects, type StorefrontProject } from "@/lib/partner-site-preview";
+import { PARTNER_SITE_SOCIALS, type PartnerSiteSocialId } from "@/lib/partner-site-socials";
+import { cn } from "@/lib/utils";
 import {
-  filterStorefrontProjects,
-  type StorefrontProject
-} from "@/lib/partner-site-preview";
-import { PARTNER_SITE_SOCIALS } from "@/lib/partner-site-socials";
+  countErrors,
+  firstErrorField,
+  SITE_FIELD_INPUT_ID,
+  SITE_FIELD_TAB,
+  SITE_TAB_LABELS,
+  SITE_TABS,
+  validatePartnerSiteDraft,
+  type SiteErrors,
+  type SiteFieldKey,
+  type SiteTab
+} from "@/lib/partner-site-validation";
 
-const TABS = ["general", "contacts", "content", "seo"] as const;
-type SiteTab = (typeof TABS)[number];
+/** Короткий пример без https:// — длинный протокол визуально «съедает» поле */
+const SOCIAL_PLACEHOLDER: Record<PartnerSiteSocialId, string> = {
+  vk: "vk.com/company",
+  instagram: "instagram.com/company",
+  youtube: "youtube.com/@company",
+  dzen: "dzen.ru/company",
+  telegram: "t.me/company",
+  max: "max.ru/company"
+};
 
 function parseTab(value: string | null): SiteTab {
-  if (value && (TABS as readonly string[]).includes(value)) {
+  if (value && (SITE_TABS as readonly string[]).includes(value)) {
     return value as SiteTab;
   }
   return "general";
+}
+
+type SiteApi = {
+  status: "draft" | "published";
+  config: PartnerSiteDraft;
+  hasUnpublishedChanges?: boolean;
+  publishedAt?: string | null;
+  publishLocked?: boolean;
+  publishLockNotice?: string | null;
+  publishLockNoticeReadAt?: string | null;
+  republishRequestStatus?: "pending" | null;
+};
+
+type SiteMeta = {
+  status: "draft" | "published";
+  hasUnpublishedChanges: boolean;
+  publishedAt: string | null;
+  publishLocked: boolean;
+  publishLockNotice: string | null;
+  noticeReadAt: string | null;
+  republishRequestStatus: "pending" | null;
+};
+
+const INITIAL_META: SiteMeta = {
+  status: "draft",
+  hasUnpublishedChanges: false,
+  publishedAt: null,
+  publishLocked: false,
+  publishLockNotice: null,
+  noticeReadAt: null,
+  republishRequestStatus: null
+};
+
+function readMeta(site: SiteApi): SiteMeta {
+  return {
+    status: site.status,
+    hasUnpublishedChanges: Boolean(site.hasUnpublishedChanges),
+    publishedAt: site.publishedAt ?? null,
+    publishLocked: Boolean(site.publishLocked),
+    publishLockNotice: site.publishLockNotice ?? null,
+    noticeReadAt: site.publishLockNoticeReadAt ?? null,
+    republishRequestStatus: site.republishRequestStatus === "pending" ? "pending" : null
+  };
 }
 
 function PartnerSiteContent() {
@@ -55,32 +132,33 @@ function PartnerSiteContent() {
   const tab = parseTab(searchParams.get("tab"));
 
   const [form, setForm] = useState<PartnerSiteDraft>(emptyPartnerSiteDraft);
-  const [siteStatus, setSiteStatus] = useState<"draft" | "published">("draft");
-  const [publishLocked, setPublishLocked] = useState(false);
-  const [publishLockNotice, setPublishLockNotice] = useState<string | null>(null);
-  const [noticeReadAt, setNoticeReadAt] = useState<string | null>(null);
-  const [republishRequestStatus, setRepublishRequestStatus] = useState<"pending" | null>(null);
+  /** Последнее, что реально лежит на сервере — от него считаем несохранённые правки */
+  const [savedForm, setSavedForm] = useState<PartnerSiteDraft>(emptyPartnerSiteDraft);
+  const [meta, setMeta] = useState<SiteMeta>(INITIAL_META);
   const [projects, setProjects] = useState<StorefrontProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  /** Ошибку поля показываем после ухода из него или после попытки сохранить */
+  const [touched, setTouched] = useState<Partial<Record<SiteFieldKey, boolean>>>({});
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  /** Выбор сетей до выключения тумблера — чтобы вернуть его, а не собирать заново */
+  const lastOfferedSocials = useRef<string[]>([]);
 
-  type SiteApi = {
-    status: "draft" | "published";
-    config: PartnerSiteDraft;
-    publishLocked?: boolean;
-    publishLockNotice?: string | null;
-    publishLockNoticeReadAt?: string | null;
-    republishRequestStatus?: "pending" | null;
-  };
+  const errors: SiteErrors = useMemo(() => validatePartnerSiteDraft(form), [form]);
+  const dirty = useMemo(() => JSON.stringify(form) !== JSON.stringify(savedForm), [form, savedForm]);
+  const host = publicSiteHost(form);
+  const subdomainSlug = slugifySubdomain(form.subdomain);
 
-  function applySiteMeta(site: SiteApi) {
-    setSiteStatus(site.status);
-    setPublishLocked(Boolean(site.publishLocked));
-    setPublishLockNotice(site.publishLockNotice ?? null);
-    setNoticeReadAt(site.publishLockNoticeReadAt ?? null);
-    setRepublishRequestStatus(site.republishRequestStatus === "pending" ? "pending" : null);
-  }
+  const showError = useCallback(
+    (key: SiteFieldKey): string | undefined =>
+      touched[key] || submitAttempted ? errors[key] : undefined,
+    [errors, touched, submitAttempted]
+  );
+
+  const markTouched = useCallback((key: SiteFieldKey) => {
+    setTouched((prev) => (prev[key] ? prev : { ...prev, [key]: true }));
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -92,7 +170,7 @@ function PartnerSiteContent() {
           )
         ]);
         setProjects(filterStorefrontProjects(storefront));
-        applySiteMeta(site);
+        setMeta(readMeta(site));
 
         let config = normalizePartnerSiteDraft(site.config) ?? site.config;
         // Одноразовая миграция: если на сервере пустое имя — подтянуть localStorage
@@ -100,13 +178,17 @@ function PartnerSiteContent() {
           const stored = loadPartnerSiteDraft();
           if (stored?.name.trim()) {
             config = stored;
-            await apiFetch("/api/partner/site", {
+            const saved = await apiFetch<SiteApi>("/api/partner/site", {
               method: "PUT",
               body: JSON.stringify({ config })
             });
+            config = saved.config;
+            setMeta(readMeta(saved));
           }
         }
         setForm(config);
+        setSavedForm(config);
+        lastOfferedSocials.current = config.postLeadOfferSocials;
         savePartnerSiteDraft(config);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Не удалось загрузить данные сайта");
@@ -116,97 +198,62 @@ function PartnerSiteContent() {
     })();
   }, []);
 
-  function handleTabChange(value: string) {
-    const next = parseTab(value);
-    const params = new URLSearchParams(searchParams.toString());
-    if (next === "general") {
-      params.delete("tab");
-    } else {
-      params.set("tab", next);
+  // Правки живут только в форме: уход со страницы их потеряет
+  useEffect(() => {
+    if (!dirty) return;
+    function warn(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
     }
-    const query = params.toString();
-    router.replace(query ? `/partner/site?${query}` : "/partner/site");
-  }
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
-  function applyTemplateTexts() {
-    setForm((prev) => {
-      const next = applySiteTemplateTexts(prev);
-      savePartnerSiteDraft(next);
-      return next;
-    });
-    toast.success("Тексты первого экрана и каталога подставлены как на сайте");
-  }
+  const goToTab = useCallback(
+    (next: SiteTab) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (next === "general") params.delete("tab");
+      else params.set("tab", next);
+      const query = params.toString();
+      router.replace(query ? `/partner/site?${query}` : "/partner/site", { scroll: false });
+    },
+    [router, searchParams]
+  );
+
+  /** Ведёт к полю: открывает нужный раздел, подсвечивает и ставит курсор */
+  const goToField = useCallback(
+    (key: SiteFieldKey) => {
+      markTouched(key);
+      goToTab(SITE_FIELD_TAB[key]);
+      window.setTimeout(() => {
+        const el = document.getElementById(SITE_FIELD_INPUT_ID[key]);
+        el?.scrollIntoView({ block: "center", behavior: "smooth" });
+        (el as HTMLElement | null)?.focus({ preventScroll: true });
+      }, 120);
+    },
+    [goToTab, markTouched]
+  );
 
   function updateField<K extends keyof PartnerSiteDraft>(key: K, value: PartnerSiteDraft[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function readImageFile(
-    event: React.ChangeEvent<HTMLInputElement>,
-    opts: { maxBytes: number; field: "logoDataUrl" | "logoMobileDataUrl"; label: string }
-  ) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (file.size > opts.maxBytes) {
-      toast.error(`${opts.label} слишком большой`, {
-        description: `Загрузите файл до ~${Math.round(opts.maxBytes / 1000)} КБ (PNG/SVG/JPG).`
-      });
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : "";
-      setForm((prev) => ({ ...prev, [opts.field]: result }));
-    };
-    reader.readAsDataURL(file);
-  }
-
-  function handleLogoChange(event: React.ChangeEvent<HTMLInputElement>) {
-    readImageFile(event, {
-      maxBytes: 800_000,
-      field: "logoDataUrl",
-      label: "Логотип"
+  function applyTemplateTexts() {
+    setForm((prev) => applySiteTemplateTexts(prev));
+    toast.success("Тексты подставлены", {
+      description: "Сохраните черновик, если они вам подходят."
     });
   }
 
-  function handleMobileLogoChange(event: React.ChangeEvent<HTMLInputElement>) {
-    readImageFile(event, {
-      maxBytes: 300_000,
-      field: "logoMobileDataUrl",
-      label: "Мобильный логотип"
-    });
-  }
-
-  function handleFaviconChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (file.size > 300_000) {
-      toast.error("Favicon слишком большой", {
-        description: "Загрузите файл до ~300 КБ (ICO/PNG/SVG/WEBP)."
+  async function persistSite(options: { publish?: boolean; silent?: boolean } = {}) {
+    setSubmitAttempted(true);
+    const failed = firstErrorField(errors);
+    if (failed) {
+      const count = countErrors(errors);
+      toast.error(count === 1 ? "Одно поле заполнено неверно" : `Полей с ошибками: ${count}`, {
+        description: "Открыли первое — исправьте и сохраните ещё раз."
       });
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : "";
-      setForm((prev) => ({ ...prev, faviconDataUrl: result }));
-    };
-    reader.readAsDataURL(file);
-  }
-
-  async function persistSite(publish = false) {
-    if (!form.name.trim() || !form.subdomain.trim()) {
-      toast.error("Заполните название и поддомен", {
-        description: "Раздел «Основное»"
-      });
-      handleTabChange("general");
-      return false;
-    }
-    if (!form.contactPhone.trim() || !form.contactEmail.trim()) {
-      toast.error("Заполните телефон и email", {
-        description: "Раздел «Контакты»"
-      });
-      handleTabChange("contacts");
+      goToField(failed);
       return false;
     }
 
@@ -214,16 +261,32 @@ function PartnerSiteContent() {
     try {
       const saved = await apiFetch<SiteApi>("/api/partner/site", {
         method: "PUT",
-        body: JSON.stringify({ config: form, publish })
+        body: JSON.stringify({ config: form, publish: options.publish === true })
       });
-      applySiteMeta(saved);
+      setMeta(readMeta(saved));
       setForm(saved.config);
+      setSavedForm(saved.config);
+      lastOfferedSocials.current = saved.config.postLeadOfferSocials;
       savePartnerSiteDraft(saved.config);
-      toast.success(publish ? "Сайт опубликован" : "Черновик сохранён", {
-        description: publish
-          ? "Сайт доступен на привязанном домене после DNS/Dokploy."
-          : "Можно открыть предпросмотр или опубликовать."
-      });
+      setSubmitAttempted(false);
+
+      if (options.silent) return true;
+
+      if (options.publish) {
+        toast.success("Сайт опубликован", {
+          description: `Открывается по адресу ${publicSiteHost(saved.config)}.`
+        });
+      } else if (saved.status === "published") {
+        toast.success("Черновик сохранён", {
+          description: "На сайте пока прежняя версия.",
+          action: {
+            label: "Опубликовать",
+            onClick: () => void persistSite({ publish: true })
+          }
+        });
+      } else {
+        toast.success("Черновик сохранён");
+      }
       return true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось сохранить сайт");
@@ -233,21 +296,19 @@ function PartnerSiteContent() {
     }
   }
 
-  async function handleSave(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    await persistSite(false);
-  }
-
-  async function handlePublish() {
-    await persistSite(true);
+    await persistSite();
   }
 
   async function handleUnpublish() {
     setSaving(true);
     try {
       const saved = await apiFetch<SiteApi>("/api/partner/site/unpublish", { method: "POST" });
-      applySiteMeta(saved);
-      toast.success("Сайт снят с публикации");
+      setMeta(readMeta(saved));
+      toast.success("Сайт снят с публикации", {
+        description: "Настройки сохранены — вернуть его можно кнопкой «Опубликовать»."
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось снять с публикации");
     } finally {
@@ -262,8 +323,10 @@ function PartnerSiteContent() {
         method: "POST",
         body: JSON.stringify({})
       });
-      applySiteMeta(saved);
-      toast.success("Запрос на возобновление отправлен");
+      setMeta(readMeta(saved));
+      toast.success("Запрос отправлен", {
+        description: "Администратор сети увидит его в своём кабинете."
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось отправить запрос");
     } finally {
@@ -274,592 +337,717 @@ function PartnerSiteContent() {
   async function handleNoticeRead() {
     try {
       const saved = await apiFetch<SiteApi>("/api/partner/site/notice-read", { method: "POST" });
-      applySiteMeta(saved);
+      setMeta(readMeta(saved));
     } catch {
-      /* ignore */
+      /* пометка о прочтении не критична */
     }
   }
 
   async function openPreview() {
-    const ok = await persistSite(false);
-    if (ok) {
-      window.open("/partner/site/preview", "_blank", "noopener,noreferrer");
+    // Предпросмотр читает сохранённый черновик, поэтому сначала сохраняем
+    if (dirty && !(await persistSite({ silent: true }))) return;
+    const opened = window.open("/partner/site/preview", "_blank", "noopener,noreferrer");
+    if (!opened) {
+      toast.info("Браузер заблокировал новую вкладку", {
+        description: "Откройте предпросмотр по адресу /partner/site/preview"
+      });
     }
   }
 
-  return (
-    <PartnerShell
-      currentPath="/partner/site"
-      title="Сайт"
-      headerActions={
-        <>
-          <Badge variant={siteStatus === "published" ? "default" : "secondary"}>
-            {siteStatus === "published" ? "Опубликован" : "Черновик"}
-          </Badge>
-          {publishLocked ? <Badge variant="destructive">Публикация заблокирована</Badge> : null}
-          <Button type="button" variant="outline" onClick={() => void openPreview()} disabled={loading || saving}>
-            <IconExternalLink />
-            Предпросмотр
-          </Button>
-        </>
-      }
-    >
-      <PageAlert message={error} variant="destructive" />
-      {publishLocked && publishLockNotice ? (
-        <PageAlert
-          message={publishLockNotice}
-          variant={noticeReadAt ? "default" : "destructive"}
-        />
-      ) : null}
-      {publishLocked && publishLockNotice && !noticeReadAt ? (
-        <div className="mb-4">
-          <Button type="button" variant="outline" size="sm" onClick={() => void handleNoticeRead()}>
-            Понятно
-          </Button>
-        </div>
-      ) : null}
+  const offerEnabled = form.postLeadOfferSocials.length > 0;
+  const filledSocials = PARTNER_SITE_SOCIALS.filter(
+    (social) => String(form[social.field] ?? "").trim().length > 0
+  );
 
-      <p className="text-muted-foreground max-w-3xl text-sm">
-        Публичный сайт по структуре msk.avgst.ru: своё лого, свой бренд, каталог и цены из портала.
-        Без верхней плашки города и без блоков «6% / Яндекс / 10+ лет».
-      </p>
+  function toggleOffer(enabled: boolean) {
+    if (enabled) {
+      const restored = lastOfferedSocials.current.filter((id) =>
+        filledSocials.some((social) => social.id === id)
+      );
+      const next = restored.length > 0 ? restored : filledSocials[0] ? [filledSocials[0].id] : [];
+      if (next.length === 0) {
+        toast.info("Сначала добавьте ссылку на соцсеть", {
+          description: "Без ссылки покупателю будет некуда перейти."
+        });
+        goToField("socialTelegram");
+        return;
+      }
+      updateField("postLeadOfferSocials", next);
+    } else {
+      lastOfferedSocials.current = form.postLeadOfferSocials;
+      updateField("postLeadOfferSocials", []);
+    }
+  }
+
+  function toggleOfferedSocial(id: string, checked: boolean) {
+    const current = form.postLeadOfferSocials;
+    const next = checked
+      ? current.includes(id)
+        ? current
+        : [...current, id]
+      : current.filter((item) => item !== id);
+    updateField("postLeadOfferSocials", next);
+    if (next.length > 0) lastOfferedSocials.current = next;
+  }
+
+  const errorCount = submitAttempted ? countErrors(errors) : 0;
+
+  return (
+    <PartnerShell currentPath="/partner/site" title="Сайт">
+      <PageAlert message={error} variant="destructive" />
 
       {loading ? (
         <div className="space-y-4">
+          <Skeleton className="h-28 w-full" />
           <Skeleton className="h-10 w-full max-w-lg" />
-          {[0, 1].map((row) => (
-            <Skeleton key={row} className="h-40 w-full" />
-          ))}
+          <Skeleton className="h-64 w-full" />
         </div>
       ) : (
-        <form className="flex flex-col gap-4 md:gap-6" onSubmit={handleSave}>
-          <Tabs value={tab} onValueChange={handleTabChange}>
-            <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
-              <TabsTrigger value="general">Основное</TabsTrigger>
-              <TabsTrigger value="contacts">Контакты</TabsTrigger>
-              <TabsTrigger value="content">Тексты</TabsTrigger>
-              <TabsTrigger value="seo">SEO и заявки</TabsTrigger>
-            </TabsList>
+        <div className="flex flex-col gap-4 md:gap-6">
+          <SiteStatusCard
+            host={host}
+            status={meta.status}
+            hasUnpublishedChanges={meta.hasUnpublishedChanges || dirty}
+            publishedAt={meta.publishedAt}
+            publishLocked={meta.publishLocked}
+            publishLockNotice={meta.publishLockNotice}
+            noticeRead={Boolean(meta.noticeReadAt)}
+            republishPending={meta.republishRequestStatus === "pending"}
+            busy={saving}
+            onPublish={() => void persistSite({ publish: true })}
+            onUnpublish={() => void handleUnpublish()}
+            onRequestRepublish={() => void handleRepublishRequest()}
+            onNoticeRead={() => void handleNoticeRead()}
+          />
 
-            <TabsContent value="general" className="mt-0 space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Адрес сайта</CardTitle>
-                  <CardDescription>
-                    Технический поддомен платформы или свой домен компании.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <FieldGroup className="md:grid md:grid-cols-2 md:gap-4">
-                    <Field>
-                      <FieldLabel htmlFor="site-name">Название компании на сайте</FieldLabel>
-                      <Input
-                        id="site-name"
-                        value={form.name}
-                        onChange={(e) => updateField("name", e.target.value)}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="site-subdomain">Поддомен</FieldLabel>
-                      <div className="flex items-center gap-2">
+          <form className="flex flex-col gap-4 md:gap-6" onSubmit={handleSubmit}>
+            {/* manual: иначе проход стрелками по разделам дёргает router.replace на каждом шаге */}
+            <Tabs
+              value={tab}
+              activationMode="manual"
+              onValueChange={(value) => goToTab(parseTab(value))}
+            >
+              <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
+                {SITE_TABS.map((item) => (
+                  <TabsTrigger key={item} value={item}>
+                    {SITE_TAB_LABELS[item]}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
+              <TabsContent value="general" className="mt-0 space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Адрес и бренд</CardTitle>
+                    <CardDescription>
+                      Название, адрес сайта и картинки для шапки, телефона и вкладки браузера.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <SettingRows>
+                      <SettingRow
+                        label="Название компании"
+                        htmlFor="site-name"
+                        description="Стоит в шапке сайта и в подвале."
+                        error={showError("name")}
+                        width="md"
+                      >
                         <Input
-                          id="site-subdomain"
-                          value={form.subdomain}
-                          onChange={(e) => updateField("subdomain", e.target.value)}
+                          id="site-name"
+                          value={form.name}
+                          required
+                          aria-invalid={Boolean(showError("name"))}
+                          onBlur={() => markTouched("name")}
+                          onChange={(e) => updateField("name", e.target.value)}
                         />
-                        <span className="text-muted-foreground shrink-0 text-sm">.avgst.ru</span>
-                      </div>
-                    </Field>
-                    <Field className="md:col-span-2">
-                      <FieldLabel htmlFor="site-domain">Свой домен (опционально)</FieldLabel>
-                      <Input
-                        id="site-domain"
-                        placeholder="stroy-company.ru"
-                        value={form.domain}
-                        onChange={(e) => updateField("domain", e.target.value)}
-                      />
-                    </Field>
-                  </FieldGroup>
-                </CardContent>
-              </Card>
+                      </SettingRow>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Логотип</CardTitle>
-                  <CardDescription>
-                    Обычный — для десктопа. Мобильный — компактная иконка в шапке, чтобы телефон не
-                    обрезался.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="flex flex-wrap items-center gap-4">
-                    <div className="bg-muted flex h-16 min-w-[120px] items-center justify-center rounded-lg border border-dashed px-4">
-                      {form.logoDataUrl ? (
-                        <img
-                          src={form.logoDataUrl}
-                          alt="Логотип"
-                          className="max-h-12 max-w-[160px] object-contain"
-                        />
-                      ) : (
-                        <span className="text-muted-foreground text-xs">Нет логотипа</span>
-                      )}
-                    </div>
-                    <div className="flex min-w-0 flex-1 flex-col gap-2">
-                      <FieldLabel htmlFor="site-logo">Десктоп / подвал</FieldLabel>
-                      <Input
-                        id="site-logo"
-                        type="file"
-                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                        onChange={handleLogoChange}
-                        className="max-w-xs cursor-pointer"
-                      />
-                      {form.logoDataUrl ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="w-fit"
-                          onClick={() => updateField("logoDataUrl", "")}
-                        >
-                          Убрать
-                        </Button>
-                      ) : (
-                        <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                          <IconUpload className="size-3.5" />
-                          PNG, JPG или SVG, до ~800 КБ
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-4 border-t pt-6">
-                    <div className="bg-muted flex size-16 items-center justify-center rounded-lg border border-dashed">
-                      {form.logoMobileDataUrl ? (
-                        <img
-                          src={form.logoMobileDataUrl}
-                          alt="Мобильный логотип"
-                          className="size-10 object-contain"
-                        />
-                      ) : (
-                        <span className="text-muted-foreground text-[10px]">Нет</span>
-                      )}
-                    </div>
-                    <div className="flex min-w-0 flex-1 flex-col gap-2">
-                      <FieldLabel htmlFor="site-logo-mobile">Мобильная шапка</FieldLabel>
-                      <Input
-                        id="site-logo-mobile"
-                        type="file"
-                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                        onChange={handleMobileLogoChange}
-                        className="max-w-xs cursor-pointer"
-                      />
-                      {form.logoMobileDataUrl ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="w-fit"
-                          onClick={() => updateField("logoMobileDataUrl", "")}
-                        >
-                          Убрать
-                        </Button>
-                      ) : (
-                        <p className="text-muted-foreground text-xs">
-                          Квадратная иконка ~64–128 px, до ~300 КБ. Если пусто — берётся обычный
-                          логотип.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="contacts" className="mt-0 space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Контакты</CardTitle>
-                  <CardDescription>
-                    Ваши телефоны и почта — то, что видит покупатель.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <FieldGroup className="md:grid md:grid-cols-2 md:gap-4">
-                    <Field>
-                      <FieldLabel htmlFor="site-phone">Телефон</FieldLabel>
-                      <Input
-                        id="site-phone"
-                        value={form.contactPhone}
-                        onChange={(e) => updateField("contactPhone", e.target.value)}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="site-email">Email</FieldLabel>
-                      <Input
-                        id="site-email"
-                        type="email"
-                        value={form.contactEmail}
-                        onChange={(e) => updateField("contactEmail", e.target.value)}
-                      />
-                    </Field>
-                    <Field className="md:col-span-2">
-                      <FieldLabel htmlFor="site-address">Адрес / город</FieldLabel>
-                      <Input
-                        id="site-address"
-                        value={form.address}
-                        onChange={(e) => updateField("address", e.target.value)}
-                      />
-                    </Field>
-                  </FieldGroup>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Соцсети</CardTitle>
-                  <CardDescription>Ссылки на ваши аккаунты — по желанию.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <FieldGroup className="md:grid md:grid-cols-2 md:gap-4">
-                    {PARTNER_SITE_SOCIALS.map((social) => (
-                      <Field key={social.id}>
-                        <FieldLabel htmlFor={`site-${social.id}`}>{social.label}</FieldLabel>
-                        <Input
-                          id={`site-${social.id}`}
-                          placeholder={social.placeholder}
-                          value={String(form[social.field] ?? "")}
-                          onChange={(e) => updateField(social.field, e.target.value)}
-                        />
-                      </Field>
-                    ))}
-                  </FieldGroup>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>После заявки</CardTitle>
-                  <CardDescription>
-                    Выберите сети для ротации: каждая новая заявка получит следующую по кругу.
-                    Так разные пользователи увидят разные соцсети. Нужны ссылки в блоке «Соцсети».
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-col gap-3">
-                    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-2.5">
-                      <Checkbox
-                        checked={form.postLeadOfferSocials.length === 0}
-                        onCheckedChange={(value) => {
-                          if (value === true) updateField("postLeadOfferSocials", []);
-                        }}
-                        className="mt-0.5"
-                      />
-                      <span className="min-w-0">
-                        <span className="block text-sm font-medium">Не предлагать</span>
-                        <span className="text-muted-foreground text-xs">
-                          После e-mail шаг с подпиской не покажется
-                        </span>
-                      </span>
-                    </label>
-                    {PARTNER_SITE_SOCIALS.map((social) => {
-                      const hasUrl = String(form[social.field] ?? "").trim().length > 0;
-                      const selected = form.postLeadOfferSocials.includes(social.id);
-                      return (
-                        <label
-                          key={social.id}
-                          className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-2.5"
-                        >
-                          <Checkbox
-                            checked={selected}
-                            disabled={!hasUrl}
-                            onCheckedChange={(value) => {
-                              const current = form.postLeadOfferSocials;
-                              if (value === true) {
-                                updateField(
-                                  "postLeadOfferSocials",
-                                  current.includes(social.id)
-                                    ? current
-                                    : [...current, social.id]
-                                );
-                              } else {
-                                updateField(
-                                  "postLeadOfferSocials",
-                                  current.filter((id) => id !== social.id)
-                                );
-                              }
-                            }}
-                            className="mt-0.5"
-                          />
-                          <span className="min-w-0">
-                            <span className="block text-sm font-medium">{social.label}</span>
-                            <span className="text-muted-foreground text-xs">
-                              {hasUrl
-                                ? "Участвует в ротации после заявки"
-                                : "Сначала укажите ссылку в блоке «Соцсети»"}
+                      <SettingRow
+                        label="Адрес на avgst.ru"
+                        htmlFor="site-subdomain"
+                        description={
+                          <>
+                            Откроется как{" "}
+                            <span className="text-foreground font-medium">
+                              {subdomainSlug}.avgst.ru
                             </span>
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="content" className="mt-0 space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Популярные проекты</CardTitle>
-                  <CardDescription>
-                    До 6 проектов на главной. Порядок здесь не связан с порядком в каталоге —
-                    перетаскивайте строки, чтобы расставить как нужно.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <PopularProjectsPicker
-                    projects={projects}
-                    selectedIds={form.popularProjectIds}
-                    onChange={(ids) => updateField("popularProjectIds", ids)}
-                  />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Тексты как на сайте</CardTitle>
-                  <CardDescription>
-                    Те же поля, что на первом экране и в каталоге превью (структура msk.avgst.ru).
-                  </CardDescription>
-                  <CardAction>
-                    <Button type="button" variant="outline" size="sm" onClick={applyTemplateTexts}>
-                      Подставить шаблон
-                    </Button>
-                  </CardAction>
-                </CardHeader>
-                <CardContent>
-                  <FieldGroup>
-                    <Field>
-                      <FieldLabel htmlFor="site-hero-headline">Заголовок первого экрана</FieldLabel>
-                      <Textarea
-                        id="site-hero-headline"
-                        rows={3}
-                        value={form.heroHeadline}
-                        onChange={(e) => updateField("heroHeadline", e.target.value)}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="site-hero-text">Текст под заголовком</FieldLabel>
-                      <Textarea
-                        id="site-hero-text"
-                        rows={3}
-                        value={form.heroText}
-                        onChange={(e) => updateField("heroText", e.target.value)}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="site-cta">Жёлтая кнопка на первом экране</FieldLabel>
-                      <Input
-                        id="site-cta"
-                        value={form.ctaLabel}
-                        onChange={(e) => updateField("ctaLabel", e.target.value)}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="site-catalog-title">Заголовок блока каталога</FieldLabel>
-                      <Input
-                        id="site-catalog-title"
-                        value={form.catalogTitle}
-                        onChange={(e) => updateField("catalogTitle", e.target.value)}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="site-catalog-text">Подзаголовок каталога</FieldLabel>
-                      <Textarea
-                        id="site-catalog-text"
-                        rows={2}
-                        value={form.catalogText}
-                        onChange={(e) => updateField("catalogText", e.target.value)}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="site-about-text">Текст в подвале сайта</FieldLabel>
-                      <Textarea
-                        id="site-about-text"
-                        rows={4}
-                        value={form.aboutText}
-                        onChange={(e) => updateField("aboutText", e.target.value)}
-                      />
-                    </Field>
-                  </FieldGroup>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="seo" className="mt-0 space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>SEO и превью ссылок</CardTitle>
-                  <CardDescription>
-                    Title, описание и favicon для вкладки браузера и превью в Telegram /
-                    мессенджерах. После правок нажмите «Опубликовать».
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <FieldGroup>
-                    <Field>
-                      <FieldLabel htmlFor="site-seo-title">Title (название в превью)</FieldLabel>
-                      <Input
-                        id="site-seo-title"
-                        placeholder={form.name.trim() || "Например: PRO DOM"}
-                        value={form.seoTitle}
-                        onChange={(e) => updateField("seoTitle", e.target.value)}
-                      />
-                      <p className="text-muted-foreground text-xs">
-                        Если пусто — название сайта из раздела «Основное».
-                      </p>
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="site-seo-description">
-                        Description (пометка / слоган)
-                      </FieldLabel>
-                      <Textarea
-                        id="site-seo-description"
-                        rows={3}
-                        placeholder="Например: PRO DOM помогает выбрать проект, рассчитать смету и построить дом."
-                        value={form.seoDescription}
-                        onChange={(e) => updateField("seoDescription", e.target.value)}
-                      />
-                      <p className="text-muted-foreground text-xs">
-                        Короткий текст под названием в превью ссылки.
-                      </p>
-                    </Field>
-                  </FieldGroup>
-
-                  <div className="flex flex-wrap items-center gap-4 border-t pt-6">
-                    <div className="bg-muted flex size-14 items-center justify-center overflow-hidden rounded-lg border border-dashed">
-                      {form.faviconDataUrl ? (
-                        <img
-                          src={form.faviconDataUrl}
-                          alt="Favicon"
-                          className="size-8 object-contain"
-                        />
-                      ) : (
-                        <span className="text-muted-foreground text-[10px]">Нет</span>
-                      )}
-                    </div>
-                    <div className="flex min-w-0 flex-1 flex-col gap-2">
-                      <FieldLabel htmlFor="site-favicon">Favicon</FieldLabel>
-                      <Input
-                        id="site-favicon"
-                        type="file"
-                        accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/svg+xml,image/webp"
-                        onChange={handleFaviconChange}
-                        className="max-w-xs cursor-pointer"
-                      />
-                      {form.faviconDataUrl ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="w-fit"
-                          onClick={() => updateField("faviconDataUrl", "")}
+                            . Латиница, цифры и дефисы.
+                          </>
+                        }
+                        error={showError("subdomain")}
+                        width="md"
+                      >
+                        <div
+                          className={cn(
+                            "border-input flex h-9 items-center overflow-hidden rounded-md border shadow-xs",
+                            "focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]",
+                            "transition-[color,box-shadow] duration-150",
+                            showError("subdomain") && "border-destructive ring-destructive/20"
+                          )}
                         >
-                          Убрать favicon
-                        </Button>
+                          <input
+                            id="site-subdomain"
+                            value={form.subdomain}
+                            required
+                            aria-invalid={Boolean(showError("subdomain"))}
+                            onBlur={() => markTouched("subdomain")}
+                            onChange={(e) => updateField("subdomain", e.target.value)}
+                            className="h-full min-w-0 flex-1 bg-transparent px-3 text-base outline-none md:text-sm"
+                          />
+                          <span className="text-muted-foreground bg-muted/50 h-full shrink-0 border-l px-2.5 text-sm leading-9">
+                            .avgst.ru
+                          </span>
+                        </div>
+                      </SettingRow>
+
+                      <SettingRow
+                        label="Свой домен"
+                        htmlFor="site-domain"
+                        description="Не обязательно. Направьте домен у регистратора — адрес на avgst.ru останется запасным."
+                        error={showError("domain")}
+                        width="md"
+                      >
+                        <Input
+                          id="site-domain"
+                          placeholder="stroy-company.ru"
+                          value={form.domain}
+                          aria-invalid={Boolean(showError("domain"))}
+                          onBlur={() => markTouched("domain")}
+                          onChange={(e) => updateField("domain", e.target.value)}
+                        />
+                      </SettingRow>
+                    </SettingRows>
+
+                    <div className="border-t pt-6">
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                        <ImageUploadField
+                          id="site-logo"
+                          label="Логотип"
+                          hint="Шапка и подвал. PNG, JPG или SVG до 800 КБ."
+                          accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                          maxBytes={800_000}
+                          value={form.logoDataUrl}
+                          onChange={(value) => updateField("logoDataUrl", value)}
+                        />
+                        <ImageUploadField
+                          id="site-logo-mobile"
+                          label="Для телефона"
+                          hint="Квадрат 64–128 px до 300 КБ. Пусто — обычный логотип."
+                          accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                          maxBytes={300_000}
+                          value={form.logoMobileDataUrl}
+                          onChange={(value) => updateField("logoMobileDataUrl", value)}
+                          shape="square"
+                        />
+                        <ImageUploadField
+                          id="site-favicon"
+                          label="Значок сайта"
+                          hint="Вкладка и превью ссылки. Для Telegram лучше PNG."
+                          accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/svg+xml,image/webp"
+                          maxBytes={300_000}
+                          value={form.faviconDataUrl}
+                          onChange={(value) => updateField("faviconDataUrl", value)}
+                          shape="square"
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="contacts" className="mt-0 space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Контакты и соцсети</CardTitle>
+                    <CardDescription>
+                      То, что покупатель видит в шапке, подвале и на странице контактов.
+                    </CardDescription>
+                    <CardAction>
+                      <span className="text-muted-foreground text-sm tabular-nums">
+                        Соцсети {filledSocials.length}/{PARTNER_SITE_SOCIALS.length}
+                      </span>
+                    </CardAction>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <SettingRows>
+                      <SettingRow
+                        label="Телефон"
+                        htmlFor="site-phone"
+                        description="В шапке и подвале — звонок в один клик."
+                        error={showError("contactPhone")}
+                        width="sm"
+                      >
+                        <Input
+                          id="site-phone"
+                          type="tel"
+                          placeholder="+7 900 000-00-00"
+                          value={form.contactPhone}
+                          required
+                          aria-invalid={Boolean(showError("contactPhone"))}
+                          onBlur={() => markTouched("contactPhone")}
+                          onChange={(e) => updateField("contactPhone", e.target.value)}
+                        />
+                      </SettingRow>
+
+                      <SettingRow
+                        label="Почта"
+                        htmlFor="site-email"
+                        description="Публичный адрес компании на сайте."
+                        error={showError("contactEmail")}
+                        width="md"
+                      >
+                        <Input
+                          id="site-email"
+                          type="email"
+                          value={form.contactEmail}
+                          required
+                          aria-invalid={Boolean(showError("contactEmail"))}
+                          onBlur={() => markTouched("contactEmail")}
+                          onChange={(e) => updateField("contactEmail", e.target.value)}
+                        />
+                      </SettingRow>
+
+                      <SettingRow
+                        label="Город или адрес офиса"
+                        htmlFor="site-address"
+                        description="Строка в подвале и на странице контактов."
+                        width="md"
+                      >
+                        <Input
+                          id="site-address"
+                          value={form.address}
+                          onChange={(e) => updateField("address", e.target.value)}
+                        />
+                      </SettingRow>
+                    </SettingRows>
+
+                    {/* Сетка, а не шесть одинаковых строк во всю ширину */}
+                    <div className="border-t pt-6">
+                      <p className="mb-3 text-sm font-medium">Соцсети в подвале</p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {PARTNER_SITE_SOCIALS.map((social) => {
+                          const filled = Boolean(String(form[social.field] ?? "").trim());
+                          return (
+                            <div key={social.id} className="min-w-0">
+                              <label
+                                htmlFor={SITE_FIELD_INPUT_ID[social.field]}
+                                className="mb-1.5 flex items-center gap-2 text-sm font-medium"
+                              >
+                                <PartnerSiteSocialGlyph
+                                  id={social.id}
+                                  className={cn(
+                                    "size-4 transition-colors duration-150",
+                                    filled ? "text-foreground" : "text-muted-foreground/45"
+                                  )}
+                                />
+                                {social.label}
+                              </label>
+                              <Input
+                                id={SITE_FIELD_INPUT_ID[social.field]}
+                                type="url"
+                                inputMode="url"
+                                placeholder={SOCIAL_PLACEHOLDER[social.id]}
+                                value={String(form[social.field] ?? "")}
+                                aria-invalid={Boolean(showError(social.field))}
+                                onBlur={() => markTouched(social.field)}
+                                onChange={(e) => updateField(social.field, e.target.value)}
+                              />
+                              <FieldError className="mt-1">{showError(social.field)}</FieldError>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="content" className="mt-0 space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Проекты на главной</CardTitle>
+                    <CardDescription>
+                      До шести в блоке «Популярное». Перетащите плитку на нужное место — порядок на
+                      сайте будет таким же.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <PopularProjectsPicker
+                      projects={projects}
+                      selectedIds={form.popularProjectIds}
+                      onChange={(ids) => updateField("popularProjectIds", ids)}
+                    />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="texts" className="mt-0 space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Тексты главной</CardTitle>
+                    <CardDescription>
+                      Первый экран, каталог и подвал. Результат — в предпросмотре.
+                    </CardDescription>
+                    <CardAction>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button type="button" variant="outline" size="sm">
+                            Вернуть стандартные
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Заменить тексты стандартными?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Заголовок и текст первого экрана, надпись на кнопке, заголовок и
+                              подзаголовок каталога вернутся к типовым. То, что вы написали сами,
+                              пропадёт. Контакты, логотип и проекты не меняются.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Оставить свои</AlertDialogCancel>
+                            <AlertDialogAction onClick={applyTemplateTexts}>
+                              Заменить тексты
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </CardAction>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-8 lg:grid-cols-2">
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-medium">Первый экран</h3>
+                        <Field>
+                          <FieldLabel htmlFor="site-hero-headline">Заголовок</FieldLabel>
+                          <Textarea
+                            id="site-hero-headline"
+                            rows={2}
+                            value={form.heroHeadline}
+                            onChange={(e) => updateField("heroHeadline", e.target.value)}
+                          />
+                          <FieldDescription>
+                            Одно предложение о том, что вы строите.
+                          </FieldDescription>
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor="site-hero-text">Текст под заголовком</FieldLabel>
+                          <Textarea
+                            id="site-hero-text"
+                            rows={4}
+                            value={form.heroText}
+                            onChange={(e) => updateField("heroText", e.target.value)}
+                          />
+                        </Field>
+                        <Field className="max-w-xs">
+                          <FieldLabel htmlFor="site-cta">Надпись на кнопке</FieldLabel>
+                          <Input
+                            id="site-cta"
+                            value={form.ctaLabel}
+                            onChange={(e) => updateField("ctaLabel", e.target.value)}
+                          />
+                          <FieldDescription>Ведёт в каталог проектов.</FieldDescription>
+                        </Field>
+                      </div>
+
+                      <div className="space-y-6">
+                        <div className="max-w-sm space-y-3">
+                          <h3 className="text-sm font-medium">Каталог</h3>
+                          <Field>
+                            <FieldLabel htmlFor="site-catalog-title">Заголовок</FieldLabel>
+                            <Input
+                              id="site-catalog-title"
+                              value={form.catalogTitle}
+                              onChange={(e) => updateField("catalogTitle", e.target.value)}
+                            />
+                          </Field>
+                          <Field>
+                            <FieldLabel htmlFor="site-catalog-text">Подзаголовок</FieldLabel>
+                            <Input
+                              id="site-catalog-text"
+                              value={form.catalogText}
+                              onChange={(e) => updateField("catalogText", e.target.value)}
+                            />
+                          </Field>
+                        </div>
+                        <div className="space-y-3 border-t pt-6">
+                          <h3 className="text-sm font-medium">Подвал</h3>
+                          <Field>
+                            <FieldLabel htmlFor="site-about-text">Текст о компании</FieldLabel>
+                            <Textarea
+                              id="site-about-text"
+                              rows={4}
+                              value={form.aboutText}
+                              onChange={(e) => updateField("aboutText", e.target.value)}
+                            />
+                            <FieldDescription>Короткий абзац под каталогом.</FieldDescription>
+                          </Field>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="leads" className="mt-0 space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Заявки с сайта</CardTitle>
+                    <CardDescription>
+                      Заявки всегда попадают в раздел «Заявки» кабинета. Здесь — куда их
+                      продублировать и что показать посетителю после отправки.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <SettingRows>
+                      <SettingRow
+                        label="Копия на почту"
+                        htmlFor="site-inquiry-email"
+                        description="Не обязательно. Если пусто — заявки видны только в кабинете."
+                        error={showError("inquiryEmail")}
+                        width="md"
+                      >
+                        <Input
+                          id="site-inquiry-email"
+                          type="email"
+                          value={form.inquiryEmail}
+                          aria-invalid={Boolean(showError("inquiryEmail"))}
+                          onBlur={() => markTouched("inquiryEmail")}
+                          onChange={(e) => updateField("inquiryEmail", e.target.value)}
+                        />
+                      </SettingRow>
+                    </SettingRows>
+
+                    <section className="border-t pt-6">
+                      <div className="mb-4 flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-medium">Подписка после заявки</h3>
+                          <p className="text-muted-foreground mt-1 max-w-prose text-sm">
+                            Оставив заявку, посетитель увидит предложение подписаться. Если выбрано
+                            несколько сетей — они чередуются: каждый следующий увидит следующую.
+                          </p>
+                        </div>
+                        <Switch
+                          id="site-post-lead-switch"
+                          checked={offerEnabled}
+                          onCheckedChange={toggleOffer}
+                          aria-label="Предлагать подписку после заявки"
+                        />
+                      </div>
+                      {offerEnabled ? (
+                      <fieldset>
+                        <legend className="mb-3 text-sm font-medium">Какие сети предлагать</legend>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {PARTNER_SITE_SOCIALS.map((social) => {
+                            const url = String(form[social.field] ?? "").trim();
+                            const checked = form.postLeadOfferSocials.includes(social.id);
+                            const inputId = `offer-${social.id}`;
+
+                            if (!url) {
+                              return (
+                                <div
+                                  key={social.id}
+                                  className="border-border/60 flex items-center gap-3 rounded-lg border border-dashed px-3 py-2.5"
+                                >
+                                  <PartnerSiteSocialGlyph
+                                    id={social.id}
+                                    className="text-muted-foreground/40 size-5"
+                                  />
+                                  <span className="text-muted-foreground min-w-0 flex-1 truncate text-sm">
+                                    {social.label}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="link"
+                                    size="sm"
+                                    className="h-auto shrink-0 p-0 text-xs"
+                                    onClick={() => goToField(social.field)}
+                                  >
+                                    Добавить ссылку
+                                  </Button>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <label
+                                key={social.id}
+                                htmlFor={inputId}
+                                data-state={checked ? "checked" : "unchecked"}
+                                className={cn(
+                                  "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5",
+                                  "transition-colors duration-150",
+                                  "hover:bg-accent/50",
+                                  checked && "border-primary bg-primary/5 dark:bg-primary/10"
+                                )}
+                              >
+                                <PartnerSiteSocialGlyph id={social.id} className="size-5" />
+                                <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                                  {social.label}
+                                </span>
+                                <Checkbox
+                                  id={inputId}
+                                  checked={checked}
+                                  onCheckedChange={(value) =>
+                                    toggleOfferedSocial(social.id, value === true)
+                                  }
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                          <FieldError className="mt-3">
+                            {showError("postLeadOfferSocials")}
+                          </FieldError>
+                        </fieldset>
                       ) : (
-                        <p className="text-muted-foreground text-xs">
-                          Для превью в Telegram лучше PNG/WEBP (SVG там часто не показывается).
-                          ICO, PNG, SVG или WEBP, до ~300 КБ.
+                        <p className="text-muted-foreground text-sm">
+                          Шаг выключен: после заявки посетитель сразу увидит благодарность.
                         </p>
                       )}
+                    </section>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="seo" className="mt-0 space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Продвижение</CardTitle>
+                    <CardDescription>
+                      Как ссылка выглядит в поиске и мессенджерах, плюс счётчики рекламы.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_18rem] lg:justify-between">
+                      <div className="flex max-w-md flex-col gap-4">
+                        <Field>
+                          <FieldLabel htmlFor="site-seo-title">Заголовок</FieldLabel>
+                          <Input
+                            id="site-seo-title"
+                            placeholder={form.name.trim() || "PRO DOM"}
+                            value={form.seoTitle}
+                            onChange={(e) => updateField("seoTitle", e.target.value)}
+                          />
+                          <FieldDescription>
+                            Если пусто — возьмём название компании.
+                          </FieldDescription>
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor="site-seo-description">Описание</FieldLabel>
+                          <Textarea
+                            id="site-seo-description"
+                            rows={3}
+                            placeholder="Помогаем выбрать проект, рассчитать смету и построить дом."
+                            value={form.seoDescription}
+                            onChange={(e) => updateField("seoDescription", e.target.value)}
+                          />
+                          <FieldDescription>
+                            Одно-два предложения под заголовком в превью.
+                          </FieldDescription>
+                        </Field>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <p className="text-muted-foreground text-xs font-medium">
+                          Так увидят ссылку
+                        </p>
+                        <div className="bg-muted/40 overflow-hidden rounded-lg border">
+                          <div className="bg-muted flex aspect-[1.91/1] items-center justify-center border-b">
+                            {form.faviconDataUrl || form.logoDataUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={form.faviconDataUrl || form.logoDataUrl}
+                                alt=""
+                                className="max-h-16 max-w-[60%] object-contain"
+                              />
+                            ) : (
+                              <span className="text-muted-foreground text-xs">
+                                Значок сайта не загружен
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-col gap-0.5 p-3">
+                            <p className="text-muted-foreground truncate text-xs">{host}</p>
+                            <p className="truncate text-sm font-medium">
+                              {form.seoTitle.trim() || form.name.trim() || "Название компании"}
+                            </p>
+                            <p className="text-muted-foreground line-clamp-2 text-xs">
+                              {form.seoDescription.trim() ||
+                                "Описание пока не заполнено — здесь будет текст из поля слева."}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Аналитика и заявки</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <FieldGroup className="md:grid md:grid-cols-2 md:gap-4">
-                    <Field>
-                      <FieldLabel htmlFor="site-metrika">Яндекс.Метрика</FieldLabel>
-                      <Input
-                        id="site-metrika"
-                        placeholder="Номер счётчика"
-                        value={form.yandexMetrika}
-                        onChange={(e) => updateField("yandexMetrika", e.target.value)}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="site-gtm">Google Tag Manager</FieldLabel>
-                      <Input
-                        id="site-gtm"
-                        placeholder="GTM-XXXX"
-                        value={form.gtmId}
-                        onChange={(e) => updateField("gtmId", e.target.value)}
-                      />
-                    </Field>
-                    <Field className="md:col-span-2">
-                      <FieldLabel htmlFor="site-inquiry-email">Email для заявок с сайта</FieldLabel>
-                      <Input
-                        id="site-inquiry-email"
-                        type="email"
-                        value={form.inquiryEmail}
-                        onChange={(e) => updateField("inquiryEmail", e.target.value)}
-                      />
-                      <FieldDescription>
-                        Дублируем заявки на эту почту помимо CRM.
-                      </FieldDescription>
-                    </Field>
-                  </FieldGroup>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+                    <div className="border-t pt-6">
+                      <p className="mb-1 text-sm font-medium">Счётчики аналитики</p>
+                      <p className="text-muted-foreground mb-3 text-sm">
+                        Не обязательны. Нужны, если считаете конверсии на своей стороне.
+                      </p>
+                      <SettingRows>
+                        <SettingRow
+                          label="Яндекс Метрика"
+                          htmlFor="site-metrika"
+                          description="Номер счётчика."
+                          width="xs"
+                        >
+                          <Input
+                            id="site-metrika"
+                            inputMode="numeric"
+                            placeholder="12345678"
+                            className="tabular-nums"
+                            value={form.yandexMetrika}
+                            onChange={(e) => updateField("yandexMetrika", e.target.value)}
+                          />
+                        </SettingRow>
+                        <SettingRow
+                          label="Google Tag Manager"
+                          htmlFor="site-gtm"
+                          description="Идентификатор контейнера."
+                          width="sm"
+                        >
+                          <Input
+                            id="site-gtm"
+                            placeholder="GTM-XXXXXXX"
+                            value={form.gtmId}
+                            onChange={(e) => updateField("gtmId", e.target.value)}
+                          />
+                        </SettingRow>
+                      </SettingRows>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="submit" disabled={saving}>
-              {saving ? "Сохранение…" : "Сохранить черновик"}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => void openPreview()} disabled={saving}>
-              <IconExternalLink />
-              Открыть предпросмотр
-            </Button>
-            {siteStatus === "published" ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={saving}
-                onClick={() => void handleUnpublish()}
-              >
-                Снять с публикации
-              </Button>
-            ) : null}
-            {publishLocked ? (
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={saving || republishRequestStatus === "pending"}
-                onClick={() => void handleRepublishRequest()}
-              >
-                {republishRequestStatus === "pending"
-                  ? "Запрос отправлен"
-                  : "Запросить возобновление"}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={saving || siteStatus === "published"}
-                onClick={() => void handlePublish()}
-              >
-                Опубликовать
-              </Button>
-            )}
-          </div>
-        </form>
+            {/* Панель работы с формой: видна на любой прокрутке, публикации здесь нет */}
+            <div className="bg-background/95 sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 shadow-xs backdrop-blur">
+              <p className="text-muted-foreground text-sm" aria-live="polite">
+                {errorCount > 0
+                  ? `Не сохранено: ${errorCount === 1 ? "одно поле заполнено неверно" : `полей с ошибками — ${errorCount}`}`
+                  : dirty
+                    ? "Есть несохранённые правки"
+                    : "Все правки сохранены"}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void openPreview()}
+                  disabled={saving}
+                >
+                  <IconExternalLink />
+                  Предпросмотр
+                </Button>
+                <Button type="submit" disabled={saving || !dirty}>
+                  {saving ? "Сохранение…" : "Сохранить"}
+                </Button>
+              </div>
+            </div>
+          </form>
+        </div>
       )}
     </PartnerShell>
   );
@@ -870,7 +1058,7 @@ export default function PartnerSitePage() {
     <Suspense
       fallback={
         <PartnerShell currentPath="/partner/site" title="Сайт">
-          <Skeleton className="h-10 w-full max-w-lg" />
+          <Skeleton className="h-28 w-full" />
           <Skeleton className="h-64 w-full" />
         </PartnerShell>
       }
