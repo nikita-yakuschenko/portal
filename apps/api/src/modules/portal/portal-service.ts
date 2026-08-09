@@ -1721,14 +1721,14 @@ export class PortalService {
     fullName: string;
     email: string;
     password: string;
-    role: "partner_owner" | "partner_member";
+    role: "partner_member";
   }) {
     const user = {
       id: randomUUID(),
       partnerId: input.partnerId,
       fullName: input.fullName,
       email: input.email,
-      role: input.role,
+      role: "partner_member" as const,
       passwordHash: await hashPassword(input.password)
     } as const;
 
@@ -1779,6 +1779,59 @@ export class PortalService {
 
   async listCrmConnections(partnerId: string) {
     return db.select().from(crmConnections).where(eq(crmConnections.partnerId, partnerId));
+  }
+
+  async setCrmConnectionEnabled(input: {
+    actorUserId: string;
+    partnerId: string;
+    connectionId: string;
+    isEnabled: boolean;
+  }) {
+    const existing = await db.query.crmConnections.findFirst({
+      where: and(
+        eq(crmConnections.id, input.connectionId),
+        eq(crmConnections.partnerId, input.partnerId)
+      )
+    });
+    if (!existing) {
+      throw new Error("Подключение CRM не найдено.");
+    }
+    await db
+      .update(crmConnections)
+      .set({ isEnabled: input.isEnabled })
+      .where(eq(crmConnections.id, input.connectionId));
+    await this.writeAuditLog(
+      input.actorUserId,
+      input.isEnabled ? "crm.connection.enabled" : "crm.connection.disabled",
+      "crm_connection",
+      input.connectionId,
+      { isEnabled: input.isEnabled }
+    );
+    return { ...existing, isEnabled: input.isEnabled };
+  }
+
+  async deleteCrmConnection(input: {
+    actorUserId: string;
+    partnerId: string;
+    connectionId: string;
+  }) {
+    const existing = await db.query.crmConnections.findFirst({
+      where: and(
+        eq(crmConnections.id, input.connectionId),
+        eq(crmConnections.partnerId, input.partnerId)
+      )
+    });
+    if (!existing) {
+      throw new Error("Подключение CRM не найдено.");
+    }
+    await db.delete(crmConnections).where(eq(crmConnections.id, input.connectionId));
+    await this.writeAuditLog(
+      input.actorUserId,
+      "crm.connection.deleted",
+      "crm_connection",
+      input.connectionId,
+      { provider: existing.provider }
+    );
   }
 
   async createLead(input: {

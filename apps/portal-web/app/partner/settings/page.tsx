@@ -1,14 +1,14 @@
 "use client";
 
-import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { PartnerCrmPanel } from "@/components/partner-crm-panel";
 import { PartnerShell } from "@/components/partner-shell";
 import { PartnerTeamPanel } from "@/components/partner-team-panel";
+import { SettingRow, SettingRows } from "@/components/partner-site/setting-row";
 import { PageAlert } from "@/components/page-alert";
-import { ThemeSettings } from "@/components/theme-settings";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,15 +18,9 @@ import {
   CardTitle
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiFetch } from "@/lib/api";
-import {
-  readPartnerModules,
-  setLeadsModuleEnabled
-} from "@/lib/partner-modules";
 
 type PartnerProfile = {
   companyName: string;
@@ -49,10 +43,12 @@ type ProfileForm = {
   email: string;
 };
 
-const TABS = ["company", "appearance", "modules", "crm"] as const;
+const TABS = ["company", "team", "integrations"] as const;
 type SettingsTab = (typeof TABS)[number];
 
 function parseTab(value: string | null): SettingsTab {
+  if (value === "crm") return "integrations";
+  if (value === "modules") return "company";
   if (value && (TABS as readonly string[]).includes(value)) {
     return value as SettingsTab;
   }
@@ -71,14 +67,10 @@ function PartnerSettingsContent() {
     phone: "",
     email: ""
   });
+  const [savedForm, setSavedForm] = useState<ProfileForm | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [leadsEnabled, setLeadsEnabled] = useState(false);
-
-  useEffect(() => {
-    setLeadsEnabled(readPartnerModules().leadsEnabled);
-  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -86,12 +78,14 @@ function PartnerSettingsContent() {
         const profile = await apiFetch<MeResponse>("/api/partner/me");
         setMe(profile);
         if (profile.partner) {
-          setForm({
+          const next = {
             companyName: profile.partner.companyName,
             region: profile.partner.region,
             phone: profile.partner.phone,
             email: profile.partner.email
-          });
+          };
+          setForm(next);
+          setSavedForm(next);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Не удалось загрузить настройки");
@@ -102,6 +96,15 @@ function PartnerSettingsContent() {
   }, []);
 
   const canManage = me?.user.role === "partner_owner";
+  const dirty = useMemo(() => {
+    if (!savedForm) return false;
+    return (
+      form.companyName !== savedForm.companyName ||
+      form.region !== savedForm.region ||
+      form.phone !== savedForm.phone ||
+      form.email !== savedForm.email
+    );
+  }, [form, savedForm]);
 
   function handleTabChange(value: string) {
     const next = parseTab(value);
@@ -113,12 +116,6 @@ function PartnerSettingsContent() {
     }
     const query = params.toString();
     router.replace(query ? `/partner/settings?${query}` : "/partner/settings");
-  }
-
-  function handleLeadsToggle(checked: boolean) {
-    setLeadsEnabled(checked);
-    setLeadsModuleEnabled(checked);
-    toast.success(checked ? "Модуль «Лиды» включён" : "Модуль «Лиды» выключен");
   }
 
   async function handleSaveProfile(event: FormEvent) {
@@ -146,12 +143,14 @@ function PartnerSettingsContent() {
             }
           : prev
       );
-      setForm({
+      const next = {
         companyName: updated.companyName,
         region: updated.region,
         phone: updated.phone,
         email: updated.email
-      });
+      };
+      setForm(next);
+      setSavedForm(next);
       toast.success("Данные компании сохранены");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось сохранить");
@@ -164,12 +163,11 @@ function PartnerSettingsContent() {
     <PartnerShell currentPath="/partner/settings" title="Настройки">
       <PageAlert message={error} variant="destructive" />
 
-      <Tabs value={tab} onValueChange={handleTabChange}>
+      <Tabs value={tab} activationMode="manual" onValueChange={handleTabChange}>
         <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
           <TabsTrigger value="company">Компания</TabsTrigger>
-          <TabsTrigger value="appearance">Внешний вид</TabsTrigger>
-          <TabsTrigger value="modules">Модули</TabsTrigger>
-          <TabsTrigger value="crm">CRM</TabsTrigger>
+          <TabsTrigger value="team">Сотрудники</TabsTrigger>
+          <TabsTrigger value="integrations">Интеграции</TabsTrigger>
         </TabsList>
 
         <TabsContent value="company" className="mt-0 space-y-4">
@@ -177,8 +175,8 @@ function PartnerSettingsContent() {
             <CardHeader>
               <CardTitle>Коммерческие данные</CardTitle>
               <CardDescription>
-                Коммерческое название попадает в копирайт подвала сайта. Юр. реквизиты
-                партнёр не меняет сам.
+                Коммерческое название попадает в копирайт подвала сайта. Юр. реквизиты партнёр не
+                меняет сам.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -191,10 +189,13 @@ function PartnerSettingsContent() {
               ) : !me?.partner ? (
                 <p className="text-muted-foreground text-sm">Нет данных о компании.</p>
               ) : (
-                <form className="space-y-4" onSubmit={(e) => void handleSaveProfile(e)}>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="company-name">Коммерческое название</Label>
+                <form className="space-y-2" onSubmit={(e) => void handleSaveProfile(e)}>
+                  <SettingRows>
+                    <SettingRow
+                      label="Коммерческое название"
+                      htmlFor="company-name"
+                      description="В шапке кабинета и в подвале сайта."
+                    >
                       <Input
                         id="company-name"
                         value={form.companyName}
@@ -203,9 +204,12 @@ function PartnerSettingsContent() {
                           setForm((prev) => ({ ...prev, companyName: e.target.value }))
                         }
                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="company-region">Регион</Label>
+                    </SettingRow>
+                    <SettingRow
+                      label="Регион"
+                      htmlFor="company-region"
+                      description="Где работаете с покупателями."
+                    >
                       <Input
                         id="company-region"
                         value={form.region}
@@ -214,20 +218,27 @@ function PartnerSettingsContent() {
                           setForm((prev) => ({ ...prev, region: e.target.value }))
                         }
                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="company-phone">Телефон</Label>
+                    </SettingRow>
+                    <SettingRow
+                      label="Телефон"
+                      htmlFor="company-phone"
+                      description="Контакт компании в кабинете."
+                    >
                       <Input
                         id="company-phone"
+                        type="tel"
                         value={form.phone}
                         disabled={!canManage || saving}
                         onChange={(e) =>
                           setForm((prev) => ({ ...prev, phone: e.target.value }))
                         }
                       />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="company-email">Email компании</Label>
+                    </SettingRow>
+                    <SettingRow
+                      label="Email компании"
+                      htmlFor="company-email"
+                      description="Публичная почта компании, не обязательно логин."
+                    >
                       <Input
                         id="company-email"
                         type="email"
@@ -237,15 +248,20 @@ function PartnerSettingsContent() {
                           setForm((prev) => ({ ...prev, email: e.target.value }))
                         }
                       />
-                    </div>
-                  </div>
+                    </SettingRow>
+                  </SettingRows>
 
                   {canManage ? (
-                    <Button type="submit" disabled={saving}>
-                      {saving ? "Сохранение…" : "Сохранить"}
-                    </Button>
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-4">
+                      <p className="text-muted-foreground text-sm" aria-live="polite">
+                        {dirty ? "Есть несохранённые правки" : "Все правки сохранены"}
+                      </p>
+                      <Button type="submit" disabled={saving || !dirty}>
+                        {saving ? "Сохранение…" : "Сохранить"}
+                      </Button>
+                    </div>
                   ) : (
-                    <p className="text-muted-foreground text-xs">
+                    <p className="text-muted-foreground pt-4 text-sm">
                       Редактировать может только владелец кабинета.
                     </p>
                   )}
@@ -258,8 +274,8 @@ function PartnerSettingsContent() {
             <CardHeader>
               <CardTitle>Юр. реквизиты</CardTitle>
               <CardDescription>
-                Юр. название и ИНН меняет администратор завода по запросу и при
-                подтверждающих документах.
+                Юр. название и ИНН меняет администратор завода по запросу и при подтверждающих
+                документах.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -273,25 +289,20 @@ function PartnerSettingsContent() {
                       {me?.partner?.legalName?.trim() || "—"}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4 py-2">
+                  <div className="flex justify-between gap-4 py-2 last:pb-0">
                     <dt className="text-muted-foreground">ИНН</dt>
                     <dd className="text-right font-medium">
                       {me?.partner?.inn?.trim() || "—"}
                     </dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-muted-foreground">Контакт</dt>
-                    <dd className="text-right font-medium">{me?.user.fullName}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2 last:pb-0">
-                    <dt className="text-muted-foreground">Email входа</dt>
-                    <dd className="text-right font-medium">{me?.user.email}</dd>
                   </div>
                 </dl>
               )}
             </CardContent>
           </Card>
 
+        </TabsContent>
+
+        <TabsContent value="team" className="mt-0">
           {loading ? (
             <Skeleton className="h-64 w-full" />
           ) : (
@@ -299,49 +310,7 @@ function PartnerSettingsContent() {
           )}
         </TabsContent>
 
-        <TabsContent value="appearance" className="mt-0">
-          <Card>
-            <CardHeader>
-              <CardTitle>Внешний вид</CardTitle>
-              <CardDescription>Тема оформления кабинета.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ThemeSettings />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="modules" className="mt-0">
-          <Card>
-            <CardHeader>
-              <CardTitle>Модули</CardTitle>
-              <CardDescription>
-                Подключаемые разделы кабинета. По умолчанию выключены.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
-                <div className="min-w-0 space-y-1">
-                  <Label htmlFor="module-leads" className="text-sm font-medium">
-                    Лиды
-                  </Label>
-                  <p className="text-muted-foreground text-sm">
-                    Раздел заявок с сайта и ручное создание лидов. Появляется в меню после
-                    включения.
-                  </p>
-                </div>
-                <Switch
-                  id="module-leads"
-                  checked={leadsEnabled}
-                  onCheckedChange={handleLeadsToggle}
-                  disabled={loading || !canManage}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="crm" className="mt-0">
+        <TabsContent value="integrations" className="mt-0">
           {loading ? (
             <Skeleton className="h-64 w-full" />
           ) : (

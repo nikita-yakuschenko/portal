@@ -10,7 +10,7 @@ export default function PartnerCrmRedirectPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/partner/settings?tab=crm");
+    router.replace("/partner/settings?tab=integrations");
   }, [router]);
 
   return (

@@ -4,12 +4,7 @@ import { useEffect, useState } from "react";
 
 import { DashboardShell } from "@/components/dashboard-shell";
 import { apiFetch } from "@/lib/api";
-import {
-  PARTNER_MODULES_CHANGED,
-  readPartnerModules,
-  type PartnerModules
-} from "@/lib/partner-modules";
-import { buildPartnerNavigation, partnerCabinetLabel } from "@/lib/partner-nav";
+import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
 import type { PartnerSiteDraft } from "@/lib/partner-site-draft";
 
 type PartnerShellProps = {
@@ -39,20 +34,8 @@ export function PartnerShell({
   fluidContent,
   children
 }: PartnerShellProps) {
-  const [modules, setModules] = useState<PartnerModules>({ leadsEnabled: false });
   const [brandTitle, setBrandTitle] = useState("Партнёр");
   const [brandLogoSrc, setBrandLogoSrc] = useState<string | null>(null);
-
-  useEffect(() => {
-    const sync = () => setModules(readPartnerModules());
-    sync();
-    window.addEventListener(PARTNER_MODULES_CHANGED, sync);
-    window.addEventListener("storage", sync);
-    return () => {
-      window.removeEventListener(PARTNER_MODULES_CHANGED, sync);
-      window.removeEventListener("storage", sync);
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,7 +72,7 @@ export function PartnerShell({
       brandLogoSrc={brandLogoSrc}
       brandHref="/partner"
       currentPath={currentPath}
-      navigation={buildPartnerNavigation(modules)}
+      navigation={partnerNavigation}
       {...(title !== undefined ? { title } : {})}
       {...(breadcrumbs !== undefined ? { breadcrumbs } : {})}
       {...(headerActions !== undefined ? { headerActions } : {})}

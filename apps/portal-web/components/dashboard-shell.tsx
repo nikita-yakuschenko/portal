@@ -12,7 +12,7 @@ import {
   SidebarTrigger
 } from "@/components/ui/sidebar";
 import { companyAccountMenu } from "@/lib/company-nav";
-import { partnerCabinetLabel } from "@/lib/partner-nav";
+import { partnerAccountMenu, partnerCabinetLabel } from "@/lib/partner-nav";
 import {
   enablePortalSound,
   initPortalSounds,
@@ -84,7 +84,7 @@ export function DashboardShell(props: {
   const isPartnerCabinet =
     props.cabinetKind === "partner" || props.cabinetLabel === partnerCabinetLabel;
 
-  const accountMenuItems = isPartnerCabinet ? [] : companyAccountMenu;
+  const accountMenuItems = isPartnerCabinet ? partnerAccountMenu : companyAccountMenu;
 
   const navForTitle = [...props.navigation, ...accountMenuItems];
   const activeHref = navForTitle

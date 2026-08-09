@@ -20,15 +20,8 @@ import {
   EmptyMedia,
   EmptyTitle
 } from "@/components/ui/empty";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -61,8 +54,7 @@ export function PartnerTeamPanel({ canManage }: { canManage: boolean }) {
   const [form, setForm] = useState({
     fullName: "",
     email: "",
-    password: "",
-    role: "partner_member" as "partner_owner" | "partner_member"
+    password: ""
   });
 
   const load = useCallback(async () => {
@@ -86,9 +78,9 @@ export function PartnerTeamPanel({ canManage }: { canManage: boolean }) {
     try {
       await apiFetch("/api/partner/team", {
         method: "POST",
-        body: JSON.stringify(form)
+        body: JSON.stringify({ ...form, role: "partner_member" })
       });
-      setForm({ fullName: "", email: "", password: "", role: "partner_member" });
+      setForm({ fullName: "", email: "", password: "" });
       toast.success("Сотрудник добавлен");
       await load();
     } catch (err) {
@@ -120,7 +112,7 @@ export function PartnerTeamPanel({ canManage }: { canManage: boolean }) {
                 </EmptyMedia>
                 <EmptyTitle>Сотрудников пока нет</EmptyTitle>
                 <EmptyDescription>
-                  Добавьте сотрудников, чтобы они работали с каталогом и лидами.
+                  Добавьте сотрудников.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -145,7 +137,7 @@ export function PartnerTeamPanel({ canManage }: { canManage: boolean }) {
                       </TableCell>
                       <TableCell>{roleLabel[user.role] ?? user.role}</TableCell>
                       <TableCell>
-                        <Badge variant={user.isActive ? "default" : "secondary"}>
+                        <Badge variant={user.isActive ? "secondary" : "outline"}>
                           {user.isActive ? "Активен" : "Отключён"}
                         </Badge>
                       </TableCell>
@@ -162,23 +154,26 @@ export function PartnerTeamPanel({ canManage }: { canManage: boolean }) {
         <Card>
           <CardHeader>
             <CardTitle>Добавить сотрудника</CardTitle>
+            <CardDescription>
+              Новый человек получит роль «Сотрудник». Владельца кабинета так назначить нельзя.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleCreate}>
+            <form onSubmit={(event) => void handleCreate(event)}>
               <FieldGroup>
                 <Field>
-                  <FieldLabel htmlFor="fullName">ФИО</FieldLabel>
+                  <FieldLabel htmlFor="team-fullName">ФИО</FieldLabel>
                   <Input
-                    id="fullName"
+                    id="team-fullName"
                     required
                     value={form.fullName}
                     onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="email">Email</FieldLabel>
+                  <FieldLabel htmlFor="team-email">Email</FieldLabel>
                   <Input
-                    id="email"
+                    id="team-email"
                     type="email"
                     required
                     value={form.email}
@@ -186,35 +181,17 @@ export function PartnerTeamPanel({ canManage }: { canManage: boolean }) {
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="password">Пароль</FieldLabel>
+                  <FieldLabel htmlFor="team-password">Пароль</FieldLabel>
                   <Input
-                    id="password"
+                    id="team-password"
                     type="password"
                     required
                     minLength={8}
+                    autoComplete="new-password"
                     value={form.password}
                     onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
                   />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="role">Роль</FieldLabel>
-                  <Select
-                    value={form.role}
-                    onValueChange={(value) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        role: value as "partner_owner" | "partner_member"
-                      }))
-                    }
-                  >
-                    <SelectTrigger id="role" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="partner_member">Сотрудник</SelectItem>
-                      <SelectItem value="partner_owner">Владелец</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <FieldDescription>Не меньше 8 символов.</FieldDescription>
                 </Field>
                 <Field>
                   <Button type="submit" disabled={saving}>

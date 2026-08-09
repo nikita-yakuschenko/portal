@@ -47,11 +47,16 @@ const createCrmConnectionSchema = z.object({
   credentials: z.record(z.string(), z.string())
 });
 
+const patchCrmConnectionSchema = z.object({
+  isEnabled: z.boolean()
+});
+
 const createTeamUserSchema = z.object({
   fullName: z.string().min(2),
   email: z.email(),
   password: z.string().min(8),
-  role: z.enum(["partner_owner", "partner_member"])
+  // Владельца через форму найма не создаём — только сотрудник
+  role: z.enum(["partner_member"]).default("partner_member")
 });
 
 const createInquirySchema = z.object({
@@ -1584,6 +1589,46 @@ export async function buildApp() {
       });
     } catch (error) {
       return reply.status(400).send({ message: error instanceof Error ? error.message : "CRM setup failed" });
+    }
+  });
+
+  app.patch("/api/partner/crm-connections/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const parsed = patchCrmConnectionSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const { id } = request.params as { id: string };
+    try {
+      return await portalService.setCrmConnectionEnabled({
+        actorUserId: getAuthUser(request)!.sub,
+        partnerId: getAuthUser(request)!.partnerId!,
+        connectionId: id,
+        isEnabled: parsed.data.isEnabled
+      });
+    } catch (error) {
+      return reply.status(404).send({ message: error instanceof Error ? error.message : "Not found" });
+    }
+  });
+
+  app.delete("/api/partner/crm-connections/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const { id } = request.params as { id: string };
+    try {
+      await portalService.deleteCrmConnection({
+        actorUserId: getAuthUser(request)!.sub,
+        partnerId: getAuthUser(request)!.partnerId!,
+        connectionId: id
+      });
+      return reply.status(204).send();
+    } catch (error) {
+      return reply.status(404).send({ message: error instanceof Error ? error.message : "Not found" });
     }
   });
 

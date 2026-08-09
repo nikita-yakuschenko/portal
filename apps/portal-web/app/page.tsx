@@ -40,8 +40,8 @@ const portalFeatures = [
     text: "Актуальные проекты, цены и материалы без ручной выгрузки."
   },
   {
-    title: "Лиды и CRM",
-    text: "Заявки клиентов и связка с вашей amoCRM / Bitrix24."
+    title: "CRM",
+    text: "Заявки с сайта партнёра в amoCRM / Bitrix24."
   },
   {
     title: "Команда партнёра",
