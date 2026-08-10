@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { DashboardShell } from "@/components/dashboard-shell";
+import { DealerSunsetNotice } from "@/components/partner-general/dealer-sunset-notice";
 import { apiFetch } from "@/lib/api";
-import { partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
+import { dealerGuestNavigation, partnerAccountMenu, partnerCabinetLabel, partnerNavigation } from "@/lib/partner-nav";
 import type { PartnerSiteDraft } from "@/lib/partner-site-draft";
 
 type PartnerShellProps = {
@@ -18,6 +20,7 @@ type PartnerShellProps = {
 };
 
 type MeResponse = {
+  user: { role: string } | null;
   partner: { companyName: string } | null;
 };
 
@@ -36,6 +39,11 @@ export function PartnerShell({
 }: PartnerShellProps) {
   const [brandTitle, setBrandTitle] = useState("Партнёр");
   const [brandLogoSrc, setBrandLogoSrc] = useState<string | null>(null);
+  /** Общий дилерский вход: кабинета у него нет, только общий раздел */
+  const [isGuest, setIsGuest] = useState(false);
+  /** Пока роль не известна — меню кабинета не показываем, чтобы гостю не мелькнули «Настройки» */
+  const [roleReady, setRoleReady] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
@@ -56,13 +64,21 @@ export function PartnerShell({
         site?.config?.logoDataUrl?.trim() ||
         null;
 
-      setBrandTitle(name);
+      const guest = me?.user?.role === "dealer_guest";
+      setIsGuest(guest);
+      setRoleReady(true);
+      // Ручной заход на чужую страницу кабинета: API её всё равно не отдаст,
+      // но упереться в ошибку хуже, чем вернуться туда, где есть содержимое
+      if (guest && !currentPath.startsWith("/partner/general")) {
+        router.replace("/partner/general");
+      }
+      setBrandTitle(guest ? "Дилерам AVGST" : name);
       setBrandLogoSrc(logo);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [currentPath, router]);
 
   return (
     <DashboardShell
@@ -70,9 +86,10 @@ export function PartnerShell({
       cabinetLabel={partnerCabinetLabel}
       brandTitle={brandTitle}
       brandLogoSrc={brandLogoSrc}
-      brandHref="/partner"
+      brandHref={isGuest ? "/partner/general" : "/partner"}
       currentPath={currentPath}
-      navigation={partnerNavigation}
+      navigation={isGuest ? dealerGuestNavigation : partnerNavigation}
+      accountMenuItems={roleReady && !isGuest ? partnerAccountMenu : []}
       {...(title !== undefined ? { title } : {})}
       {...(breadcrumbs !== undefined ? { breadcrumbs } : {})}
       {...(headerActions !== undefined ? { headerActions } : {})}
@@ -80,6 +97,7 @@ export function PartnerShell({
       {...(fluidContent !== undefined ? { fluidContent } : {})}
     >
       {children}
+      <DealerSunsetNotice enabled={roleReady && isGuest} />
     </DashboardShell>
   );
 }

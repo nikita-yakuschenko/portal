@@ -44,7 +44,8 @@ const ROLE_LABEL: Record<string, string> = {
   company_admin: "Администратор завода",
   company_manager: "Менеджер завода",
   partner_owner: "Владелец кабинета",
-  partner_member: "Сотрудник"
+  partner_member: "Сотрудник",
+  dealer_guest: "Общий доступ"
 };
 
 const THEME_OPTIONS = [
@@ -159,20 +160,27 @@ export function NavUser({
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            {accountMenuItems.length > 0 ? (
+              <>
+                <DropdownMenuLabel className="text-muted-foreground text-xs font-medium">
+                  Кабинет
+                </DropdownMenuLabel>
+                {accountMenuItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <DropdownMenuItem key={item.href} asChild>
+                      <Link href={item.href}>
+                        <Icon />
+                        {item.title}
+                      </Link>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </>
+            ) : null}
             <DropdownMenuLabel className="text-muted-foreground text-xs font-medium">
-              Настройки
+              Оформление
             </DropdownMenuLabel>
-            {accountMenuItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <DropdownMenuItem key={item.href} asChild>
-                  <Link href={item.href}>
-                    <Icon />
-                    {item.title}
-                  </Link>
-                </DropdownMenuItem>
-              );
-            })}
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <IconSun />

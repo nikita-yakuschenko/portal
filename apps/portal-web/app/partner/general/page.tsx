@@ -6,8 +6,6 @@ import {
   IconArrowRight,
   IconFolders,
   IconPhoto,
-  IconRoad,
-  IconStack2,
   type Icon
 } from "@tabler/icons-react";
 
@@ -20,27 +18,25 @@ import { cn } from "@/lib/utils";
 import { formatPrice, pluralize, type GeneralOverview } from "@/lib/general-section";
 
 /**
- * Плитка каталога домов: фото ведёт, текст лежит поверх затемнения.
- * Дилер узнаёт раздел по дому, а не по иконке.
+ * Плитка раздела с фото: текст поверх затемнения.
+ * Дилер узнаёт раздел по картинке, а не по иконке.
  */
-function HousesTile({
+function CoverTile({
   href,
   title,
-  count,
-  from,
+  hint,
   cover
 }: {
   href: string;
   title: string;
-  count: number;
-  from: number | null;
+  hint: string;
   cover: string | null;
 }) {
   return (
     <Link
       href={href}
       className={cn(
-        "group relative flex aspect-[16/9] flex-col justify-end overflow-hidden rounded-xl border",
+        "group relative flex aspect-video flex-col justify-end overflow-hidden rounded-xl border",
         "focus-visible:border-ring focus-visible:ring-ring/50 outline-none focus-visible:ring-[3px]",
         "motion-safe:active:scale-[0.995] motion-safe:transition-transform"
       )}
@@ -63,10 +59,7 @@ function HousesTile({
       <div className="relative flex items-end justify-between gap-3 p-5">
         <div className="min-w-0">
           <p className="text-lg font-medium text-white">{title}</p>
-          <p className="text-sm text-white/80">
-            {pluralize(count, ["проект", "проекта", "проектов"])}
-            {from !== null ? ` · от ${formatPrice(from)}` : ""}
-          </p>
+          <p className="text-sm text-white/80">{hint}</p>
         </div>
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white backdrop-blur transition-transform duration-150 group-hover:translate-x-0.5">
           <IconArrowRight className="size-4" aria-hidden />
@@ -76,7 +69,7 @@ function HousesTile({
   );
 }
 
-/** Плитка остальной продукции: спокойная карточка с иконкой */
+/** Плитка без фото: спокойная карточка с иконкой (материалы) */
 function ProductTile({
   href,
   title,
@@ -137,20 +130,15 @@ export default function PartnerGeneralPage() {
     <PartnerShell currentPath="/partner/general" title="Общий раздел">
       <PageAlert message={error} variant="destructive" />
 
-      <p className="text-muted-foreground max-w-prose text-sm">
-        Продукция и материалы завода — одинаковые для всех дилеров. Ваши персональные цены и
-        витрина живут в разделах «Каталог» и «Сайт».
-      </p>
-
       {loading ? (
         <div className="flex flex-col gap-3">
           <div className="grid gap-3 md:grid-cols-2">
-            <Skeleton className="aspect-[16/9] w-full rounded-xl" />
-            <Skeleton className="aspect-[16/9] w-full rounded-xl" />
+            <Skeleton className="aspect-video w-full rounded-xl" />
+            <Skeleton className="aspect-video w-full rounded-xl" />
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             {[0, 1, 2].map((row) => (
-              <Skeleton key={row} className="h-36 w-full rounded-xl" />
+              <Skeleton key={row} className="aspect-video w-full rounded-xl" />
             ))}
           </div>
         </div>
@@ -162,32 +150,37 @@ export default function PartnerGeneralPage() {
         </Card>
       ) : (
         <div className="flex flex-col gap-3">
-          {/* Дома — то, ради чего заходят: крупно и с фотографией */}
           <div className="grid gap-3 md:grid-cols-2">
-            <HousesTile
+            <CoverTile
               href="/partner/general/houses?technology=panel_frame"
               title="Панельно-каркасные дома"
-              count={overview.panelFrame}
-              from={overview.panelFrameFrom}
+              hint={`${pluralize(overview.panelFrame, ["проект", "проекта", "проектов"])}${
+                overview.panelFrameFrom !== null
+                  ? ` · от ${formatPrice(overview.panelFrameFrom)}`
+                  : ""
+              }`}
               cover={overview.panelFrameCover}
             />
-            <HousesTile
+            <CoverTile
               href="/partner/general/houses?technology=modular"
               title="Модульные дома"
-              count={overview.modular}
-              from={overview.modularFrom}
+              hint={`${pluralize(overview.modular, ["проект", "проекта", "проектов"])}${
+                overview.modularFrom !== null
+                  ? ` · от ${formatPrice(overview.modularFrom)}`
+                  : ""
+              }`}
               cover={overview.modularCover}
             />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <ProductTile
+            <CoverTile
               href="/partner/general/trusses"
               title="Фермы на МЗП"
-              hint={`${pluralize(overview.trusses, ["тип", "типа", "типов"])} · стропильные фермы для кровель`}
-              icon={IconRoad}
+              hint="Стропильные фермы для кровли"
+              cover={overview.trussCover}
             />
-            <ProductTile
+            <CoverTile
               href="/partner/general/roof-panels"
               title="Кровельные панели"
               hint={
@@ -195,7 +188,7 @@ export default function PartnerGeneralPage() {
                   ? `${formatPrice(overview.roofPanelPrice)} за м² · панели с завода`
                   : "Готовые кровельные панели с завода"
               }
-              icon={IconStack2}
+              cover={overview.roofPanelCover}
             />
             <ProductTile
               href="/partner/general/materials"

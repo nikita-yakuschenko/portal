@@ -298,7 +298,7 @@ const passwordResetConfirmSchema = z.object({
 type JwtPayload = {
   sub: string;
   partnerId: string | null;
-  role: "company_admin" | "company_manager" | "partner_owner" | "partner_member";
+  role: "company_admin" | "company_manager" | "partner_owner" | "partner_member" | "dealer_guest";
   email: string;
   fullName: string;
 };
@@ -359,6 +359,13 @@ export async function buildApp() {
     companyName: config.partnerCompanyName,
     region: config.partnerRegion
   });
+
+  await portalService.ensureDealerGuest({
+    email: config.dealerEmail,
+    password: config.dealerPassword
+  });
+
+  await portalService.ensureFactoryCatalog();
 
   await messengerService.ensureBootstrap();
 
@@ -1298,7 +1305,11 @@ export async function buildApp() {
   });
 
   app.get("/api/partner/me", async (request, reply) => {
-    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    const roleCheck = await requireRoles(request, reply, [
+      "partner_owner",
+      "partner_member",
+      "dealer_guest"
+    ]);
     if (roleCheck) {
       return roleCheck;
     }
@@ -1730,7 +1741,11 @@ export async function buildApp() {
   // --- Общий дилерский раздел: то же, что было в закрытом разделе на Tilda ---
 
   app.get("/api/partner/general/overview", async (request, reply) => {
-    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    const roleCheck = await requireRoles(request, reply, [
+      "partner_owner",
+      "partner_member",
+      "dealer_guest"
+    ]);
     if (roleCheck) {
       return roleCheck;
     }
@@ -1738,7 +1753,11 @@ export async function buildApp() {
   });
 
   app.get("/api/partner/general/houses", async (request, reply) => {
-    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    const roleCheck = await requireRoles(request, reply, [
+      "partner_owner",
+      "partner_member",
+      "dealer_guest"
+    ]);
     if (roleCheck) {
       return roleCheck;
     }
@@ -1749,8 +1768,30 @@ export async function buildApp() {
     return portalService.listGeneralHouses(parsed.data.technology);
   });
 
+  // Карточка дома в общем разделе: только опубликованные проекты
+  app.get("/api/partner/general/houses/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "partner_owner",
+      "partner_member",
+      "dealer_guest"
+    ]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const { id } = request.params as { id: string };
+    const project = await portalService.getCatalogProject(id);
+    if (!project || !project.active) {
+      return reply.status(404).send({ message: "Проект не найден" });
+    }
+    return portalService.withVisibleAssets(project);
+  });
+
   app.get("/api/partner/general/products", async (request, reply) => {
-    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    const roleCheck = await requireRoles(request, reply, [
+      "partner_owner",
+      "partner_member",
+      "dealer_guest"
+    ]);
     if (roleCheck) {
       return roleCheck;
     }
@@ -1762,7 +1803,11 @@ export async function buildApp() {
   });
 
   app.get("/api/partner/general/materials", async (request, reply) => {
-    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    const roleCheck = await requireRoles(request, reply, [
+      "partner_owner",
+      "partner_member",
+      "dealer_guest"
+    ]);
     if (roleCheck) {
       return roleCheck;
     }
@@ -1973,7 +2018,12 @@ export async function buildApp() {
   });
 
   app.post("/api/partner/inquiries", async (request, reply) => {
-    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    // Общий дилерский вход тоже просит расчёт — ради этого раздел и делался
+    const roleCheck = await requireRoles(request, reply, [
+      "partner_owner",
+      "partner_member",
+      "dealer_guest"
+    ]);
     if (roleCheck) {
       return roleCheck;
     }

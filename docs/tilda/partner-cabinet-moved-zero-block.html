@@ -1,0 +1,375 @@
+<!--
+  THESIS: Сообщение о переезде в каноне посадки b2b.avgst.ru — full-bleed hero, не карточка на сером.
+  OWN-WORLD: тёмный кадр завода, жёлтая линия, зелёный CTA, Geist/Inter, без шапки Тильды.
+  STORY: кабинет переехал; общий раздел — старые логины; партнёрский — регистрация; переход на главную портала.
+  FIRST VIEWPORT: full-bleed hero → бренд → заголовок → два факта → CTA на https://b2b.avgst.ru (+ регистрация).
+  FORM: extend portal landing hero; seed n/a (incumbent world).
+  FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+
+  Tilda → Zero Block → HTML-код. Вставьте весь файл. Опубликуйте страницу.
+-->
+<style>
+  /* Оболочка avgst.ru: шапка/меню/подвал/cookies — особенно мобильный fixed-header */
+  #tildacopy,
+  .t-header,
+  .t-menu,
+  .t-menuburger,
+  .t-menuburger__container,
+  .t-menu__mobile,
+  .t-menuwidget,
+  .t-fixed-menu,
+  .t-footer,
+  .t-popup,
+  .t-popup-cookie,
+  .t-cookies,
+  .t-cookies__wrapper,
+  .t-btnscroll,
+  .t-btnscroll__wrapper,
+  .t450,
+  .t450__close,
+  .t450__close-button,
+  .t450__burger_container,
+  .t-menuburger__wrapper,
+  .uc-main-menu,
+  [data-menu="yes"],
+  #allrecords > .t-rec:not(:has(.avgst-moved)) {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  html,
+  body {
+    height: 100% !important;
+    overflow: hidden !important;
+    background: #12140f !important;
+  }
+
+  #allrecords,
+  #allrecords .t-rec:has(.avgst-moved),
+  #allrecords .t-rec:has(.avgst-moved) .t396,
+  #allrecords .t-rec:has(.avgst-moved) .t396__artboard {
+    min-height: 100vh !important;
+    height: 100% !important;
+    background: #12140f !important;
+  }
+
+  .avgst-moved {
+    --green: #48b062;
+    --green-hover: #44a75d;
+    --yellow: #fcc90c;
+    box-sizing: border-box;
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
+    overflow: hidden;
+    background: #12140f;
+    color: #fff;
+    font-family: Inter, Arial, Helvetica, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .avgst-moved *,
+  .avgst-moved *::before,
+  .avgst-moved *::after {
+    box-sizing: border-box;
+  }
+
+  .avgst-moved__media {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+
+  .avgst-moved__media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: bottom center;
+    transform-origin: bottom center;
+    transform: scale(1.12);
+    animation: avgst-moved-ken 8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .avgst-moved__shade {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(
+        105deg,
+        rgba(18, 20, 15, 0.9) 0%,
+        rgba(18, 20, 15, 0.68) 42%,
+        rgba(18, 20, 15, 0.32) 72%,
+        rgba(18, 20, 15, 0.2) 100%
+      ),
+      radial-gradient(
+        ellipse at top left,
+        rgba(252, 201, 12, 0.1),
+        transparent 42%
+      );
+  }
+
+  .avgst-moved__inner {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100%;
+    width: 100%;
+    max-width: 80rem;
+    margin: 0 auto;
+    padding: 2rem 1.25rem;
+    text-align: left;
+  }
+
+  @media (min-width: 768px) {
+    .avgst-moved__inner {
+      padding: 2.5rem 2rem;
+    }
+  }
+
+  .avgst-moved__brand {
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 2rem;
+    animation: avgst-moved-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .avgst-moved__brand img {
+    height: 2.25rem;
+    width: auto;
+  }
+
+  @media (min-width: 768px) {
+    .avgst-moved__brand img {
+      height: 2.5rem;
+    }
+  }
+
+  .avgst-moved__copy {
+    max-width: 40rem;
+  }
+
+  .avgst-moved__title {
+    margin: 0;
+    font-size: clamp(2rem, 5vw, 3.25rem);
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    animation: avgst-moved-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both;
+  }
+
+  .avgst-moved__line {
+    width: 7rem;
+    height: 1px;
+    margin-top: 1.25rem;
+    background: var(--yellow);
+    transform-origin: left center;
+    animation: avgst-moved-line 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.18s both;
+  }
+
+  .avgst-moved__facts {
+    margin: 1.25rem 0 0;
+    padding: 0;
+    list-style: none;
+    max-width: 36rem;
+    display: grid;
+    gap: 0.65rem;
+    animation: avgst-moved-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.18s both;
+  }
+
+  .avgst-moved__facts li {
+    font-size: clamp(0.95rem, 1.6vw, 1.0625rem);
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .avgst-moved__facts strong {
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .avgst-moved__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1.75rem;
+    animation: avgst-moved-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.28s both;
+  }
+
+  .avgst-moved__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 2.75rem;
+    padding: 0 1.25rem;
+    border-radius: 0.5rem;
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      transform 0.12s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .avgst-moved__btn:active {
+    transform: scale(0.97);
+  }
+
+  .avgst-moved__btn--primary {
+    background: var(--green);
+    color: #fff;
+    border: 0;
+  }
+
+  .avgst-moved__btn--primary:hover {
+    background: var(--green-hover);
+  }
+
+  .avgst-moved__btn--ghost {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .avgst-moved__btn--ghost:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+
+  @media (max-width: 480px) {
+    .avgst-moved__actions {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .avgst-moved__btn {
+      width: 100%;
+    }
+  }
+
+  @keyframes avgst-moved-rise {
+    from {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes avgst-moved-line {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes avgst-moved-ken {
+    from {
+      transform: scale(1.18);
+    }
+    to {
+      transform: scale(1.12);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .avgst-moved__media img,
+    .avgst-moved__brand,
+    .avgst-moved__title,
+    .avgst-moved__line,
+    .avgst-moved__facts,
+    .avgst-moved__actions {
+      animation: none !important;
+    }
+  }
+</style>
+
+<div class="avgst-moved">
+  <div class="avgst-moved__media" aria-hidden="true">
+    <img
+      src="https://b2b.avgst.ru/landing/hero.jpg"
+      alt=""
+      width="1920"
+      height="1080"
+      decoding="async"
+    />
+    <div class="avgst-moved__shade"></div>
+  </div>
+
+  <div class="avgst-moved__inner">
+    <a class="avgst-moved__brand" href="https://b2b.avgst.ru" rel="noopener noreferrer">
+      <img src="https://b2b.avgst.ru/logo_l.svg" alt="Авангард Строй" width="180" height="40" />
+    </a>
+
+    <div class="avgst-moved__copy">
+      <h1 class="avgst-moved__title">Партнёрский кабинет переехал</h1>
+      <div class="avgst-moved__line" aria-hidden="true"></div>
+
+      <ul class="avgst-moved__facts">
+        <li>
+          <strong>Общий раздел</strong> портала доступен по прежним учётным данным.
+        </li>
+        <li>
+          Для входа в <strong>новый партнёрский кабинет</strong> нужна регистрация.
+        </li>
+      </ul>
+
+      <div class="avgst-moved__actions">
+        <a class="avgst-moved__btn avgst-moved__btn--primary" href="https://b2b.avgst.ru" rel="noopener noreferrer">
+          Перейти на портал
+        </a>
+        <a class="avgst-moved__btn avgst-moved__btn--ghost" href="https://b2b.avgst.ru/signup" rel="noopener noreferrer">
+          Регистрация
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    function hideChrome() {
+      var records = document.querySelectorAll("#allrecords > .t-rec");
+      for (var i = 0; i < records.length; i++) {
+        if (!records[i].querySelector(".avgst-moved")) {
+          records[i].style.setProperty("display", "none", "important");
+          records[i].style.setProperty("visibility", "hidden", "important");
+          records[i].style.setProperty("height", "0", "important");
+          records[i].style.setProperty("overflow", "hidden", "important");
+        }
+      }
+      var extras = document.querySelectorAll(
+        ".t450, .t-menuburger, .t-menuburger__container, .t-cookies, .t-btnscroll"
+      );
+      for (var j = 0; j < extras.length; j++) {
+        extras[j].style.setProperty("display", "none", "important");
+        extras[j].style.setProperty("visibility", "hidden", "important");
+      }
+      document.documentElement.style.setProperty("overflow", "hidden", "important");
+      document.body.style.setProperty("overflow", "hidden", "important");
+    }
+
+    hideChrome();
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", hideChrome);
+    }
+    window.addEventListener("load", hideChrome);
+    setTimeout(hideChrome, 300);
+    setTimeout(hideChrome, 1200);
+  })();
+</script>

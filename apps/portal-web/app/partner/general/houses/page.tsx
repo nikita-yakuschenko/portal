@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { IconPhoto, IconSearch } from "@tabler/icons-react";
 
@@ -42,15 +43,18 @@ function parseTechnology(value: string | null): Technology {
 /** Карточка проекта: фото ведёт, под ним характеристики и заводская цена */
 function HouseCard({ house }: { house: GeneralHouse }) {
   return (
-    <article className="bg-card overflow-hidden rounded-xl border transition-colors duration-150 hover:border-ring/50">
-      <div className="bg-muted relative aspect-[4/3] w-full overflow-hidden">
+    <Link
+      href={`/partner/general/houses/${house.id}`}
+      className="bg-card group block overflow-hidden rounded-xl border transition-colors duration-150 hover:border-ring/50 focus-visible:border-ring focus-visible:ring-ring/50 outline-none focus-visible:ring-[3px] motion-safe:active:scale-[0.995] motion-safe:transition-transform"
+    >
+      <div className="bg-muted relative aspect-video w-full overflow-hidden">
         {house.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={house.imageUrl}
             alt=""
             loading="lazy"
-            className="size-full object-cover transition-transform duration-300 hover:scale-[1.02]"
+            className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
           />
         ) : (
           <div className="text-muted-foreground flex size-full items-center justify-center">
@@ -76,7 +80,7 @@ function HouseCard({ house }: { house: GeneralHouse }) {
 
         <p className="text-lg font-medium tabular-nums">{formatPrice(house.basePrice)}</p>
       </div>
-    </article>
+    </Link>
   );
 }
 
@@ -152,7 +156,7 @@ function GeneralHousesContent() {
         <p className="text-muted-foreground text-sm">
           {loading
             ? "Загружаем проекты…"
-            : `${pluralize(visible.length, ["проект", "проекта", "проектов"])} · цены завода, одинаковые для всех дилеров`}
+            : pluralize(visible.length, ["проект", "проекта", "проектов"])}
         </p>
 
         <div className="flex flex-wrap items-center gap-2">

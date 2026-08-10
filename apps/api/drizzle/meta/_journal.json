@@ -232,6 +232,13 @@
       "when": 1788300000000,
       "tag": "0032_deep_firebird",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1788400000000,
+      "tag": "0033_open_nico_minoru",
+      "breakpoints": true
     }
   ]
 }

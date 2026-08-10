@@ -8,7 +8,9 @@ export type GeneralOverview = {
   modularCover: string | null;
   modularFrom: number | null;
   trusses: number;
+  trussCover: string | null;
   roofPanels: number;
+  roofPanelCover: string | null;
   roofPanelPrice: number | null;
   materials: number;
 };
@@ -56,6 +58,15 @@ export function formatPrice(value: number | null): string {
     currency: "RUB",
     maximumFractionDigits: 0
   }).format(value);
+}
+
+/** imageUrl может хранить несколько ссылок через перевод строки (галерея) */
+export function parseProductImageUrls(imageUrl: string | null | undefined): string[] {
+  if (!imageUrl?.trim()) return [];
+  return imageUrl
+    .split(/\n+/)
+    .map((url) => url.trim())
+    .filter(Boolean);
 }
 
 /** «17 проектов» / «2 проекта» — счётчик под плиткой раздела */

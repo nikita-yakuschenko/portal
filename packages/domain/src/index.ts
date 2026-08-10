@@ -4,7 +4,13 @@ export type SourceSystem = "tilda";
 
 export type PartnerStatus = "pending" | "active" | "suspended";
 export type PartnerApplicationStatus = "new" | "under_review" | "approved" | "rejected";
-export type Role = "company_admin" | "company_manager" | "partner_owner" | "partner_member";
+export type Role =
+  | "company_admin"
+  | "company_manager"
+  | "partner_owner"
+  | "partner_member"
+  /** Общий дилерский доступ на время переезда с Tilda */
+  | "dealer_guest";
 export type SiteStatus = "draft" | "provisioning" | "published" | "archived";
 /** Судьба заявки на пути в CRM: см. crm_delivery_status в схеме БД */
 export type CrmDeliveryStatus = "skipped" | "pending" | "sent" | "failed";

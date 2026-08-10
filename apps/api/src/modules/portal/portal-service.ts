@@ -58,7 +58,7 @@ import { partnerSiteService } from "../partners/partner-site-service.js";
 type SessionUser = {
   id: string;
   partnerId: string | null;
-  role: "company_admin" | "company_manager" | "partner_owner" | "partner_member";
+  role: "company_admin" | "company_manager" | "partner_owner" | "partner_member" | "dealer_guest";
   email: string;
   fullName: string;
 };
@@ -140,6 +140,211 @@ export class PortalService {
       role: "company_admin",
       passwordHash: await hashPassword(input.password)
     });
+  }
+
+  /**
+   * Общий дилерский вход на время переезда с Tilda: один логин на всех,
+   * те же креды, что были в закрытом разделе сайта. Партнёра ему не заводим —
+   * у роли dealer_guest нет ни своего сайта, ни сделок, ни каталога цен.
+   */
+  async ensureDealerGuest(input: { email: string; password: string }): Promise<void> {
+    const email = input.email.trim().toLowerCase();
+
+    // Партнёр-заглушка нужен ровно для одного: чтобы запросу дилера было куда
+    // прийти — мессенджер адресует разговоры партнёру. Доступ к кабинету он не
+    // открывает, это делает роль.
+    const companyName = "Дилеры AVGST";
+    let partner = await db.query.partners.findFirst({
+      where: eq(partners.companyName, companyName)
+    });
+    if (!partner) {
+      const row = {
+        id: randomUUID(),
+        companyName,
+        status: "active" as const,
+        region: "Общий доступ",
+        email,
+        phone: "+7 (000) 000-00-00"
+      };
+      await db.insert(partners).values(row);
+      partner = await db.query.partners.findFirst({ where: eq(partners.id, row.id) });
+    }
+
+    const existing = await db.query.users.findFirst({ where: eq(users.email, email) });
+
+    if (existing) {
+      // Пароль общего входа меняется в окружении, а не в кабинете
+      await db
+        .update(users)
+        .set({
+          passwordHash: await hashPassword(input.password),
+          role: "dealer_guest",
+          partnerId: partner?.id ?? null,
+          isActive: true
+        })
+        .where(eq(users.id, existing.id));
+      return;
+    }
+
+    await db.insert(users).values({
+      id: randomUUID(),
+      partnerId: partner?.id ?? null,
+      email,
+      fullName: "Дилеры AVGST",
+      role: "dealer_guest",
+      passwordHash: await hashPassword(input.password)
+    });
+  }
+
+  /**
+   * Канон общего раздела с закрытого кабинета Tilda: фермы МЗП, кровельные
+   * панели и подборка материалов. Дописывает картинки к уже заведённым
+   * позициям без фото — иначе после первого пустого сида раздел остаётся слепым.
+   */
+  async ensureFactoryCatalog(): Promise<void> {
+    const canon: Array<{
+      kind: "truss" | "roof_panel";
+      name: string;
+      description: string;
+      sizes: string;
+      /** Одна или несколько картинок: первая — обложка, остальные — галерея */
+      imageUrls: string[];
+      price: number | null;
+      priceUnit: string;
+      sortOrder: number;
+    }> = [
+      {
+        kind: "truss",
+        name: "Односкатные фермы",
+        description:
+          "Односкатные фермы обычно применяются для устройства односкатных кровель или в случае наличия опоры внутри здания (стена, балки или подстропильные фермы) для устройства скатов кровель.",
+        sizes: "6х6, 7х7, 8х8, 9х9, 10х10",
+        imageUrls: [
+          "https://static.tildacdn.com/tild3263-3632-4466-b139-373330343434/2.jpg"
+        ],
+        price: null,
+        priceUnit: "",
+        sortOrder: 10
+      },
+      {
+        kind: "truss",
+        name: "Двускатные фермы",
+        description:
+          "Двускатные фермы применяются для устройства двускатных кровель или как одни из типов ферм для вальмовых или полу вальмовых кровель.",
+        sizes: "6х6, 7х7, 8х8, 9х9, 10х10",
+        imageUrls: [
+          "https://static.tildacdn.com/tild3966-3430-4533-a531-383736373638/2.jpg"
+        ],
+        price: null,
+        priceUnit: "",
+        sortOrder: 20
+      },
+      {
+        kind: "truss",
+        name: "Ножничные фермы",
+        description:
+          "Ножничные фермы с подъёмом нижнего пояса устанавливают над конкретными помещениями: гостиные, залы для занятия спортом, часто применяют для устройства навесов над парковками автотранспорта или павильонов.",
+        sizes: "6х6, 7х7, 8х8, 9х9, 10х10",
+        imageUrls: [
+          "https://static.tildacdn.com/tild6161-3165-4632-b234-303862623337/2.jpg"
+        ],
+        price: null,
+        priceUnit: "",
+        sortOrder: 30
+      },
+      {
+        kind: "truss",
+        name: "Вальмовые фермы",
+        description:
+          "Вальмовая ферма отличается от двускатной отсутствием фронтона — вместо него появляется дополнительный скат. К достоинствам такой крыши можно отнести лучшее восприятие ветровой нагрузки, лучшую защиту стен от осадков.",
+        sizes: "9х12",
+        imageUrls: [
+          "https://static.tildacdn.com/tild6166-3434-4135-b538-303134383065/2.jpg"
+        ],
+        price: null,
+        priceUnit: "",
+        sortOrder: 40
+      },
+      {
+        kind: "roof_panel",
+        name: "Кровельные панели",
+        description:
+          "В готовую кровельную панель входят: стропильная система, контробрешетка для вентиляции межкровельного пространства, обрешетка кровли, утепление 200 мм, пароизоляционная пленка 200 мкрн, гидро-ветрозащитная кровельная мембрана.",
+        sizes: "",
+        imageUrls: [
+          "https://static.tildacdn.com/tild6232-3938-4461-a439-316131636539/--.jpg",
+          "https://static.tildacdn.com/tild3466-6365-4137-b162-646432653331/--.jpg"
+        ],
+        price: 4200,
+        priceUnit: "за м²",
+        sortOrder: 10
+      }
+    ];
+
+    const existing = await db.select().from(factoryProducts);
+    const normalize = (value: string) =>
+      value
+        .trim()
+        .toLowerCase()
+        .replace(/ё/g, "е")
+        .replace(/\s+/g, " ");
+
+    for (const item of canon) {
+      // Несколько URL через перевод строки — фронт разбирает в галерею
+      const imageUrl = item.imageUrls.join("\n");
+      const match = existing.find(
+        (row) =>
+          row.kind === item.kind &&
+          (normalize(row.name) === normalize(item.name) ||
+            (item.kind === "roof_panel" && normalize(row.name).includes("кровельн")))
+      );
+
+      if (match) {
+        if (!match.imageUrl?.trim()) {
+          await db
+            .update(factoryProducts)
+            .set({
+              imageUrl,
+              ...(item.kind === "roof_panel" && match.price == null
+                ? { price: item.price, priceUnit: item.priceUnit }
+                : {})
+            })
+            .where(eq(factoryProducts.id, match.id));
+        }
+        continue;
+      }
+
+      await db.insert(factoryProducts).values({
+        id: randomUUID(),
+        kind: item.kind,
+        name: item.name,
+        description: item.description,
+        sizes: item.sizes,
+        imageUrl,
+        price: item.price,
+        priceUnit: item.priceUnit,
+        sortOrder: item.sortOrder,
+        isActive: true
+      });
+    }
+
+    const existingMaterials = await db
+      .select({ id: dealerMaterials.id })
+      .from(dealerMaterials)
+      .where(eq(dealerMaterials.isActive, true))
+      .limit(1);
+
+    if (existingMaterials.length === 0) {
+      await db.insert(dealerMaterials).values({
+        id: randomUUID(),
+        title: "Фото и видео проектов",
+        description: "Подборка материалов для дилеров — как в закрытом разделе на сайте.",
+        url: "https://disk.yandex.ru/d/6IiiQ-KdWdMHkw",
+        category: "media",
+        sortOrder: 10,
+        isActive: true
+      });
+    }
   }
 
   // Локальный демо-партнёр для входа в /partner
@@ -2467,7 +2672,15 @@ export class PortalService {
         null
       ),
       trusses: products.filter((item) => item.kind === "truss").length,
+      trussCover:
+        products.find((item) => item.kind === "truss" && item.imageUrl)?.imageUrl?.split("\n")[0]?.trim() ??
+        null,
       roofPanels: products.filter((item) => item.kind === "roof_panel").length,
+      roofPanelCover:
+        products
+          .find((item) => item.kind === "roof_panel" && item.imageUrl)
+          ?.imageUrl?.split("\n")[0]
+          ?.trim() ?? null,
       roofPanelPrice: products.find((item) => item.kind === "roof_panel")?.price ?? null,
       materials: materials.length
     };

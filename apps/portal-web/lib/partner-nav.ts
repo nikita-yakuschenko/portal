@@ -26,3 +26,11 @@ export const partnerNavigation: NavigationItem[] = [
 export const partnerAccountMenu: NavigationItem[] = [
   { title: "Настройки", href: "/partner/settings", icon: IconSettings }
 ];
+
+/**
+ * Общий дилерский вход (роль dealer_guest): своего кабинета у него нет,
+ * поэтому в меню только то, ради чего он заходит.
+ */
+export const dealerGuestNavigation: NavigationItem[] = [
+  { title: "Общий раздел", href: "/partner/general", icon: IconBuildingFactory2 }
+];

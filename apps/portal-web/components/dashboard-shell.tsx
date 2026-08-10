@@ -46,6 +46,8 @@ export function DashboardShell(props: {
   cabinetKind?: "company" | "partner";
   currentPath: string;
   navigation: NavigationItem[];
+  /** Пункты в меню профиля; пустой массив — ничего не показывать (общий дилерский вход) */
+  accountMenuItems?: NavigationItem[];
   /** Заголовок бренда в сайдбаре (по умолчанию AVGST / Партнёр) */
   brandTitle?: string;
   /** Логотип партнёра (сокращённая версия) */
@@ -84,7 +86,9 @@ export function DashboardShell(props: {
   const isPartnerCabinet =
     props.cabinetKind === "partner" || props.cabinetLabel === partnerCabinetLabel;
 
-  const accountMenuItems = isPartnerCabinet ? partnerAccountMenu : companyAccountMenu;
+  const accountMenuItems =
+    props.accountMenuItems ??
+    (isPartnerCabinet ? partnerAccountMenu : companyAccountMenu);
 
   const navForTitle = [...props.navigation, ...accountMenuItems];
   const activeHref = navForTitle

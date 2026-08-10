@@ -122,6 +122,7 @@ export function ProjectAboutPanel({
   savingDescription = false,
   onSaveDescription,
   descriptionProtected = false,
+  showDescription = true,
   assetBusyId = null,
   onPatchAsset,
   roomBusyId = null,
@@ -140,6 +141,8 @@ export function ProjectAboutPanel({
   onSaveDescription?: (next: string) => void;
   /** Точка защиты синка — над подписью таба «Описание», без влияния на размер */
   descriptionProtected?: boolean;
+  /** Общий раздел дилера: только медиа, без вкладки «Описание» */
+  showDescription?: boolean;
   assetBusyId?: string | null;
   onPatchAsset?: (assetId: string, patch: AboutAssetPatch) => void;
   roomBusyId?: string | null;
@@ -167,6 +170,10 @@ export function ProjectAboutPanel({
 
   const unknownAssets = byType("unknown");
 
+  const defaultTab = showDescription
+    ? "description"
+    : (MEDIA_TABS.find((tab) => byType(tab.type).length > 0)?.id ?? MEDIA_TABS[0]!.id);
+
   function openViewer(sectionAssets: AboutAsset[], index: number) {
     setViewer({
       items: sectionAssets.map((asset) => ({
@@ -180,20 +187,22 @@ export function ProjectAboutPanel({
 
   return (
     <div className="space-y-3">
-      <Tabs defaultValue="description">
+      <Tabs defaultValue={defaultTab}>
         <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
-          <TabsTrigger value="description">
-            <span className="relative inline-flex items-center">
-              Описание
-              {descriptionProtected ? (
-                <span
-                  className="bg-amber-500/90 absolute top-0 left-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                  title="Защищено от синхронизации Tilda"
-                  aria-label="Описание защищено от синхронизации Tilda"
-                />
-              ) : null}
-            </span>
-          </TabsTrigger>
+          {showDescription ? (
+            <TabsTrigger value="description">
+              <span className="relative inline-flex items-center">
+                Описание
+                {descriptionProtected ? (
+                  <span
+                    className="bg-amber-500/90 absolute top-0 left-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                    title="Защищено от синхронизации Tilda"
+                    aria-label="Описание защищено от синхронизации Tilda"
+                  />
+                ) : null}
+              </span>
+            </TabsTrigger>
+          ) : null}
           {MEDIA_TABS.map((tab) => {
             const count = byType(tab.type).length;
             return (
@@ -205,6 +214,7 @@ export function ProjectAboutPanel({
           {extra ? <TabsTrigger value="service">Служебное</TabsTrigger> : null}
         </TabsList>
 
+        {showDescription ? (
         <TabsContent value="description" className="space-y-3">
           <form
             className="space-y-3"
@@ -242,6 +252,7 @@ export function ProjectAboutPanel({
             ) : null}
           </form>
         </TabsContent>
+        ) : null}
 
         {MEDIA_TABS.map((tab) => {
           const items = byType(tab.type);

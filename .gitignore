@@ -5,6 +5,7 @@ coverage/
 .turbo/
 .env
 .env.local
+.env.dealer
 *.log
 # Кэш инкрементальной сборки TypeScript — машинный, шумит в каждом diff
 *.tsbuildinfo

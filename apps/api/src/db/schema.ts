@@ -23,7 +23,10 @@ export const roleEnum = pgEnum("role", [
   "company_admin",
   "company_manager",
   "partner_owner",
-  "partner_member"
+  "partner_member",
+  // Общий дилерский доступ на время переезда с Tilda: один логин на всех,
+  // видит только общий раздел и ничего не может изменить
+  "dealer_guest"
 ]);
 export const catalogSourceEnum = pgEnum("catalog_source", ["tilda"]);
 export const crmProviderEnum = pgEnum("crm_provider", ["amocrm", "bitrix24"]);

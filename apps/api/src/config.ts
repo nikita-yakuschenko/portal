@@ -18,6 +18,9 @@ const configSchema = z.object({
   ADMIN_EMAIL: z.email().default("admin@avgst.local"),
   ADMIN_PASSWORD: z.string().min(8).default("ChangeMe123!"),
   ADMIN_FULL_NAME: z.string().min(2).default("AVGST Admin"),
+  /** Общий дилерский вход на время переезда с Tilda: один логин на всех */
+  DEALER_EMAIL: z.email().default("dealer@avgst.ru"),
+  DEALER_PASSWORD: z.string().min(8).default("avgst_dealer_25"),
   PARTNER_EMAIL: z.email().default("partner@avgst.local"),
   PARTNER_PASSWORD: z.string().min(8).default("ChangeMe123!"),
   PARTNER_FULL_NAME: z.string().min(2).default("Демо Партнёр"),
@@ -61,6 +64,8 @@ export const config = {
   adminEmail: parsedConfig.ADMIN_EMAIL,
   adminPassword: parsedConfig.ADMIN_PASSWORD,
   adminFullName: parsedConfig.ADMIN_FULL_NAME,
+  dealerEmail: parsedConfig.DEALER_EMAIL,
+  dealerPassword: parsedConfig.DEALER_PASSWORD,
   partnerEmail: parsedConfig.PARTNER_EMAIL,
   partnerPassword: parsedConfig.PARTNER_PASSWORD,
   partnerFullName: parsedConfig.PARTNER_FULL_NAME,

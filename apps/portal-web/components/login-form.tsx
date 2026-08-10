@@ -15,14 +15,19 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
+import { markDealerSunsetNotice } from "@/components/partner-general/dealer-sunset-notice";
 
 type LoginUser = {
-  role: "company_admin" | "company_manager" | "partner_owner" | "partner_member";
+  role: "company_admin" | "company_manager" | "partner_owner" | "partner_member" | "dealer_guest";
 };
 
 function cabinetPathForRole(role: LoginUser["role"]) {
   if (role === "company_admin" || role === "company_manager") {
     return "/company";
+  }
+  // Общему дилерскому входу главная кабинета не нужна — ему нужен общий раздел
+  if (role === "dealer_guest") {
+    return "/partner/general";
   }
   return "/partner";
 }
@@ -45,6 +50,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
         method: "POST",
         body: JSON.stringify({ email, password })
       });
+      if (payload.user.role === "dealer_guest") {
+        markDealerSunsetNotice();
+      }
       router.replace(cabinetPathForRole(payload.user.role));
     } catch (err) {
       setResultMessage(

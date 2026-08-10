@@ -46,11 +46,6 @@ export default function GeneralMaterialsPage() {
     <PartnerShell currentPath="/partner/general" title="Материалы для дилеров">
       <PageAlert message={error} variant="destructive" />
 
-      <p className="text-muted-foreground max-w-prose text-sm">
-        Фото и видео проектов, презентации и фирменные материалы — берите для своего сайта,
-        соцсетей и переговоров. Подборки хранятся во внешнем облаке и открываются в новой вкладке.
-      </p>
-
       {loading ? (
         <div className="grid gap-3 sm:grid-cols-2">
           {[0, 1].map((row) => (

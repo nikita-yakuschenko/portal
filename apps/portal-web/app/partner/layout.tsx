@@ -8,7 +8,9 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
     return children;
   }
 
+  // Общий дилерский вход пускаем в дерево /partner: внутри ему открыт только
+  // /partner/general, остальное закрывает AuthGate самого раздела и API
   return (
-    <AuthGate allow={["partner_owner", "partner_member"]}>{children}</AuthGate>
+    <AuthGate allow={["partner_owner", "partner_member", "dealer_guest"]}>{children}</AuthGate>
   );
 }

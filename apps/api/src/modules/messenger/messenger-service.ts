@@ -34,7 +34,7 @@ const typingByConversation = new Map<string, Map<string, TypingEntry>>();
 type Actor = {
   sub: string;
   partnerId: string | null;
-  role: "company_admin" | "company_manager" | "partner_owner" | "partner_member";
+  role: "company_admin" | "company_manager" | "partner_owner" | "partner_member" | "dealer_guest";
   fullName: string;
 };
 
