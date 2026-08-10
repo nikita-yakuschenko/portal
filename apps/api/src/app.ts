@@ -146,6 +146,37 @@ const createSiteRequestSchema = z.object({
   pageUrl: z.string().max(2000).optional()
 });
 
+const generalHousesQuerySchema = z.object({
+  technology: z.enum(["panel_frame", "modular"])
+});
+
+const factoryProductQuerySchema = z.object({
+  kind: z.enum(["truss", "roof_panel"]).optional()
+});
+
+const factoryProductSchema = z.object({
+  id: z.string().optional(),
+  kind: z.enum(["truss", "roof_panel"]),
+  name: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  sizes: z.string().max(200).optional(),
+  imageUrl: z.string().max(2000).nullable().optional(),
+  price: z.number().int().min(0).max(100_000_000).nullable().optional(),
+  priceUnit: z.string().max(50).optional(),
+  sortOrder: z.number().int().min(0).max(999).optional(),
+  isActive: z.boolean().optional()
+});
+
+const dealerMaterialSchema = z.object({
+  id: z.string().optional(),
+  title: z.string().min(1).max(200),
+  description: z.string().max(1000).optional(),
+  url: z.string().url().max(2000),
+  category: z.string().max(50).optional(),
+  sortOrder: z.number().int().min(0).max(999).optional(),
+  isActive: z.boolean().optional()
+});
+
 const updateDealSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   status: z.enum(["new", "in_progress", "won", "lost"]).optional(),
@@ -1693,6 +1724,140 @@ export async function buildApp() {
       return reply.status(204).send();
     } catch (error) {
       return reply.status(404).send({ message: error instanceof Error ? error.message : "Not found" });
+    }
+  });
+
+  // --- Общий дилерский раздел: то же, что было в закрытом разделе на Tilda ---
+
+  app.get("/api/partner/general/overview", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    return portalService.getGeneralOverview();
+  });
+
+  app.get("/api/partner/general/houses", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const parsed = generalHousesQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    return portalService.listGeneralHouses(parsed.data.technology);
+  });
+
+  app.get("/api/partner/general/products", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const parsed = factoryProductQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    return portalService.listFactoryProducts(parsed.data.kind);
+  });
+
+  app.get("/api/partner/general/materials", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    return portalService.listDealerMaterials();
+  });
+
+  // --- Управление общим разделом из кабинета завода ---
+
+  app.get("/api/company/general/products", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    return portalService.listFactoryProducts(undefined, true);
+  });
+
+  app.post("/api/company/general/products", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const parsed = factoryProductSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    try {
+      return await portalService.upsertFactoryProduct({
+        actorUserId: getAuthUser(request)!.sub,
+        ...parsed.data
+      });
+    } catch (error) {
+      return reply
+        .status(400)
+        .send({ message: error instanceof Error ? error.message : "Не удалось сохранить" });
+    }
+  });
+
+  app.delete("/api/company/general/products/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const { id } = request.params as { id: string };
+    try {
+      await portalService.deleteFactoryProduct(getAuthUser(request)!.sub, id);
+      return reply.status(204).send();
+    } catch (error) {
+      return reply
+        .status(404)
+        .send({ message: error instanceof Error ? error.message : "Позиция не найдена" });
+    }
+  });
+
+  app.get("/api/company/general/materials", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    return portalService.listDealerMaterials(true);
+  });
+
+  app.post("/api/company/general/materials", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const parsed = dealerMaterialSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    try {
+      return await portalService.upsertDealerMaterial({
+        actorUserId: getAuthUser(request)!.sub,
+        ...parsed.data
+      });
+    } catch (error) {
+      return reply
+        .status(400)
+        .send({ message: error instanceof Error ? error.message : "Не удалось сохранить" });
+    }
+  });
+
+  app.delete("/api/company/general/materials/:id", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+    const { id } = request.params as { id: string };
+    try {
+      await portalService.deleteDealerMaterial(getAuthUser(request)!.sub, id);
+      return reply.status(204).send();
+    } catch (error) {
+      return reply
+        .status(404)
+        .send({ message: error instanceof Error ? error.message : "Подборка не найдена" });
     }
   });
 

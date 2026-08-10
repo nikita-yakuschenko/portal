@@ -19,8 +19,10 @@ import {
   catalogSyncRuns,
   contacts,
   crmConnections,
+  dealerMaterials,
   dealEvents,
   deals,
+  factoryProducts,
   partnerApplications,
   partnerInquiries,
   partnerProjectPrices,
@@ -2360,4 +2362,221 @@ export class PortalService {
       payload
     });
   }
+  /**
+   * Общий дилерский раздел: витрина завода до того, как дилер получил свой
+   * кабинет с персональными ценами. Цены здесь заводские, одни на всех.
+   */
+  async listGeneralHouses(technology: "panel_frame" | "modular") {
+    const rows = await db
+      .select({
+        id: catalogProjects.id,
+        slug: catalogProjects.slug,
+        name: catalogProjects.name,
+        technology: catalogProjects.technology,
+        area: catalogProjects.area,
+        floors: catalogProjects.floors,
+        bedrooms: catalogProjects.bedrooms,
+        basePrice: catalogProjects.basePrice,
+        details: catalogProjects.details
+      })
+      .from(catalogProjects)
+      .where(
+        and(eq(catalogProjects.active, true), eq(catalogProjects.technology, technology))
+      )
+      .orderBy(catalogProjects.basePrice);
+
+    const ids = rows.map((row) => row.id);
+    const assets = ids.length
+      ? await db
+          .select()
+          .from(catalogAssets)
+          .where(and(inArray(catalogAssets.projectId, ids), eq(catalogAssets.isHidden, false)))
+      : [];
+
+    return rows.map((row) => {
+      const cover = assets
+        .filter((asset) => asset.projectId === row.id && asset.type === "exterior")
+        .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.sortOrder - b.sortOrder)[0];
+      // dimensions в details — объект с готовой подписью вида «13,68×8,98 м»
+      const details = (row.details ?? {}) as { dimensions?: { label?: string } };
+      return {
+        id: row.id,
+        slug: row.slug,
+        name: row.name,
+        technology: row.technology,
+        area: row.area,
+        floors: row.floors,
+        bedrooms: row.bedrooms,
+        basePrice: row.basePrice,
+        dimensions: details.dimensions?.label ?? null,
+        imageUrl: cover?.localPath || cover?.sourceUrl || null
+      };
+    });
+  }
+
+  /** Продукция завода помимо домов: фермы и кровельные панели */
+  async listFactoryProducts(kind?: "truss" | "roof_panel", includeHidden = false) {
+    const filters = [];
+    if (kind) filters.push(eq(factoryProducts.kind, kind));
+    if (!includeHidden) filters.push(eq(factoryProducts.isActive, true));
+
+    return db
+      .select()
+      .from(factoryProducts)
+      .where(filters.length ? and(...filters) : undefined)
+      .orderBy(factoryProducts.kind, factoryProducts.sortOrder);
+  }
+
+  async listDealerMaterials(includeHidden = false) {
+    return db
+      .select()
+      .from(dealerMaterials)
+      .where(includeHidden ? undefined : eq(dealerMaterials.isActive, true))
+      .orderBy(dealerMaterials.sortOrder);
+  }
+
+  /** Сводка для главной общего раздела: счётчики и обложки разделов */
+  async getGeneralOverview() {
+    const [panel, modular, products, materials] = await Promise.all([
+      this.listGeneralHouses("panel_frame"),
+      this.listGeneralHouses("modular"),
+      db.select().from(factoryProducts).where(eq(factoryProducts.isActive, true)),
+      db
+        .select({ id: dealerMaterials.id })
+        .from(dealerMaterials)
+        .where(eq(dealerMaterials.isActive, true))
+    ]);
+
+    // Обложка раздела — фото первого проекта: плитка с домом читается быстрее иконки
+    const cover = (houses: Array<{ imageUrl: string | null }>) =>
+      houses.find((house) => house.imageUrl)?.imageUrl ?? null;
+
+    return {
+      panelFrame: panel.length,
+      panelFrameCover: cover(panel),
+      panelFrameFrom: panel.reduce<number | null>(
+        (min, house) =>
+          house.basePrice !== null && (min === null || house.basePrice < min) ? house.basePrice : min,
+        null
+      ),
+      modular: modular.length,
+      modularCover: cover(modular),
+      modularFrom: modular.reduce<number | null>(
+        (min, house) =>
+          house.basePrice !== null && (min === null || house.basePrice < min) ? house.basePrice : min,
+        null
+      ),
+      trusses: products.filter((item) => item.kind === "truss").length,
+      roofPanels: products.filter((item) => item.kind === "roof_panel").length,
+      roofPanelPrice: products.find((item) => item.kind === "roof_panel")?.price ?? null,
+      materials: materials.length
+    };
+  }
+
+  async upsertFactoryProduct(input: {
+    actorUserId: string;
+    id?: string | undefined;
+    kind: "truss" | "roof_panel";
+    name: string;
+    description?: string | undefined;
+    sizes?: string | undefined;
+    imageUrl?: string | null | undefined;
+    price?: number | null | undefined;
+    priceUnit?: string | undefined;
+    sortOrder?: number | undefined;
+    isActive?: boolean | undefined;
+  }) {
+    const values = {
+      kind: input.kind,
+      name: input.name.trim(),
+      description: input.description?.trim() ?? "",
+      sizes: input.sizes?.trim() ?? "",
+      imageUrl: input.imageUrl ?? null,
+      price: input.price ?? null,
+      priceUnit: input.priceUnit?.trim() ?? "",
+      sortOrder: input.sortOrder ?? 0,
+      isActive: input.isActive ?? true
+    };
+
+    if (input.id) {
+      const existing = await db.query.factoryProducts.findFirst({
+        where: eq(factoryProducts.id, input.id)
+      });
+      if (!existing) throw new Error("Позиция не найдена.");
+      await db.update(factoryProducts).set(values).where(eq(factoryProducts.id, input.id));
+      await this.writeAuditLog(input.actorUserId, "factory_product.updated", "factory_product", input.id, {
+        name: values.name
+      });
+      return { ...existing, ...values };
+    }
+
+    const row = { id: randomUUID(), ...values };
+    await db.insert(factoryProducts).values(row);
+    await this.writeAuditLog(input.actorUserId, "factory_product.created", "factory_product", row.id, {
+      name: values.name
+    });
+    return row;
+  }
+
+  async deleteFactoryProduct(actorUserId: string, id: string) {
+    const existing = await db.query.factoryProducts.findFirst({
+      where: eq(factoryProducts.id, id)
+    });
+    if (!existing) throw new Error("Позиция не найдена.");
+    await db.delete(factoryProducts).where(eq(factoryProducts.id, id));
+    await this.writeAuditLog(actorUserId, "factory_product.deleted", "factory_product", id, {
+      name: existing.name
+    });
+  }
+
+  async upsertDealerMaterial(input: {
+    actorUserId: string;
+    id?: string | undefined;
+    title: string;
+    description?: string | undefined;
+    url: string;
+    category?: string | undefined;
+    sortOrder?: number | undefined;
+    isActive?: boolean | undefined;
+  }) {
+    const values = {
+      title: input.title.trim(),
+      description: input.description?.trim() ?? "",
+      url: input.url.trim(),
+      category: input.category?.trim() || "other",
+      sortOrder: input.sortOrder ?? 0,
+      isActive: input.isActive ?? true
+    };
+
+    if (input.id) {
+      const existing = await db.query.dealerMaterials.findFirst({
+        where: eq(dealerMaterials.id, input.id)
+      });
+      if (!existing) throw new Error("Подборка не найдена.");
+      await db.update(dealerMaterials).set(values).where(eq(dealerMaterials.id, input.id));
+      await this.writeAuditLog(input.actorUserId, "dealer_material.updated", "dealer_material", input.id, {
+        title: values.title
+      });
+      return { ...existing, ...values };
+    }
+
+    const row = { id: randomUUID(), ...values };
+    await db.insert(dealerMaterials).values(row);
+    await this.writeAuditLog(input.actorUserId, "dealer_material.created", "dealer_material", row.id, {
+      title: values.title
+    });
+    return row;
+  }
+
+  async deleteDealerMaterial(actorUserId: string, id: string) {
+    const existing = await db.query.dealerMaterials.findFirst({
+      where: eq(dealerMaterials.id, id)
+    });
+    if (!existing) throw new Error("Подборка не найдена.");
+    await db.delete(dealerMaterials).where(eq(dealerMaterials.id, id));
+    await this.writeAuditLog(actorUserId, "dealer_material.deleted", "dealer_material", id, {
+      title: existing.title
+    });
+  }
+
 }

@@ -1,5 +1,6 @@
 import {
   IconBook,
+  IconBuildingFactory2,
   IconInbox,
   IconLayoutDashboard,
   IconMessageCircle,
@@ -15,6 +16,7 @@ export const partnerCabinetLabel = "Дилер";
 export const partnerNavigation: NavigationItem[] = [
   { title: "Главная", href: "/partner", icon: IconLayoutDashboard },
   { title: "Сайт", href: "/partner/site", icon: IconWorld },
+  { title: "Общий раздел", href: "/partner/general", icon: IconBuildingFactory2 },
   { title: "Каталог", href: "/partner/catalog", icon: IconBook },
   { title: "Сделки", href: "/partner/deals", icon: IconInbox },
   { title: "Мессенджер", href: "/partner/messenger", icon: IconMessageCircle }

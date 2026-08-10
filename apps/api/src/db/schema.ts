@@ -54,6 +54,11 @@ export const dealEventTypeEnum = pgEnum("site_request_event_type", [
   "field_changed",
   "contact_changed"
 ]);
+/**
+ * Продукция завода помимо домов. Дома живут в catalog_projects и приезжают
+ * из Tilda, а это заводится руками в кабинете HQ.
+ */
+export const factoryProductKindEnum = pgEnum("factory_product_kind", ["truss", "roof_panel"]);
 export const inquiryStatusEnum = pgEnum("inquiry_status", ["new", "answered"]);
 export const syncStatusEnum = pgEnum("sync_status", ["running", "completed", "failed"]);
 export const partnerSiteStatusEnum = pgEnum("partner_site_status", ["draft", "published"]);
@@ -621,3 +626,47 @@ export const socialProfileSnapshots = pgTable(
     )
   })
 );
+
+/**
+ * Продукция завода для общего дилерского раздела: фермы на МЗП и кровельные
+ * панели. Это не дома — у них нет проекта, планировок и комплектаций, зато
+ * есть типоразмеры и цена за единицу.
+ */
+export const factoryProducts = pgTable(
+  "factory_products",
+  {
+    id: text("id").primaryKey(),
+    kind: factoryProductKindEnum("kind").notNull(),
+    name: text("name").notNull(),
+    /** Короткое пояснение, где такое применяют */
+    description: text("description").notNull().default(""),
+    /** «6х6, 7х7, 8х8» — как их называет завод, без разбора на числа */
+    sizes: text("sizes").notNull().default(""),
+    imageUrl: text("image_url"),
+    /** Цена и то, за что она: «4200 ₽ за м²» собирается из этих двух полей */
+    price: integer("price"),
+    priceUnit: text("price_unit").notNull().default(""),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    kindOrderIdx: index("factory_products_kind_order_idx").on(table.kind, table.sortOrder)
+  })
+);
+
+/**
+ * Подборки материалов для дилеров: пока это ссылки на внешние хранилища.
+ * Своё хранилище с контролем доступа — отдельная задача, см. README.
+ */
+export const dealerMaterials = pgTable("dealer_materials", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  url: text("url").notNull(),
+  /** Что там лежит: фото, видео, презентации — для иконки и подписи */
+  category: text("category").notNull().default("other"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+});

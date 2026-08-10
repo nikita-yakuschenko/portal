@@ -225,6 +225,13 @@
       "when": 1788200000000,
       "tag": "0031_large_nehzno",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788300000000,
+      "tag": "0032_deep_firebird",
+      "breakpoints": true
     }
   ]
 }
