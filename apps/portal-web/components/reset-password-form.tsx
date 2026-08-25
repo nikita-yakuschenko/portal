@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { IconEye, IconEyeOff } from "@tabler/icons-react";
 
 import { cn } from "@/lib/utils";
@@ -15,48 +15,47 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
-import { markDealerSunsetNotice } from "@/components/partner-general/dealer-sunset-notice";
 
-type LoginUser = {
-  role: "company_admin" | "company_manager" | "partner_owner" | "partner_member" | "dealer_guest";
-};
-
-function cabinetPathForRole(role: LoginUser["role"]) {
-  if (role === "company_admin" || role === "company_manager") {
-    return "/company";
-  }
-  // Общему дилерскому входу главная кабинета не нужна — ему нужен общий раздел
-  if (role === "dealer_guest") {
-    return "/partner/general";
-  }
-  return "/partner";
-}
-
-export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
+function ResetPasswordFormInner({ className, ...props }: React.ComponentProps<"div">) {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const searchParams = useSearchParams();
+  const token = searchParams.get("token")?.trim() ?? "";
+
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [resultMessage, setResultMessage] = useState("");
+  const [resultMessage, setResultMessage] = useState(
+    token ? "" : "В ссылке нет токена. Запросите сброс пароля ещё раз."
+  );
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!token) {
+      setResultMessage("В ссылке нет токена. Запросите сброс пароля ещё раз.");
+      return;
+    }
+    if (password.length < 8) {
+      setResultMessage("Пароль должен быть не короче 8 символов.");
+      return;
+    }
+    if (password !== confirm) {
+      setResultMessage("Пароли не совпадают.");
+      return;
+    }
+
     setLoading(true);
     setResultMessage("");
 
     try {
-      const payload = await apiFetch<{ user: LoginUser }>("/api/auth/login", {
+      await apiFetch("/api/auth/password-reset/confirm", {
         method: "POST",
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ token, password })
       });
-      if (payload.user.role === "dealer_guest") {
-        markDealerSunsetNotice();
-      }
-      router.replace(cabinetPathForRole(payload.user.role));
+      router.replace("/login");
     } catch (err) {
       setResultMessage(
-        err instanceof Error ? err.message : "Не удалось связаться с API. Проверьте npm run dev:api."
+        err instanceof Error ? err.message : "Не удалось сменить пароль. Попробуйте ещё раз."
       );
     } finally {
       setLoading(false);
@@ -70,21 +69,11 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
           <form className="min-w-0 p-5 md:p-7" onSubmit={handleSubmit}>
             <FieldGroup className="gap-3.5">
               <div className="mb-1">
-                <h1 className="text-2xl font-bold">Вход</h1>
+                <h1 className="text-2xl font-bold">Новый пароль</h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Придумайте пароль не короче 8 символов.
+                </p>
               </div>
-              <Field className="min-w-0">
-                <FieldLabel htmlFor="email">Email</FieldLabel>
-                <Input
-                  id="email"
-                  className="max-w-full"
-                  type="email"
-                  placeholder="partner@company.ru"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </Field>
               <Field className="min-w-0">
                 <FieldLabel htmlFor="password">Пароль</FieldLabel>
                 <div className="relative">
@@ -92,8 +81,10 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                     id="password"
                     className="max-w-full pr-10"
                     type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
+                    autoComplete="new-password"
                     required
+                    minLength={8}
+                    disabled={loading || !token}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                   />
@@ -111,17 +102,23 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                   </button>
                 </div>
               </Field>
-              <p className="-mt-1 text-right text-sm">
-                <Link
-                  href="/forgot-password"
-                  className="text-muted-foreground font-medium underline-offset-4 hover:text-foreground hover:underline"
-                >
-                  Забыли пароль?
-                </Link>
-              </p>
+              <Field className="min-w-0">
+                <FieldLabel htmlFor="confirm">Повтор пароля</FieldLabel>
+                <Input
+                  id="confirm"
+                  className="max-w-full"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  disabled={loading || !token}
+                  value={confirm}
+                  onChange={(event) => setConfirm(event.target.value)}
+                />
+              </Field>
               <Field>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Вход..." : "Войти в кабинет"}
+                <Button type="submit" className="w-full" disabled={loading || !token}>
+                  {loading ? "Сохранение..." : "Сохранить пароль"}
                 </Button>
               </Field>
               {resultMessage ? (
@@ -129,9 +126,8 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               ) : null}
             </FieldGroup>
             <p className="mt-6 border-t border-border pt-5 text-left text-sm text-muted-foreground">
-              Нет доступа?{" "}
-              <Link href="/signup" className="font-medium text-foreground underline-offset-4 hover:underline">
-                Регистрация
+              <Link href="/login" className="font-medium text-foreground underline-offset-4 hover:underline">
+                Вернуться ко входу
               </Link>
             </p>
           </form>
@@ -145,5 +141,17 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export function ResetPasswordForm(props: React.ComponentProps<"div">) {
+  return (
+    <Suspense
+      fallback={
+        <div className="text-muted-foreground p-8 text-sm">Загрузка формы…</div>
+      }
+    >
+      <ResetPasswordFormInner {...props} />
+    </Suspense>
   );
 }

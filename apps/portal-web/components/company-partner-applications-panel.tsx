@@ -116,26 +116,25 @@ export function CompanyPartnerApplicationsPanel({
     if (!detail || !reviewAction) return;
     setBusyId(detail.id);
     try {
-      const result = await apiFetch<{ status: string; temporaryPassword?: string }>(
+      const result = await apiFetch<{ status: string; mailSent?: boolean }>(
         `/api/company/applications/${detail.id}/${reviewAction}`,
         {
           method: "POST",
           body: JSON.stringify({ comment: comment.trim() || undefined })
         }
       );
-      const password = result.temporaryPassword;
-      if (password) {
+      if (reviewAction === "approve") {
         toast.success("Заявка одобрена", {
-          description: `Временный пароль: ${password}`,
-          duration: Infinity,
-          closeButton: true,
-          action: {
-            label: "Скопировать",
-            onClick: () => void navigator.clipboard.writeText(password)
-          }
+          description: result.mailSent
+            ? "Письмо с доступом отправлено партнёру."
+            : "Партнёр создан, но письмо не ушло. Сбросьте пароль на карточке партнёра."
         });
       } else {
-        toast.success(reviewAction === "approve" ? "Заявка одобрена" : "Заявка отклонена");
+        toast.success("Заявка отклонена", {
+          description: result.mailSent
+            ? "Письмо об отклонении отправлено."
+            : "Статус обновлён, письмо не отправилось."
+        });
       }
       setReviewAction(null);
       setDetail(null);

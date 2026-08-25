@@ -81,7 +81,6 @@ function PartnerDetailContent() {
   const [saving, setSaving] = useState(false);
   const [legalName, setLegalName] = useState("");
   const [inn, setInn] = useState("");
-  const [tempPassword, setTempPassword] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -160,12 +159,15 @@ function PartnerDetailContent() {
     if (!partner) return;
     setSaving(true);
     try {
-      const result = await apiFetch<{ temporaryPassword: string; email: string }>(
+      const result = await apiFetch<{ mailSent?: boolean; email: string }>(
         `/api/company/partners/${partner.id}/reset-password`,
         { method: "POST", body: "{}" }
       );
-      setTempPassword(result.temporaryPassword);
-      toast.success(`Пароль сброшен для ${result.email}`);
+      toast.success(
+        result.mailSent
+          ? `Новый пароль отправлен на ${result.email}`
+          : `Пароль сброшен, но письмо на ${result.email} не ушло. Повторите позже.`
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось сбросить пароль");
     } finally {
@@ -469,7 +471,7 @@ function PartnerDetailContent() {
                 <CardHeader>
                   <CardTitle>Безопасность</CardTitle>
                   <CardDescription>
-                    Сброс пароля владельца кабинета. Новый пароль показывается один раз.
+                    Новый временный пароль уйдёт владельцу кабинета на email.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -482,22 +484,6 @@ function PartnerDetailContent() {
                     {saving ? <Spinner /> : null}
                     Сбросить пароль владельца
                   </Button>
-                  {tempPassword ? (
-                    <div className="space-y-2">
-                      <Label>Временный пароль</Label>
-                      <div className="bg-muted/40 rounded-lg border px-3 py-2 font-mono text-sm break-all">
-                        {tempPassword}
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => void navigator.clipboard.writeText(tempPassword)}
-                      >
-                        Скопировать
-                      </Button>
-                    </div>
-                  ) : null}
                 </CardContent>
               </Card>
             </TabsContent>

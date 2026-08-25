@@ -54,6 +54,13 @@ import {
   resolvePartnerDisplayPrice
 } from "../partners/partner-pricing.js";
 import { partnerSiteService } from "../partners/partner-site-service.js";
+import { appLoginUrl, appResetPasswordUrl, sendMailSafe } from "../mail/mailer.js";
+import {
+  applicationReceivedMail,
+  applicationRejectedMail,
+  partnerAccessMail,
+  passwordResetMail
+} from "../mail/messages.js";
 
 type SessionUser = {
   id: string;
@@ -519,6 +526,7 @@ export class PortalService {
     };
 
     await db.insert(partnerApplications).values(application);
+    await sendMailSafe(application.email, applicationReceivedMail(application.contactName));
     return {
       id: application.id,
       status: application.status
@@ -561,7 +569,12 @@ export class PortalService {
         comment: input.comment ?? ""
       });
 
-      return { status: "rejected" as const };
+      const mailSent = await sendMailSafe(
+        application.email,
+        applicationRejectedMail(application.contactName, input.comment)
+      );
+
+      return { status: "rejected" as const, mailSent };
     }
 
     const partnerId = randomUUID();
@@ -606,11 +619,22 @@ export class PortalService {
     const { messengerService } = await import("../messenger/messenger-service.js");
     await messengerService.ensureDm(partnerId, userId);
 
+    const mailSent = await sendMailSafe(
+      application.email,
+      partnerAccessMail({
+        kind: "approved",
+        name: application.contactName,
+        loginEmail: application.email,
+        temporaryPassword,
+        loginUrl: appLoginUrl()
+      })
+    );
+
     return {
       status: "approved" as const,
       partnerId,
       userId,
-      temporaryPassword
+      mailSent
     };
   }
 
@@ -638,12 +662,13 @@ export class PortalService {
   }
 
   async requestPasswordReset(email: string) {
+    const raw = email.trim();
     const user = await db.query.users.findFirst({
-      where: eq(users.email, email)
+      where: or(eq(users.email, raw), eq(users.email, raw.toLowerCase()))
     });
 
-    if (!user) {
-      return null;
+    if (!user || !user.isActive) {
+      return;
     }
 
     const { token, tokenHash } = createResetToken();
@@ -655,7 +680,13 @@ export class PortalService {
       expiresAt: new Date(Date.now() + 1000 * 60 * 60)
     });
 
-    return { token };
+    await sendMailSafe(
+      user.email,
+      passwordResetMail({
+        name: user.fullName,
+        resetUrl: appResetPasswordUrl(token)
+      })
+    );
   }
 
   async resetPassword(tokenHash: string, nextPassword: string) {
@@ -664,7 +695,7 @@ export class PortalService {
     });
 
     if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
-      throw new Error("Reset token is invalid or expired.");
+      throw new Error("Ссылка недействительна или истекла. Запросите сброс пароля ещё раз.");
     }
 
     await db
@@ -1819,10 +1850,21 @@ export class PortalService {
       { partnerId: input.partnerId }
     );
 
+    const mailSent = await sendMailSafe(
+      owner.email,
+      partnerAccessMail({
+        kind: "reset",
+        name: owner.fullName,
+        loginEmail: owner.email,
+        temporaryPassword,
+        loginUrl: appLoginUrl()
+      })
+    );
+
     return {
       userId: owner.id,
       email: owner.email,
-      temporaryPassword
+      mailSent
     };
   }
 

@@ -17,6 +17,8 @@ import { resolvePartnerSocialUrl } from "./modules/social/social-urls.js";
 import { fetchProxiedMedia } from "./modules/social/media-proxy.js";
 import { OutboundError } from "./modules/social/social-http.js";
 import { consumeRateLimit } from "./modules/social/rate-limit.js";
+import { appLoginUrl, sendMailSafe } from "./modules/mail/mailer.js";
+import { partnerAccessMail } from "./modules/mail/messages.js";
 import { partnerSiteDraftSchema } from "@b2b/site-schema";
 import type { SocialProfileSnapshot } from "@b2b/domain";
 
@@ -316,7 +318,9 @@ export async function buildApp() {
   // 10 × 10 МБ × ~4/3 + запас на JSON.
   const app = Fastify({
     logger: true,
-    bodyLimit: 150 * 1024 * 1024
+    bodyLimit: 150 * 1024 * 1024,
+    // Traefik/Dokploy: иначе request.ip — адрес прокси, rate limit бесполезен
+    trustProxy: true
   });
   const portalService = new PortalService(new StoreTildaClient());
 
@@ -600,6 +604,13 @@ export async function buildApp() {
       return reply.status(400).send(parsed.error.flatten());
     }
 
+    if (!consumeRateLimit(`login:ip:${request.ip}`, 20, 15 * 60_000)) {
+      return reply.status(429).send({ message: "Слишком много попыток. Подождите немного." });
+    }
+    if (!consumeRateLimit(`login:email:${parsed.data.email.trim().toLowerCase()}`, 10, 15 * 60_000)) {
+      return reply.status(429).send({ message: "Слишком много попыток. Подождите немного." });
+    }
+
     const user = await portalService.login(parsed.data.email, parsed.data.password);
     if (!user) {
       return reply.status(401).send({ message: "Invalid credentials" });
@@ -678,8 +689,16 @@ export async function buildApp() {
       return reply.status(400).send(parsed.error.flatten());
     }
 
-    const reset = await portalService.requestPasswordReset(parsed.data.email);
-    return { issued: Boolean(reset), token: reset?.token };
+    const email = parsed.data.email.trim().toLowerCase();
+    if (!consumeRateLimit(`reset:ip:${request.ip}`, 8, 60 * 60_000)) {
+      return reply.status(429).send({ message: "Слишком много попыток. Подождите немного." });
+    }
+    if (!consumeRateLimit(`reset:email:${email}`, 3, 60 * 60_000)) {
+      return reply.status(429).send({ message: "Слишком много попыток. Подождите немного." });
+    }
+
+    await portalService.requestPasswordReset(parsed.data.email);
+    return { ok: true };
   });
 
   app.post("/api/auth/password-reset/confirm", async (request, reply) => {
@@ -688,8 +707,13 @@ export async function buildApp() {
       return reply.status(400).send(parsed.error.flatten());
     }
 
+    if (!consumeRateLimit(`reset-confirm:ip:${request.ip}`, 20, 60 * 60_000)) {
+      return reply.status(429).send({ message: "Слишком много попыток. Подождите немного." });
+    }
+
     try {
-      return await portalService.resetPassword(hashResetToken(parsed.data.token), parsed.data.password);
+      await portalService.resetPassword(hashResetToken(parsed.data.token), parsed.data.password);
+      return { ok: true };
     } catch (error) {
       return reply.status(400).send({ message: error instanceof Error ? error.message : "Reset failed" });
     }
@@ -1104,9 +1128,19 @@ export async function buildApp() {
         inn: parsed.data.inn ?? null,
         legalName: parsed.data.legalName ?? null
       });
+      const mailSent = await sendMailSafe(
+        created.email,
+        partnerAccessMail({
+          kind: created.passwordReset ? "reset" : "created",
+          name: parsed.data.fullName?.trim() || created.email,
+          loginEmail: created.email,
+          temporaryPassword,
+          loginUrl: appLoginUrl()
+        })
+      );
       return {
         ...created,
-        temporaryPassword
+        mailSent
       };
     } catch (error) {
       return reply.status(400).send({

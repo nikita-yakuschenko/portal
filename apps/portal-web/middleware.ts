@@ -61,6 +61,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/company") ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/signup") ||
+    pathname.startsWith("/forgot-password") ||
     pathname.startsWith("/reset-password") ||
     pathname === "/delete"
   ) {

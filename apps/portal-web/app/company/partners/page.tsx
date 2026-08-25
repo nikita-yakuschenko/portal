@@ -146,7 +146,7 @@ function CompanyPartnersContent() {
     try {
       const result = await apiFetch<{
         created: boolean;
-        temporaryPassword?: string;
+        mailSent?: boolean;
         email: string;
       }>("/api/company/partners", {
         method: "POST",
@@ -161,20 +161,11 @@ function CompanyPartnersContent() {
           inn: createForm.inn.trim() || null
         })
       });
-      const password = result.temporaryPassword;
-      if (password) {
-        toast.success("Партнёр создан", {
-          description: `Пароль: ${password}`,
-          duration: Infinity,
-          closeButton: true,
-          action: {
-            label: "Скопировать",
-            onClick: () => void navigator.clipboard.writeText(password)
-          }
-        });
-      } else {
-        toast.success("Партнёр создан");
-      }
+      toast.success("Партнёр создан", {
+        description: result.mailSent
+          ? `Письмо с доступом отправлено на ${result.email}.`
+          : "Кабинет создан, но письмо не ушло. Сбросьте пароль на карточке партнёра."
+      });
       setCreateForm({
         companyName: "",
         fullName: "",
@@ -390,7 +381,7 @@ function CompanyPartnersContent() {
                 value={createForm.password}
                 disabled={saving}
                 onChange={(e) => setCreateForm((p) => ({ ...p, password: e.target.value }))}
-                placeholder="Минимум 8 символов или пусто"
+                placeholder="Пусто — сгенерируем и отправим письмом"
               />
             </div>
             <div className="space-y-2">

@@ -105,7 +105,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
       });
 
       setStatus("success");
-      setMessage("Заявка принята. После проверки откроем доступ в кабинет.");
+      setMessage("Заявка принята. Мы отправили письмо на указанный email.");
       setForm(initialState);
       goToStep(1);
     } catch (err) {
@@ -230,7 +230,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
                       <textarea
                         id="message"
                         rows={2}
-                        className="flex min-h-[56px] w-full max-w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                        className="flex min-h-14 w-full max-w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                         value={form.message}
                         onChange={(event) => updateField("message", event.target.value)}
                       />
@@ -268,7 +268,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
             </p>
           </div>
 
-          <div className="relative hidden min-h-[420px] overflow-hidden rounded-r-xl bg-muted md:block">
+          <div className="relative hidden min-h-105 overflow-hidden rounded-r-xl bg-muted md:block">
             <img
               src="/landing/factory.jpg"
               alt="Производство Авангард Строй"

@@ -45,7 +45,15 @@ const configSchema = z.object({
   META_ACCESS_TOKEN: z.string().default(""),
   META_IG_BUSINESS_ID: z.string().default(""),
   INSTAGRAM_COLLECTOR_URL: z.string().default(""),
-  INSTAGRAM_COLLECTOR_TOKEN: z.string().default("")
+  INSTAGRAM_COLLECTOR_TOKEN: z.string().default(""),
+  // Публичный URL кабинета — ссылки в письмах (логин, сброс пароля)
+  APP_PUBLIC_URL: z.string().url().default("https://b2b.avgst.ru"),
+  SMTP_HOST: z.string().default(""),
+  SMTP_PORT: z.coerce.number().int().positive().default(465),
+  SMTP_SECURE: z.string().optional(),
+  SMTP_USER: z.string().default(""),
+  SMTP_PASS: z.string().default(""),
+  SMTP_FROM: z.string().min(3).default("AVGST <noreply@avgst.ru>")
 });
 
 // Dokploy часто прокидывает пустые строки вместо отсутствия ключа —
@@ -104,5 +112,17 @@ export const config = {
       collectorUrl: parsedConfig.INSTAGRAM_COLLECTOR_URL,
       collectorToken: parsedConfig.INSTAGRAM_COLLECTOR_TOKEN
     }
+  },
+  appPublicUrl: parsedConfig.APP_PUBLIC_URL.replace(/\/$/, ""),
+  smtp: {
+    host: parsedConfig.SMTP_HOST,
+    port: parsedConfig.SMTP_PORT,
+    secure:
+      parsedConfig.SMTP_SECURE == null
+        ? parsedConfig.SMTP_PORT === 465
+        : !["false", "0", "no"].includes(parsedConfig.SMTP_SECURE.toLowerCase()),
+    user: parsedConfig.SMTP_USER,
+    pass: parsedConfig.SMTP_PASS,
+    from: parsedConfig.SMTP_FROM
   }
 };
