@@ -31,9 +31,7 @@ export function ForgotPasswordForm({ className, ...props }: React.ComponentProps
         body: JSON.stringify({ email })
       });
       setSent(true);
-      setResultMessage(
-        "Если такой аккаунт есть, отправим ссылку на сброс пароля. Проверьте почту."
-      );
+      setResultMessage("Письмо отправлено. Проверьте почту.");
     } catch (err) {
       setResultMessage(
         err instanceof Error ? err.message : "Не удалось отправить запрос. Попробуйте позже."
@@ -52,7 +50,7 @@ export function ForgotPasswordForm({ className, ...props }: React.ComponentProps
               <div className="mb-1">
                 <h1 className="text-2xl font-bold">Сброс пароля</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Укажите email входа — пришлём ссылку, если кабинет есть.
+                  Укажите email входа — пришлём ссылку для нового пароля.
                 </p>
               </div>
               <Field className="min-w-0">

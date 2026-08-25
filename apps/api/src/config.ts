@@ -63,6 +63,17 @@ const envForParse = Object.fromEntries(
 );
 const parsedConfig = configSchema.parse(envForParse);
 
+function unwrapQuotes(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
 export const config = {
   port: parsedConfig.PORT,
   databaseUrl: parsedConfig.DATABASE_URL,
@@ -121,8 +132,8 @@ export const config = {
       parsedConfig.SMTP_SECURE == null
         ? parsedConfig.SMTP_PORT === 465
         : !["false", "0", "no"].includes(parsedConfig.SMTP_SECURE.toLowerCase()),
-    user: parsedConfig.SMTP_USER,
-    pass: parsedConfig.SMTP_PASS,
-    from: parsedConfig.SMTP_FROM
+    user: unwrapQuotes(parsedConfig.SMTP_USER),
+    pass: unwrapQuotes(parsedConfig.SMTP_PASS),
+    from: unwrapQuotes(parsedConfig.SMTP_FROM)
   }
 };
