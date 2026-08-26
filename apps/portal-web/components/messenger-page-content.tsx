@@ -24,6 +24,7 @@ import {
   IconSearch,
   IconTicket,
   IconTrash,
+  IconVideo,
   IconX
 } from "@tabler/icons-react";
 import { toast } from "sonner";
@@ -98,7 +99,11 @@ type Conversation = {
   status: "open" | "in_progress" | "closed" | null;
   lastMessageAt: string | null;
   lastMessagePreview:
-    | { kind: "text" | "media" | "file"; text: string }
+    | {
+        kind: "text" | "image" | "video" | "media" | "document" | "file";
+        text: string;
+        attachmentId?: string | null;
+      }
     | string
     | null;
   unread: boolean;
@@ -256,6 +261,83 @@ function isImageMime(mimeType: string) {
   return mimeType.startsWith("image/");
 }
 
+const PREVIEW_LABEL: Record<string, string> = {
+  image: "Изображение",
+  video: "Видео",
+  media: "Медиафайл",
+  document: "Документ",
+  file: "Документ"
+};
+
+function previewMeta(preview: Conversation["lastMessagePreview"]) {
+  if (!preview) return null;
+  if (typeof preview === "string") {
+    const text = preview.trim();
+    return text ? ({ kind: "text" as const, text, attachmentId: null }) : null;
+  }
+  const kind = preview.kind;
+  if (kind === "text") {
+    const text = preview.text?.trim();
+    if (!text) return null;
+    return { kind: "text" as const, text, attachmentId: null };
+  }
+  // Старый kind "file" / "media" с именем файла → нормализуем подпись
+  const label = PREVIEW_LABEL[kind] ?? preview.text?.trim() ?? "Вложение";
+  return {
+    kind: kind === "file" ? ("document" as const) : kind,
+    text: label,
+    attachmentId: preview.attachmentId ?? null
+  };
+}
+
+function MessageListPreview({ preview }: { preview: Conversation["lastMessagePreview"] }) {
+  const meta = previewMeta(preview);
+  if (!meta) {
+    return <span className="text-muted-foreground">Нет сообщений</span>;
+  }
+  if (meta.kind === "text") {
+    return <span className="text-muted-foreground truncate">{meta.text}</span>;
+  }
+  if (meta.kind === "image") {
+    return (
+      <span className="text-muted-foreground inline-flex min-w-0 items-center gap-1.5">
+        {meta.attachmentId ? (
+          <img
+            src={`/api/messenger/attachments/${meta.attachmentId}`}
+            alt=""
+            className="bg-muted size-4 shrink-0 rounded-sm object-cover"
+          />
+        ) : (
+          <IconPhoto className="size-3.5 shrink-0" />
+        )}
+        <span className="truncate">{meta.text}</span>
+      </span>
+    );
+  }
+  if (meta.kind === "video") {
+    return (
+      <span className="text-muted-foreground inline-flex min-w-0 items-center gap-1">
+        <IconVideo className="size-3.5 shrink-0" />
+        <span className="truncate">{meta.text}</span>
+      </span>
+    );
+  }
+  if (meta.kind === "media") {
+    return (
+      <span className="text-muted-foreground inline-flex min-w-0 items-center gap-1">
+        <IconPhoto className="size-3.5 shrink-0" />
+        <span className="truncate">{meta.text}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="text-muted-foreground inline-flex min-w-0 items-center gap-1">
+      <IconFile className="size-3.5 shrink-0" />
+      <span className="truncate">{meta.text}</span>
+    </span>
+  );
+}
+
 /** Локальный превью выбранного изображения до отправки */
 function PendingImageThumb({ file, fileName }: { file: File; fileName: string }) {
   const [src, setSrc] = useState<string | null>(null);
@@ -275,41 +357,6 @@ function PendingImageThumb({ file, fileName }: { file: File; fileName: string })
   return (
     <img src={src} alt={fileName} className="h-16 w-16 object-cover" title={fileName} />
   );
-}
-
-function previewMeta(preview: Conversation["lastMessagePreview"]) {
-  if (!preview) return null;
-  if (typeof preview === "string") {
-    const text = preview.trim();
-    return text ? ({ kind: "text" as const, text }) : null;
-  }
-  const text = preview.text?.trim();
-  if (!text) return null;
-  return { kind: preview.kind, text };
-}
-
-function MessageListPreview({ preview }: { preview: Conversation["lastMessagePreview"] }) {
-  const meta = previewMeta(preview);
-  if (!meta) {
-    return <span className="text-muted-foreground">Нет сообщений</span>;
-  }
-  if (meta.kind === "media") {
-    return (
-      <span className="text-muted-foreground inline-flex min-w-0 items-center gap-1">
-        <IconPhoto className="size-3.5 shrink-0" />
-        <span className="truncate">{meta.text}</span>
-      </span>
-    );
-  }
-  if (meta.kind === "file") {
-    return (
-      <span className="text-muted-foreground inline-flex min-w-0 items-center gap-1">
-        <IconFile className="size-3.5 shrink-0" />
-        <span className="truncate">{meta.text}</span>
-      </span>
-    );
-  }
-  return <span className="text-muted-foreground truncate">{meta.text}</span>;
 }
 
 function MessageReceipt({
@@ -1525,7 +1572,7 @@ export function MessengerPageContent({
                                           <div
                                             data-slot="message-attachments"
                                             className={cn(
-                                              "flex max-w-[80%] flex-col gap-2",
+                                              "flex max-w-[min(100%,14rem)] flex-col gap-2",
                                               hasBody && "mt-0.5"
                                             )}
                                           >
@@ -1552,7 +1599,7 @@ export function MessengerPageContent({
                                                       <img
                                                         src={src}
                                                         alt={att.fileName}
-                                                        className="bg-muted max-h-72 max-w-full cursor-zoom-in object-cover sm:max-h-80"
+                                                        className="bg-muted max-h-44 w-full max-w-56 cursor-zoom-in object-cover sm:max-h-52"
                                                         loading="lazy"
                                                       />
                                                     </button>
@@ -1854,12 +1901,20 @@ export function MessengerPageContent({
         }}
       >
         <DialogContent
-          showCloseButton
-          overlayClassName="bg-black/80"
+          showCloseButton={false}
+          overlayClassName="bg-black/85"
           className="border-0 bg-transparent p-0 shadow-none sm:max-w-[min(96vw,56rem)]"
         >
           <DialogTitle className="sr-only">{lightbox?.fileName ?? "Изображение"}</DialogTitle>
           <DialogDescription className="sr-only">Просмотр вложения</DialogDescription>
+          <button
+            type="button"
+            aria-label="Закрыть"
+            className="fixed top-4 right-4 z-60 flex size-10 items-center justify-center rounded-full bg-black/50 text-white transition hover:bg-black/70 focus-visible:outline-none"
+            onClick={() => setLightbox(null)}
+          >
+            <IconX className="size-5" />
+          </button>
           {lightbox ? (
             <img
               src={lightbox.src}

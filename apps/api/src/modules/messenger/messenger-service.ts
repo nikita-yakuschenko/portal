@@ -60,14 +60,6 @@ function previewText(body: string) {
   return trimmed.length > 120 ? `${trimmed.slice(0, 117)}…` : trimmed;
 }
 
-function isMediaMime(mimeType: string) {
-  return (
-    mimeType.startsWith("image/") ||
-    mimeType.startsWith("video/") ||
-    mimeType.startsWith("audio/")
-  );
-}
-
 function partnerAvatarFromSiteConfig(config: unknown): string | null {
   if (!config || typeof config !== "object") return null;
   const row = config as Record<string, unknown>;
@@ -77,8 +69,29 @@ function partnerAvatarFromSiteConfig(config: unknown): string | null {
 }
 
 type LastMessagePreview = {
-  kind: "text" | "media" | "file";
+  kind: "text" | "image" | "video" | "media" | "document";
   text: string;
+  /** Для миниатюры в списке чатов (только image) */
+  attachmentId?: string | null;
+};
+
+function attachmentPreviewKind(
+  mimeType: string
+): "image" | "video" | "media" | "document" {
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType.startsWith("video/")) return "video";
+  if (mimeType.startsWith("audio/")) return "media";
+  return "document";
+}
+
+const ATTACHMENT_PREVIEW_LABEL: Record<
+  "image" | "video" | "media" | "document",
+  string
+> = {
+  image: "Изображение",
+  video: "Видео",
+  media: "Медиафайл",
+  document: "Документ"
 };
 
 function mapConversation(
@@ -313,7 +326,7 @@ export class MessengerService {
 
           const [att] = await db
             .select({
-              fileName: messengerAttachments.fileName,
+              id: messengerAttachments.id,
               mimeType: messengerAttachments.mimeType
             })
             .from(messengerAttachments)
@@ -322,11 +335,13 @@ export class MessengerService {
 
           if (!att) return [id, null] as const;
 
+          const kind = attachmentPreviewKind(att.mimeType);
           return [
             id,
             {
-              kind: isMediaMime(att.mimeType) ? ("media" as const) : ("file" as const),
-              text: att.fileName
+              kind,
+              text: ATTACHMENT_PREVIEW_LABEL[kind],
+              attachmentId: kind === "image" ? att.id : null
             }
           ] as const;
         })
