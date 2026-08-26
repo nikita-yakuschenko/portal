@@ -383,7 +383,10 @@ function UnreadBadge({ count }: { count: number }) {
   );
 }
 
-/** Всегда держим низ ленты при новом сообщении (своём или чужом) и при смене диалога */
+/**
+ * После смены диалога и подгрузки ленты — в низ.
+ * Новые сообщения в том же чате ведёт autoScroll (без scrollAnchor — иначе spacer «дыра»).
+ */
 function MessengerStickToBottom({
   conversationId,
   lastMessageId
@@ -393,16 +396,13 @@ function MessengerStickToBottom({
 }) {
   const { scrollToEnd } = useMessageScroller();
   const prevConvRef = useRef<string | null>(null);
-  const prevLastRef = useRef<string | null>(null);
 
   useLayoutEffect(() => {
     if (!conversationId || !lastMessageId) return;
     const switched = prevConvRef.current !== conversationId;
-    const newer = prevLastRef.current !== lastMessageId;
     prevConvRef.current = conversationId;
-    prevLastRef.current = lastMessageId;
-    if (!switched && !newer) return;
-    scrollToEnd({ behavior: switched ? "auto" : "smooth" });
+    if (!switched) return;
+    scrollToEnd({ behavior: "auto" });
   }, [conversationId, lastMessageId, scrollToEnd]);
 
   return null;
@@ -1451,7 +1451,11 @@ export function MessengerPageContent({
                     ))}
                   </div>
                 ) : (
-                  <MessageScrollerProvider autoScroll defaultScrollPosition="end">
+                  <MessageScrollerProvider
+                    key={activeId ?? "idle"}
+                    autoScroll
+                    defaultScrollPosition="end"
+                  >
                     <MessageScroller className="h-full">
                       <MessengerStickToBottom
                         conversationId={activeId}
@@ -1475,12 +1479,10 @@ export function MessengerPageContent({
                               new Date(msg.createdAt).getTime() -
                                 new Date(prev.createdAt).getTime() <
                                 GROUP_WINDOW_MS;
-                            const isLast = index === messages.length - 1;
                             return (
                               <MessageScrollerItem
                                 key={msg.id}
                                 messageId={msg.id}
-                                scrollAnchor={isLast}
                                 className={cn(grouped && "-mt-3")}
                               >
                                 {showDayBadge ? (
