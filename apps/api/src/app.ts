@@ -2584,10 +2584,16 @@ export async function buildApp() {
     if (roleCheck) return roleCheck;
 
     try {
-      const id = (request.params as { id: string }).id;
-      const download = await messengerService.getAttachmentDownloadUrl(getAuthUser(request)!, id);
-      // Короткоживущая ссылка — браузер открывает без повторного ACL-запроса через cookie
-      return reply.redirect(download.url);
+      // Stream под cookie — миниатюры <img> и оверлей без редиректа в новую вкладку
+      const file = await messengerService.getAttachmentFile(
+        getAuthUser(request)!,
+        (request.params as { id: string }).id
+      );
+      return reply
+        .header("Content-Type", file.contentType)
+        .header("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`)
+        .header("Cache-Control", "private, max-age=300")
+        .send(file.body);
     } catch (error) {
       return reply.status(404).send({
         message: error instanceof Error ? error.message : "Файл не найден"

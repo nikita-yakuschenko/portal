@@ -255,6 +255,27 @@ function isImageMime(mimeType: string) {
   return mimeType.startsWith("image/");
 }
 
+/** Локальный превью выбранного изображения до отправки */
+function PendingImageThumb({ file, fileName }: { file: File; fileName: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setSrc(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  if (!src) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1">
+        <IconPhoto className="size-3.5 shrink-0" />
+        <span className="truncate">{fileName}</span>
+      </span>
+    );
+  }
+  return (
+    <img src={src} alt={fileName} className="h-16 w-16 object-cover" title={fileName} />
+  );
+}
+
 function previewMeta(preview: Conversation["lastMessagePreview"]) {
   if (!preview) return null;
   if (typeof preview === "string") {
@@ -445,6 +466,7 @@ export function MessengerPageContent({
   const [archiveCount, setArchiveCount] = useState(0);
   const [archiving, setArchiving] = useState(false);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(() => new Set());
+  const [lightbox, setLightbox] = useState<{ src: string; fileName: string } | null>(null);
   const deletingIdsRef = useRef(deletingIds);
   deletingIdsRef.current = deletingIds;
 
@@ -1475,13 +1497,47 @@ export function MessengerPageContent({
                                           >
                                             {attachments.map((att, attIndex) => {
                                               const image = isImageMime(att.mimeType);
+                                              const src = `/api/messenger/attachments/${att.id}`;
                                               // Без текста время и статус показываем у последнего файла
                                               const showMeta =
                                                 !hasBody && attIndex === attachments.length - 1;
+                                              if (image) {
+                                                return (
+                                                  <div
+                                                    key={att.id}
+                                                    className="relative max-w-full overflow-hidden rounded-2xl"
+                                                  >
+                                                    <button
+                                                      type="button"
+                                                      className="block max-w-full overflow-hidden rounded-2xl text-left focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
+                                                      onClick={() =>
+                                                        setLightbox({ src, fileName: att.fileName })
+                                                      }
+                                                    >
+                                                      {/* cookie-auth same-origin — next/image здесь не подходит */}
+                                                      <img
+                                                        src={src}
+                                                        alt={att.fileName}
+                                                        className="bg-muted max-h-72 max-w-full cursor-zoom-in object-cover sm:max-h-80"
+                                                        loading="lazy"
+                                                      />
+                                                    </button>
+                                                    {showMeta ? (
+                                                      <span className="absolute right-2 bottom-2 rounded-md bg-black/55 px-1.5 py-0.5">
+                                                        <MessageMeta
+                                                          message={msg}
+                                                          mine={mine}
+                                                          onPrimary
+                                                        />
+                                                      </span>
+                                                    ) : null}
+                                                  </div>
+                                                );
+                                              }
                                               return (
                                                 <a
                                                   key={att.id}
-                                                  href={`/api/messenger/attachments/${att.id}`}
+                                                  href={src}
                                                   target="_blank"
                                                   rel="noreferrer"
                                                 >
@@ -1490,11 +1546,7 @@ export function MessengerPageContent({
                                                     className="bg-muted/80 border-border/60"
                                                   >
                                                     <AttachmentMedia>
-                                                      {image ? (
-                                                        <IconPhoto className="size-4" />
-                                                      ) : (
-                                                        <IconFile className="size-4" />
-                                                      )}
+                                                      <IconFile className="size-4" />
                                                     </AttachmentMedia>
                                                     <AttachmentContent>
                                                       <AttachmentTitle>{att.fileName}</AttachmentTitle>
@@ -1564,20 +1616,22 @@ export function MessengerPageContent({
                       {pendingFiles.map((file) => (
                         <div
                           key={file.id}
-                          className="bg-muted inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs"
+                          className="bg-muted relative inline-flex max-w-full items-center gap-1.5 overflow-hidden rounded-xl text-xs"
                         >
                           {isImageMime(file.mimeType) ? (
-                            <IconPhoto className="size-3.5 shrink-0" />
+                            <PendingImageThumb file={file.file} fileName={file.fileName} />
                           ) : (
-                            <IconFile className="size-3.5 shrink-0" />
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1">
+                              <IconFile className="size-3.5 shrink-0" />
+                              <span className="truncate">{file.fileName}</span>
+                            </span>
                           )}
-                          <span className="truncate">{file.fileName}</span>
                           <button
                             type="button"
-                            className="text-muted-foreground hover:text-foreground"
+                            className="hover:bg-background/80 absolute top-1 right-1 rounded-full bg-black/50 p-0.5 text-white"
                             aria-label="Убрать файл"
                             onClick={() =>
-                              setPendingFiles((prev) => prev.filter((f) => f.id !== file.id))
+                              setPendingFiles((prev) => prev.filter((row) => row.id !== file.id))
                             }
                           >
                             <IconX className="size-3.5" />
@@ -1756,6 +1810,29 @@ export function MessengerPageContent({
               Создать
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(lightbox)}
+        onOpenChange={(open) => {
+          if (!open) setLightbox(null);
+        }}
+      >
+        <DialogContent
+          showCloseButton
+          overlayClassName="bg-black/80"
+          className="border-0 bg-transparent p-0 shadow-none sm:max-w-[min(96vw,56rem)]"
+        >
+          <DialogTitle className="sr-only">{lightbox?.fileName ?? "Изображение"}</DialogTitle>
+          <DialogDescription className="sr-only">Просмотр вложения</DialogDescription>
+          {lightbox ? (
+            <img
+              src={lightbox.src}
+              alt={lightbox.fileName}
+              className="mx-auto max-h-[85vh] w-auto max-w-full rounded-lg object-contain"
+            />
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>
