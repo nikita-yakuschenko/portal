@@ -659,14 +659,18 @@ export const factoryProducts = pgTable(
 );
 
 /**
- * Подборки материалов для дилеров: пока это ссылки на внешние хранилища.
- * Своё хранилище с контролем доступа — отдельная задача, см. README.
+ * Подборки материалов для дилеров: внешняя ссылка и/или файл в S3 (Garage).
  */
 export const dealerMaterials = pgTable("dealer_materials", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
-  url: text("url").notNull(),
+  /** Внешняя ссылка; пусто, если файл лежит в object storage */
+  url: text("url").notNull().default(""),
+  storageKey: text("storage_key"),
+  fileName: text("file_name"),
+  mimeType: text("mime_type"),
+  byteSize: integer("byte_size"),
   /** Что там лежит: фото, видео, презентации — для иконки и подписи */
   category: text("category").notNull().default("other"),
   sortOrder: integer("sort_order").notNull().default(0),

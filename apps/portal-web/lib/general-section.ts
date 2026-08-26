@@ -46,6 +46,11 @@ export type DealerMaterial = {
   title: string;
   description: string;
   url: string;
+  storageKey?: string | null;
+  fileName?: string | null;
+  mimeType?: string | null;
+  byteSize?: number | null;
+  hasFile?: boolean;
   category: string;
   sortOrder: number;
   isActive: boolean;

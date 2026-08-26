@@ -62,7 +62,9 @@ const KIND_LABEL: Record<FactoryProduct["kind"], string> = {
 };
 
 type ProductDraft = Partial<FactoryProduct> & { kind: FactoryProduct["kind"] };
-type MaterialDraft = Partial<DealerMaterial>;
+type MaterialDraft = Partial<DealerMaterial> & {
+  pendingFile?: File | null;
+};
 
 export default function CompanyGeneralPage() {
   const [products, setProducts] = useState<FactoryProduct[]>([]);
@@ -128,19 +130,48 @@ export default function CompanyGeneralPage() {
   }
 
   async function saveMaterial() {
-    if (!materialDraft?.title?.trim() || !materialDraft.url?.trim()) {
-      toast.error("Нужны название и ссылка");
+    if (!materialDraft?.title?.trim()) {
+      toast.error("Укажите название");
+      return;
+    }
+    const externalUrl = materialDraft.url?.trim() ?? "";
+    const isApiFileUrl = externalUrl.startsWith("/api/");
+    const hasExistingFile = Boolean(materialDraft.storageKey || materialDraft.hasFile);
+    if (!materialDraft.pendingFile && !hasExistingFile && (!externalUrl || isApiFileUrl)) {
+      toast.error("Нужна ссылка или файл");
       return;
     }
     setSaving(true);
     try {
+      let storageKey = materialDraft.storageKey ?? undefined;
+      let fileName = materialDraft.fileName ?? undefined;
+      let mimeType = materialDraft.mimeType ?? undefined;
+      let byteSize = materialDraft.byteSize ?? undefined;
+
+      if (materialDraft.pendingFile) {
+        const form = new FormData();
+        form.append("file", materialDraft.pendingFile, materialDraft.pendingFile.name);
+        const uploaded = await apiFetch<{
+          storageKey: string;
+          fileName: string;
+          mimeType: string;
+          byteSize: number;
+        }>("/api/uploads?purpose=dealer_material", { method: "POST", body: form });
+        storageKey = uploaded.storageKey;
+        fileName = uploaded.fileName;
+        mimeType = uploaded.mimeType;
+        byteSize = uploaded.byteSize;
+      }
+
       await apiFetch("/api/company/general/materials", {
         method: "POST",
         body: JSON.stringify({
           ...(materialDraft.id ? { id: materialDraft.id } : {}),
           title: materialDraft.title,
           description: materialDraft.description ?? "",
-          url: materialDraft.url,
+          ...(storageKey
+            ? { storageKey, fileName, mimeType, byteSize }
+            : { url: externalUrl }),
           category: materialDraft.category ?? "other",
           sortOrder: materialDraft.sortOrder ?? 0,
           isActive: materialDraft.isActive ?? true
@@ -199,7 +230,22 @@ export default function CompanyGeneralPage() {
     try {
       await apiFetch("/api/company/general/materials", {
         method: "POST",
-        body: JSON.stringify({ ...material, isActive })
+        body: JSON.stringify({
+          id: material.id,
+          title: material.title,
+          description: material.description,
+          category: material.category,
+          sortOrder: material.sortOrder,
+          isActive,
+          ...(material.hasFile || material.storageKey
+            ? {
+                storageKey: material.storageKey,
+                fileName: material.fileName,
+                mimeType: material.mimeType,
+                byteSize: material.byteSize
+              }
+            : { url: material.url })
+        })
       });
     } catch (err) {
       setMaterials((prev) =>
@@ -542,7 +588,9 @@ export default function CompanyGeneralPage() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{materialDraft?.id ? "Изменить подборку" : "Новая подборка"}</DialogTitle>
-            <DialogDescription>Ссылка откроется у дилера в новой вкладке.</DialogDescription>
+            <DialogDescription>
+              Файл в хранилище портала или внешняя ссылка — дилер откроет в новой вкладке.
+            </DialogDescription>
           </DialogHeader>
 
           {materialDraft ? (
@@ -559,14 +607,74 @@ export default function CompanyGeneralPage() {
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="material-url">Ссылка</FieldLabel>
+                <FieldLabel htmlFor="material-file">Файл</FieldLabel>
+                <Input
+                  id="material-file"
+                  type="file"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    setMaterialDraft({
+                      ...materialDraft,
+                      pendingFile: file,
+                      ...(file
+                        ? { url: "", storageKey: null, hasFile: false }
+                        : {})
+                    });
+                  }}
+                />
+                <FieldDescription>
+                  {materialDraft.pendingFile
+                    ? `Выбран: ${materialDraft.pendingFile.name}`
+                    : materialDraft.hasFile || materialDraft.storageKey
+                      ? `Сейчас в хранилище: ${materialDraft.fileName ?? "файл"}`
+                      : "До 50 МБ. Можно вместо ссылки."}
+                </FieldDescription>
+                {materialDraft.hasFile || materialDraft.storageKey || materialDraft.pendingFile ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="self-start"
+                    onClick={() =>
+                      setMaterialDraft({
+                        ...materialDraft,
+                        pendingFile: null,
+                        storageKey: null,
+                        hasFile: false,
+                        fileName: null,
+                        mimeType: null,
+                        byteSize: null,
+                        url: ""
+                      })
+                    }
+                  >
+                    Убрать файл — указать ссылку
+                  </Button>
+                ) : null}
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="material-url">Или внешняя ссылка</FieldLabel>
                 <Input
                   id="material-url"
                   type="url"
                   placeholder="https://disk.yandex.ru/d/…"
-                  value={materialDraft.url ?? ""}
+                  value={
+                    materialDraft.hasFile || materialDraft.storageKey || materialDraft.pendingFile
+                      ? ""
+                      : (materialDraft.url ?? "")
+                  }
+                  disabled={Boolean(
+                    materialDraft.pendingFile || materialDraft.hasFile || materialDraft.storageKey
+                  )}
                   onChange={(event) =>
-                    setMaterialDraft({ ...materialDraft, url: event.target.value })
+                    setMaterialDraft({
+                      ...materialDraft,
+                      url: event.target.value,
+                      pendingFile: null,
+                      storageKey: null,
+                      hasFile: false
+                    })
                   }
                 />
               </Field>

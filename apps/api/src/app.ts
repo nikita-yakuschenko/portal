@@ -1,11 +1,21 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
+import multipart from "@fastify/multipart";
 import { randomBytes } from "node:crypto";
 import Fastify from "fastify";
 import { z } from "zod";
 
 import { config } from "./config.js";
+import {
+  assertAllowedUpload,
+  buildObjectKey,
+  putObject,
+  sanitizeFileName,
+  UPLOAD_LIMITS,
+  verifyApiSignedDownload,
+  type UploadPurpose
+} from "./lib/object-storage.js";
 import { StoreTildaClient, verifyOfficialTildaKeys } from "./modules/catalog/tilda-client.js";
 import { hashResetToken } from "./modules/auth/passwords.js";
 import { partnerSiteService } from "./modules/partners/partner-site-service.js";
@@ -79,10 +89,15 @@ const messengerPostMessageSchema = z.object({
       z.object({
         fileName: z.string().min(1),
         mimeType: z.string().min(1),
-        dataBase64: z.string().min(1)
+        byteSize: z.number().int().positive(),
+        storageKey: z.string().min(1)
       })
     )
     .optional()
+});
+
+const uploadPurposeSchema = z.object({
+  purpose: z.enum(["messenger", "dealer_material"])
 });
 
 const messengerCreateRequestSchema = z.object({
@@ -169,15 +184,38 @@ const factoryProductSchema = z.object({
   isActive: z.boolean().optional()
 });
 
-const dealerMaterialSchema = z.object({
-  id: z.string().optional(),
-  title: z.string().min(1).max(200),
-  description: z.string().max(1000).optional(),
-  url: z.string().url().max(2000),
-  category: z.string().max(50).optional(),
-  sortOrder: z.number().int().min(0).max(999).optional(),
-  isActive: z.boolean().optional()
-});
+const dealerMaterialSchema = z
+  .object({
+    id: z.string().optional(),
+    title: z.string().min(1).max(200),
+    description: z.string().max(1000).optional(),
+    url: z.string().max(2000).optional(),
+    storageKey: z.string().min(1).optional(),
+    fileName: z.string().min(1).max(200).optional(),
+    mimeType: z.string().min(1).max(200).optional(),
+    byteSize: z.number().int().positive().optional(),
+    category: z.string().max(50).optional(),
+    sortOrder: z.number().int().min(0).max(999).optional(),
+    isActive: z.boolean().optional()
+  })
+  .superRefine((value, ctx) => {
+    const hasUrl = Boolean(value.url?.trim());
+    const hasFile = Boolean(value.storageKey?.trim());
+    if (!hasUrl && !hasFile) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Нужна ссылка или файл",
+        path: ["url"]
+      });
+    }
+    if (hasUrl && value.url && !/^https?:\/\//i.test(value.url.trim())) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Ссылка должна начинаться с http:// или https://",
+        path: ["url"]
+      });
+    }
+  });
 
 const updateDealSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -314,11 +352,10 @@ function getAuthUser(request: { user?: unknown }): JwtPayload | null {
 }
 
 export async function buildApp() {
-  // Временно: вложения мессенджера уходят base64 в JSON (до S3).
-  // 10 × 10 МБ × ~4/3 + запас на JSON.
+  // JSON без base64-вложений; файлы идут multipart на /api/uploads
   const app = Fastify({
     logger: true,
-    bodyLimit: 150 * 1024 * 1024,
+    bodyLimit: 20 * 1024 * 1024,
     // Traefik/Dokploy: иначе request.ip — адрес прокси, rate limit бесполезен
     trustProxy: true
   });
@@ -327,6 +364,12 @@ export async function buildApp() {
   await app.register(cors, {
     origin: true,
     credentials: true
+  });
+  await app.register(multipart, {
+    limits: {
+      files: 1,
+      fileSize: UPLOAD_LIMITS.dealer_material.maxBytes
+    }
   });
   await app.register(cookie);
   await app.register(jwt, {
@@ -400,6 +443,58 @@ export async function buildApp() {
   }
 
   app.get("/health", async () => ({ status: "ok" }));
+
+  // Multipart → object storage (Garage/S3 или локальный uploads/ в dev)
+  app.post("/api/uploads", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+
+    try {
+      const user = getAuthUser(request)!;
+      const file = await request.file();
+      if (!file) {
+        return reply.status(400).send({ message: "Файл не передан" });
+      }
+
+      let purpose: UploadPurpose = "messenger";
+      const purposeField = (file.fields as Record<string, { value?: string } | undefined>).purpose;
+      if (purposeField?.value === "dealer_material" || purposeField?.value === "messenger") {
+        purpose = purposeField.value;
+      } else {
+        // purpose можно передать query: ?purpose=dealer_material
+        const q = uploadPurposeSchema.safeParse(request.query);
+        if (q.success) purpose = q.data.purpose;
+      }
+
+      if (purpose === "dealer_material" && user.role !== "company_admin" && user.role !== "company_manager") {
+        return reply.status(403).send({ message: "Forbidden" });
+      }
+
+      const buffer = await file.toBuffer();
+      const mimeType = file.mimetype || "application/octet-stream";
+      assertAllowedUpload(purpose, mimeType, buffer.byteLength);
+
+      const safeName = sanitizeFileName(file.filename || "file");
+      const storageKey = buildObjectKey(purpose, safeName, user.sub);
+      await putObject({ key: storageKey, body: buffer, contentType: mimeType });
+
+      return {
+        storageKey,
+        fileName: safeName,
+        mimeType,
+        byteSize: buffer.byteLength
+      };
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось загрузить файл"
+      });
+    }
+  });
 
   app.post("/api/public/partner-applications", async (request, reply) => {
     const parsed = applicationSchema.safeParse(request.body);
@@ -1940,6 +2035,68 @@ export async function buildApp() {
     }
   });
 
+  app.get("/api/partner/general/materials/:id/file", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "partner_owner",
+      "partner_member",
+      "dealer_guest",
+      "company_admin",
+      "company_manager"
+    ]);
+    if (roleCheck) return roleCheck;
+    try {
+      const user = getAuthUser(request)!;
+      const allowHidden = user.role === "company_admin" || user.role === "company_manager";
+      const file = await portalService.getDealerMaterialFile(
+        (request.params as { id: string }).id,
+        allowHidden
+      );
+      return reply
+        .header("Content-Type", file.contentType)
+        .header("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`)
+        .send(file.body);
+    } catch (error) {
+      return reply.status(404).send({
+        message: error instanceof Error ? error.message : "Файл не найден"
+      });
+    }
+  });
+
+  app.get("/api/partner/general/materials/:id/url", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "partner_owner",
+      "partner_member",
+      "dealer_guest",
+      "company_admin",
+      "company_manager"
+    ]);
+    if (roleCheck) return roleCheck;
+    try {
+      return await portalService.getDealerMaterialDownloadUrl((request.params as { id: string }).id);
+    } catch (error) {
+      return reply.status(404).send({
+        message: error instanceof Error ? error.message : "Файл не найден"
+      });
+    }
+  });
+
+  app.get("/api/partner/general/materials/:id/signed", async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const query = request.query as { exp?: string; sig?: string };
+      verifyApiSignedDownload("dealer_material", id, query.exp ?? "", query.sig ?? "");
+      const file = await portalService.getDealerMaterialFile(id);
+      return reply
+        .header("Content-Type", file.contentType)
+        .header("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`)
+        .send(file.body);
+    } catch (error) {
+      return reply.status(403).send({
+        message: error instanceof Error ? error.message : "Ссылка недействительна"
+      });
+    }
+  });
+
   app.get("/api/partner/deals", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["partner_owner", "partner_member"]);
     if (roleCheck) {
@@ -2427,17 +2584,50 @@ export async function buildApp() {
     if (roleCheck) return roleCheck;
 
     try {
-      const file = await messengerService.getAttachmentFile(
-        getAuthUser(request)!,
-        (request.params as { id: string }).id
-      );
-      return reply
-        .header("Content-Type", file.mimeType)
-        .header("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`)
-        .send(file.data);
+      const id = (request.params as { id: string }).id;
+      const download = await messengerService.getAttachmentDownloadUrl(getAuthUser(request)!, id);
+      // Короткоживущая ссылка — браузер открывает без повторного ACL-запроса через cookie
+      return reply.redirect(download.url);
     } catch (error) {
       return reply.status(404).send({
         message: error instanceof Error ? error.message : "Файл не найден"
+      });
+    }
+  });
+
+  app.get("/api/messenger/attachments/:id/url", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, [
+      "company_admin",
+      "company_manager",
+      "partner_owner",
+      "partner_member"
+    ]);
+    if (roleCheck) return roleCheck;
+    try {
+      return await messengerService.getAttachmentDownloadUrl(
+        getAuthUser(request)!,
+        (request.params as { id: string }).id
+      );
+    } catch (error) {
+      return reply.status(404).send({
+        message: error instanceof Error ? error.message : "Файл не найден"
+      });
+    }
+  });
+
+  app.get("/api/messenger/attachments/:id/signed", async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const query = request.query as { exp?: string; sig?: string };
+      verifyApiSignedDownload("messenger", id, query.exp ?? "", query.sig ?? "");
+      const file = await messengerService.getAttachmentFileBySignedId(id);
+      return reply
+        .header("Content-Type", file.contentType)
+        .header("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`)
+        .send(file.body);
+    } catch (error) {
+      return reply.status(403).send({
+        message: error instanceof Error ? error.message : "Ссылка недействительна"
       });
     }
   });

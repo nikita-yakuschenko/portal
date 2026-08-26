@@ -53,7 +53,14 @@ const configSchema = z.object({
   SMTP_SECURE: z.string().optional(),
   SMTP_USER: z.string().default(""),
   SMTP_PASS: z.string().default(""),
-  SMTP_FROM: z.string().min(3).default("AVGST <noreply@avgst.ru>")
+  SMTP_FROM: z.string().min(3).default("AVGST <noreply@avgst.ru>"),
+  // Garage / S3 (path-style). Пусто → локальный диск uploads/ (только dev)
+  S3_ENDPOINT: z.string().default(""),
+  S3_PUBLIC_ENDPOINT: z.string().default(""),
+  S3_REGION: z.string().default("garage"),
+  S3_BUCKET: z.string().default(""),
+  S3_ACCESS_KEY: z.string().default(""),
+  S3_SECRET_KEY: z.string().default("")
 });
 
 // Dokploy часто прокидывает пустые строки вместо отсутствия ключа —
@@ -135,5 +142,13 @@ export const config = {
     user: unwrapQuotes(parsedConfig.SMTP_USER),
     pass: unwrapQuotes(parsedConfig.SMTP_PASS),
     from: unwrapQuotes(parsedConfig.SMTP_FROM)
+  },
+  s3: {
+    endpoint: parsedConfig.S3_ENDPOINT.replace(/\/$/, ""),
+    publicEndpoint: parsedConfig.S3_PUBLIC_ENDPOINT.replace(/\/$/, ""),
+    region: parsedConfig.S3_REGION,
+    bucket: parsedConfig.S3_BUCKET,
+    accessKey: parsedConfig.S3_ACCESS_KEY,
+    secretKey: parsedConfig.S3_SECRET_KEY
   }
 };

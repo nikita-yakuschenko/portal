@@ -1,10 +1,9 @@
-import { mkdir, writeFile, readFile, unlink } from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { and, desc, eq, gt, isNull, lt, ne, or, sql, inArray } from "drizzle-orm";
 
 import { db } from "../../db/client.js";
+import { config } from "../../config.js";
 import {
   catalogProjects,
   messengerAttachments,
@@ -19,11 +18,17 @@ import {
   partnerSites,
   users
 } from "../../db/schema.js";
+import {
+  assertObjectExists,
+  createApiSignedDownloadPath,
+  createSignedGetUrl,
+  deleteObject,
+  openObjectStream,
+  UPLOAD_LIMITS
+} from "../../lib/object-storage.js";
 
 const NEWS_CHANNEL_TITLE = "Новости и анонсы";
-const UPLOAD_ROOT = path.resolve(process.cwd(), "uploads", "messenger");
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-const MAX_ATTACHMENTS_PER_MESSAGE = 10;
+const MAX_ATTACHMENTS_PER_MESSAGE = UPLOAD_LIMITS.messenger.maxFiles;
 const TYPING_TTL_MS = 4000;
 
 type TypingEntry = { userId: string; fullName: string; until: number };
@@ -41,7 +46,8 @@ type Actor = {
 type AttachmentInput = {
   fileName: string;
   mimeType: string;
-  dataBase64: string;
+  byteSize: number;
+  storageKey: string;
 };
 
 function isCompany(actor: Actor) {
@@ -115,8 +121,6 @@ function mapConversation(
 
 export class MessengerService {
   async ensureBootstrap() {
-    await mkdir(UPLOAD_ROOT, { recursive: true });
-
     const [channel] = await db
       .select()
       .from(messengerConversations)
@@ -728,11 +732,7 @@ export class MessengerService {
       .where(eq(messengerAttachments.messageId, messageId));
 
     for (const file of files) {
-      try {
-        await unlink(path.join(UPLOAD_ROOT, file.storageKey));
-      } catch {
-        /* файла уже нет — ок */
-      }
+      await deleteObject(file.storageKey);
     }
 
     await db.delete(messengerMessages).where(eq(messengerMessages.id, messageId));
@@ -1051,7 +1051,7 @@ export class MessengerService {
     return this.getConversation(actor, conversationId);
   }
 
-  async getAttachmentFile(actor: Actor, attachmentId: string) {
+  async getAttachmentMeta(attachmentId: string) {
     const [row] = await db
       .select({
         attachment: messengerAttachments,
@@ -1061,17 +1061,51 @@ export class MessengerService {
       .innerJoin(messengerMessages, eq(messengerAttachments.messageId, messengerMessages.id))
       .where(eq(messengerAttachments.id, attachmentId))
       .limit(1);
-
     if (!row) throw new Error("Файл не найден");
+    return row;
+  }
+
+  async assertCanReadAttachment(actor: Actor, attachmentId: string) {
+    const row = await this.getAttachmentMeta(attachmentId);
     const conversation = await this.requireConversation(row.conversationId);
     await this.assertCanAccess(actor, conversation);
+    return row.attachment;
+  }
 
-    const fullPath = path.join(UPLOAD_ROOT, row.attachment.storageKey);
-    const data = await readFile(fullPath);
+  async getAttachmentFile(actor: Actor, attachmentId: string) {
+    const attachment = await this.assertCanReadAttachment(actor, attachmentId);
+    const stream = await openObjectStream(attachment.storageKey);
+    return {
+      fileName: attachment.fileName,
+      mimeType: attachment.mimeType,
+      body: stream.body,
+      contentType: stream.contentType ?? attachment.mimeType
+    };
+  }
+
+  /** Signed URL: публичный S3 endpoint или короткоживущая ссылка на наш API. */
+  async getAttachmentDownloadUrl(actor: Actor, attachmentId: string) {
+    const attachment = await this.assertCanReadAttachment(actor, attachmentId);
+    if (config.s3.publicEndpoint) {
+      const s3Url = await createSignedGetUrl(attachment.storageKey, attachment.fileName);
+      if (s3Url) {
+        return { url: s3Url, expiresInSec: 15 * 60 };
+      }
+    }
+    return {
+      url: createApiSignedDownloadPath("messenger", attachmentId),
+      expiresInSec: 15 * 60
+    };
+  }
+
+  async getAttachmentFileBySignedId(attachmentId: string) {
+    const row = await this.getAttachmentMeta(attachmentId);
+    const stream = await openObjectStream(row.attachment.storageKey);
     return {
       fileName: row.attachment.fileName,
       mimeType: row.attachment.mimeType,
-      data
+      body: stream.body,
+      contentType: stream.contentType ?? row.attachment.mimeType
     };
   }
 
@@ -1101,32 +1135,30 @@ export class MessengerService {
   }
 
   private async saveAttachment(messageId: string, file: AttachmentInput) {
-    const raw = Buffer.from(file.dataBase64.replace(/^data:[^;]+;base64,/, ""), "base64");
-    if (raw.byteLength === 0) throw new Error("Пустой файл");
-    if (raw.byteLength > MAX_ATTACHMENT_BYTES) {
-      throw new Error("Файл больше 10 МБ");
+    if (!file.storageKey.startsWith("messenger/")) {
+      throw new Error("Неверный ключ вложения");
     }
+    await assertObjectExists(file.storageKey);
 
     const safeName = file.fileName.replace(/[^\w.\-а-яА-ЯёЁ ]+/gi, "_").slice(0, 120) || "file";
-    const storageKey = `${messageId}-${randomUUID()}-${safeName}`;
-    await mkdir(UPLOAD_ROOT, { recursive: true });
-    await writeFile(path.join(UPLOAD_ROOT, storageKey), raw);
+    const mimeType = file.mimeType || "application/octet-stream";
+    const byteSize = file.byteSize;
 
     const id = randomUUID();
     await db.insert(messengerAttachments).values({
       id,
       messageId,
       fileName: safeName,
-      mimeType: file.mimeType || "application/octet-stream",
-      byteSize: raw.byteLength,
-      storageKey
+      mimeType,
+      byteSize,
+      storageKey: file.storageKey
     });
 
     return {
       id,
       fileName: safeName,
-      mimeType: file.mimeType || "application/octet-stream",
-      byteSize: raw.byteLength
+      mimeType,
+      byteSize
     };
   }
 

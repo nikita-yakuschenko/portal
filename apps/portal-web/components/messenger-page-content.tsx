@@ -134,7 +134,8 @@ type PendingFile = {
   id: string;
   fileName: string;
   mimeType: string;
-  dataBase64: string;
+  byteSize: number;
+  file: File;
 };
 
 type TabKey = "dm" | "request" | "channel";
@@ -389,7 +390,7 @@ export function MessengerHeaderSearch({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Поиск по чатам, запросам и каналам…"
-        className="h-9 w-80 pl-8 sm:w-[28rem] md:w-[36rem] lg:w-[40rem]"
+        className="h-9 w-80 pl-8 sm:w-md md:w-xl lg:w-160"
       />
     </div>
   );
@@ -746,17 +747,12 @@ export function MessengerPageContent({
         toast.error(`«${file.name}» больше 10 МБ`);
         continue;
       }
-      const dataBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result ?? ""));
-        reader.onerror = () => reject(new Error("read failed"));
-        reader.readAsDataURL(file);
-      });
       next.push({
         id: `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         fileName: file.name,
         mimeType: file.type || "application/octet-stream",
-        dataBase64
+        byteSize: file.size,
+        file
       });
     }
     if (next.length === 0) return;
@@ -785,16 +781,30 @@ export function MessengerPageContent({
     if (!body && pendingFiles.length === 0) return;
     setSending(true);
     try {
+      const uploaded = [];
+      for (const pending of pendingFiles) {
+        const form = new FormData();
+        form.append("file", pending.file, pending.fileName);
+        const meta = await apiFetch<{
+          storageKey: string;
+          fileName: string;
+          mimeType: string;
+          byteSize: number;
+        }>(`/api/uploads?purpose=messenger`, { method: "POST", body: form });
+        uploaded.push(meta);
+      }
+
       const created = await apiFetch<ChatMessage>(
         `/api/messenger/conversations/${activeId}/messages`,
         {
           method: "POST",
           body: JSON.stringify({
             body,
-            attachments: pendingFiles.map((f) => ({
+            attachments: uploaded.map((f) => ({
               fileName: f.fileName,
               mimeType: f.mimeType,
-              dataBase64: f.dataBase64
+              byteSize: f.byteSize,
+              storageKey: f.storageKey
             }))
           })
         }
@@ -1248,7 +1258,7 @@ export function MessengerPageContent({
             ) : null}
           </div>
 
-          <div className="flex min-h-[3.75rem] items-center border-t px-3 py-2">
+          <div className="flex min-h-15 items-center border-t px-3 py-2">
             <Button
               type="button"
               variant={archiveMode ? "secondary" : "ghost"}
@@ -1548,7 +1558,7 @@ export function MessengerPageContent({
               </div>
 
               {canWrite ? (
-                <div className="flex min-h-[3.75rem] flex-col justify-center border-t px-3 py-2">
+                <div className="flex min-h-15 flex-col justify-center border-t px-3 py-2">
                   {pendingFiles.length > 0 ? (
                     <div className="mb-2 flex flex-wrap gap-2">
                       {pendingFiles.map((file) => (
@@ -1647,7 +1657,7 @@ export function MessengerPageContent({
                 </div>
               ) : active?.type === "request" && active.status === "closed" ? (
                 isCompany ? (
-                  <div className="flex min-h-[3.75rem] items-center justify-center border-t px-3 py-2">
+                  <div className="flex min-h-15 items-center justify-center border-t px-3 py-2">
                     <Button
                       type="button"
                       size="sm"
@@ -1659,7 +1669,7 @@ export function MessengerPageContent({
                     </Button>
                   </div>
                 ) : (
-                  <div className="text-muted-foreground flex min-h-[3.75rem] items-center justify-center border-t px-3 py-2 text-center text-sm">
+                  <div className="text-muted-foreground flex min-h-15 items-center justify-center border-t px-3 py-2 text-center text-sm">
                     Обращение закрыто — писать нельзя
                   </div>
                 )

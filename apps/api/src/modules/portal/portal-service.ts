@@ -12,6 +12,14 @@ import type {
 
 import { db } from "../../db/client.js";
 import {
+  assertObjectExists,
+  createApiSignedDownloadPath,
+  createSignedGetUrl,
+  deleteObject,
+  openObjectStream
+} from "../../lib/object-storage.js";
+import { config } from "../../config.js";
+import {
   auditLogs,
   catalogAssets,
   catalogProjectRooms,
@@ -2675,11 +2683,34 @@ export class PortalService {
   }
 
   async listDealerMaterials(includeHidden = false) {
-    return db
+    const rows = await db
       .select()
       .from(dealerMaterials)
       .where(includeHidden ? undefined : eq(dealerMaterials.isActive, true))
       .orderBy(dealerMaterials.sortOrder);
+
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      url: row.storageKey
+        ? `/api/partner/general/materials/${row.id}/file`
+        : row.url,
+      // Ключ storage только HQ — для toggle/edit; партнёру не отдаём
+      ...(includeHidden
+        ? {
+            storageKey: row.storageKey,
+            fileName: row.fileName,
+            mimeType: row.mimeType,
+            byteSize: row.byteSize
+          }
+        : {}),
+      hasFile: Boolean(row.storageKey),
+      category: row.category,
+      sortOrder: row.sortOrder,
+      isActive: row.isActive,
+      createdAt: row.createdAt
+    }));
   }
 
   /** Сводка для главной общего раздела: счётчики и обложки разделов */
@@ -2789,15 +2820,35 @@ export class PortalService {
     id?: string | undefined;
     title: string;
     description?: string | undefined;
-    url: string;
+    url?: string | undefined;
+    storageKey?: string | null | undefined;
+    fileName?: string | null | undefined;
+    mimeType?: string | null | undefined;
+    byteSize?: number | null | undefined;
     category?: string | undefined;
     sortOrder?: number | undefined;
     isActive?: boolean | undefined;
   }) {
+    const url = (input.url ?? "").trim();
+    const storageKey = input.storageKey?.trim() || null;
+    if (!url && !storageKey) {
+      throw new Error("Нужна ссылка или загруженный файл");
+    }
+    if (storageKey) {
+      if (!storageKey.startsWith("dealer-materials/")) {
+        throw new Error("Неверный ключ файла");
+      }
+      await assertObjectExists(storageKey);
+    }
+
     const values = {
       title: input.title.trim(),
       description: input.description?.trim() ?? "",
-      url: input.url.trim(),
+      url: storageKey ? "" : url,
+      storageKey,
+      fileName: storageKey ? (input.fileName?.trim() || "file") : null,
+      mimeType: storageKey ? (input.mimeType?.trim() || "application/octet-stream") : null,
+      byteSize: storageKey ? (input.byteSize ?? null) : null,
       category: input.category?.trim() || "other",
       sortOrder: input.sortOrder ?? 0,
       isActive: input.isActive ?? true
@@ -2808,11 +2859,15 @@ export class PortalService {
         where: eq(dealerMaterials.id, input.id)
       });
       if (!existing) throw new Error("Подборка не найдена.");
+      // Старый объект в S3 убираем, если ключ сменился
+      if (existing.storageKey && existing.storageKey !== storageKey) {
+        await deleteObject(existing.storageKey);
+      }
       await db.update(dealerMaterials).set(values).where(eq(dealerMaterials.id, input.id));
       await this.writeAuditLog(input.actorUserId, "dealer_material.updated", "dealer_material", input.id, {
         title: values.title
       });
-      return { ...existing, ...values };
+      return this.listDealerMaterials(true).then((rows) => rows.find((row) => row.id === input.id)!);
     }
 
     const row = { id: randomUUID(), ...values };
@@ -2820,7 +2875,7 @@ export class PortalService {
     await this.writeAuditLog(input.actorUserId, "dealer_material.created", "dealer_material", row.id, {
       title: values.title
     });
-    return row;
+    return this.listDealerMaterials(true).then((rows) => rows.find((r) => r.id === row.id)!);
   }
 
   async deleteDealerMaterial(actorUserId: string, id: string) {
@@ -2828,10 +2883,43 @@ export class PortalService {
       where: eq(dealerMaterials.id, id)
     });
     if (!existing) throw new Error("Подборка не найдена.");
+    if (existing.storageKey) {
+      await deleteObject(existing.storageKey);
+    }
     await db.delete(dealerMaterials).where(eq(dealerMaterials.id, id));
     await this.writeAuditLog(actorUserId, "dealer_material.deleted", "dealer_material", id, {
       title: existing.title
     });
   }
 
+  async getDealerMaterialFile(id: string, allowHidden = false) {
+    const existing = await db.query.dealerMaterials.findFirst({
+      where: eq(dealerMaterials.id, id)
+    });
+    if (!existing?.storageKey) throw new Error("Файл не найден");
+    if (!allowHidden && !existing.isActive) throw new Error("Подборка скрыта");
+    const stream = await openObjectStream(existing.storageKey);
+    return {
+      fileName: existing.fileName || "file",
+      mimeType: existing.mimeType || "application/octet-stream",
+      body: stream.body,
+      contentType: stream.contentType ?? existing.mimeType ?? "application/octet-stream"
+    };
+  }
+
+  async getDealerMaterialDownloadUrl(id: string, allowHidden = false) {
+    const existing = await db.query.dealerMaterials.findFirst({
+      where: eq(dealerMaterials.id, id)
+    });
+    if (!existing?.storageKey) throw new Error("Файл не найден");
+    if (!allowHidden && !existing.isActive) throw new Error("Подборка скрыта");
+    if (config.s3.publicEndpoint) {
+      const s3Url = await createSignedGetUrl(existing.storageKey, existing.fileName || "file");
+      if (s3Url) return { url: s3Url, expiresInSec: 15 * 60 };
+    }
+    return {
+      url: createApiSignedDownloadPath("dealer_material", id),
+      expiresInSec: 15 * 60
+    };
+  }
 }
