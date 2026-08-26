@@ -230,12 +230,17 @@ body {
   scrollbar-gutter: stable;
 }
 
-/* react-remove-scroll (Dialog/Select): не дублируем компенсацию поверх gutter */
+/* react-remove-scroll (Dialog/Select): не дублируем компенсацию поверх gutter.
+   Фон html совпадает с оверлеем — gutter не светится белым под модалкой. */
 html[data-scroll-locked],
 body[data-scroll-locked],
 html body[data-scroll-locked] {
   margin-right: 0 !important;
   padding-right: 0 !important;
+}
+
+html[data-scroll-locked] {
+  background-color: #000;
 }
 
 html::-webkit-scrollbar {

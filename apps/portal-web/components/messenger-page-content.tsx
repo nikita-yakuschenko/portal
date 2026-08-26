@@ -1902,15 +1902,16 @@ export function MessengerPageContent({
       >
         <DialogContent
           showCloseButton={false}
-          overlayClassName="bg-black/85"
-          className="border-0 bg-transparent p-0 shadow-none sm:max-w-[min(96vw,56rem)]"
+          // w-screen — перекрыть scrollbar-gutter (иначе справа белая полоска)
+          overlayClassName="left-0 w-screen bg-black/85"
+          className="fixed inset-0 top-0 left-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 items-center justify-center gap-0 overflow-hidden rounded-none border-0 bg-transparent p-0 shadow-none sm:max-w-none"
         >
           <DialogTitle className="sr-only">{lightbox?.fileName ?? "Изображение"}</DialogTitle>
           <DialogDescription className="sr-only">Просмотр вложения</DialogDescription>
           <button
             type="button"
             aria-label="Закрыть"
-            className="fixed top-4 right-4 z-60 flex size-10 items-center justify-center rounded-full bg-black/50 text-white transition hover:bg-black/70 focus-visible:outline-none"
+            className="absolute top-4 right-4 z-10 flex size-10 items-center justify-center rounded-full bg-black/50 text-white transition hover:bg-black/70 focus-visible:outline-none"
             onClick={() => setLightbox(null)}
           >
             <IconX className="size-5" />
@@ -1919,7 +1920,7 @@ export function MessengerPageContent({
             <img
               src={lightbox.src}
               alt={lightbox.fileName}
-              className="mx-auto max-h-[85vh] w-auto max-w-full rounded-lg object-contain"
+              className="max-h-[85vh] max-w-[min(96vw,56rem)] rounded-lg object-contain"
             />
           ) : null}
         </DialogContent>
