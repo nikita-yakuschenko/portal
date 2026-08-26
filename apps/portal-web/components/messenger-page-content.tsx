@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   IconArchive,
@@ -63,7 +63,8 @@ import {
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
-  MessageScrollerViewport
+  MessageScrollerViewport,
+  useMessageScroller
 } from "@/components/ui/message-scroller";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -380,6 +381,31 @@ function UnreadBadge({ count }: { count: number }) {
       {count > 99 ? "99+" : count}
     </Badge>
   );
+}
+
+/** Всегда держим низ ленты при новом сообщении (своём или чужом) и при смене диалога */
+function MessengerStickToBottom({
+  conversationId,
+  lastMessageId
+}: {
+  conversationId: string | null;
+  lastMessageId: string | null;
+}) {
+  const { scrollToEnd } = useMessageScroller();
+  const prevConvRef = useRef<string | null>(null);
+  const prevLastRef = useRef<string | null>(null);
+
+  useLayoutEffect(() => {
+    if (!conversationId || !lastMessageId) return;
+    const switched = prevConvRef.current !== conversationId;
+    const newer = prevLastRef.current !== lastMessageId;
+    prevConvRef.current = conversationId;
+    prevLastRef.current = lastMessageId;
+    if (!switched && !newer) return;
+    scrollToEnd({ behavior: switched ? "auto" : "smooth" });
+  }, [conversationId, lastMessageId, scrollToEnd]);
+
+  return null;
 }
 
 function TypingDots() {
@@ -1425,8 +1451,12 @@ export function MessengerPageContent({
                     ))}
                   </div>
                 ) : (
-                  <MessageScrollerProvider>
+                  <MessageScrollerProvider autoScroll defaultScrollPosition="end">
                     <MessageScroller className="h-full">
+                      <MessengerStickToBottom
+                        conversationId={activeId}
+                        lastMessageId={messages[messages.length - 1]?.id ?? null}
+                      />
                       <MessageScrollerViewport className="p-4">
                         <MessageScrollerContent className="gap-4">
                           {messages.map((msg, index) => {
@@ -1445,10 +1475,12 @@ export function MessengerPageContent({
                               new Date(msg.createdAt).getTime() -
                                 new Date(prev.createdAt).getTime() <
                                 GROUP_WINDOW_MS;
+                            const isLast = index === messages.length - 1;
                             return (
                               <MessageScrollerItem
                                 key={msg.id}
-                                id={msg.id}
+                                messageId={msg.id}
+                                scrollAnchor={isLast}
                                 className={cn(grouped && "-mt-3")}
                               >
                                 {showDayBadge ? (
