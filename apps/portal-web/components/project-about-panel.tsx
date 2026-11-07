@@ -1554,7 +1554,7 @@ function AssetCarousel({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={catalogImageSrc(asset.sourceUrl, asset.type === "floor_plan" ? 1200 : 1080)}
+                  src={catalogImageSrc(asset.sourceUrl, asset.type === "floor_plan" ? 1200 : 828)}
                   alt={assetLabel(asset, projectName)}
                   loading={assetIndex === 0 ? "eager" : "lazy"}
                   decoding="async"

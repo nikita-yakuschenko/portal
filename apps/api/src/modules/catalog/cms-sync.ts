@@ -174,6 +174,26 @@ function detailsOf(current: CatalogProjectDetails | null, item: CmsCatalogItem, 
   };
 }
 
+function mediaKey(url: string): string {
+  try {
+    return new URL(url).pathname.match(/\/api\/media\/(?:file|fit\/\d+)\/([^/]+)$/)?.[1] ?? url;
+  } catch {
+    return url;
+  }
+}
+
+// Уже показанный кадр не затираем полной ссылкой CMS: страница берёт адрес как есть.
+function fittedSource(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const name = parsed.pathname.match(/\/api\/media\/file\/([^/]+)$/)?.[1];
+    if (parsed.origin !== "https://cms.avgst.ru" || !name) return url;
+    return `https://b2b.avgst.ru/api/media/fit/828/${name}`;
+  } catch {
+    return url;
+  }
+}
+
 function desiredAssets(item: CmsCatalogItem, plans: CmsPlans | null): DesiredAsset[] {
   const assets: DesiredAsset[] = [];
   (item.exteriors ?? []).filter(Boolean).forEach((sourceUrl, index) => {
@@ -305,7 +325,7 @@ export async function syncCmsCatalog() {
           const storedAssets = await tx.select().from(catalogAssets).where(eq(catalogAssets.projectId, projectId));
           const usedAssets = new Set<string>();
           for (const asset of incomingAssets) {
-            const current = storedAssets.find((row) => !usedAssets.has(row.id) && row.type === asset.type && row.sourceUrl === asset.sourceUrl);
+            const current = storedAssets.find((row) => !usedAssets.has(row.id) && row.type === asset.type && mediaKey(row.sourceUrl) === mediaKey(asset.sourceUrl));
             if (current) {
               usedAssets.add(current.id);
               await tx
@@ -319,7 +339,7 @@ export async function syncCmsCatalog() {
                 })
                 .where(eq(catalogAssets.id, current.id));
             } else {
-              await tx.insert(catalogAssets).values({ id: randomUUID(), projectId, localPath: "", ...asset });
+              await tx.insert(catalogAssets).values({ id: randomUUID(), projectId, localPath: "", ...asset, sourceUrl: fittedSource(asset.sourceUrl) });
             }
           }
           for (const asset of storedAssets) {

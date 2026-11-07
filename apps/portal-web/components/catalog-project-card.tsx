@@ -94,6 +94,8 @@ function CatalogMediaPreview({
         <img
           src={catalogImageSrc(current, 828)}
           alt={alt}
+          loading="lazy"
+          decoding="async"
           className="absolute inset-0 size-full object-cover"
           draggable={false}
         />
