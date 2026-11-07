@@ -155,7 +155,7 @@ export function SocialQrCard({
 
             <p
               className="mt-6 line-clamp-1 text-center text-[32px] leading-none font-bold tracking-[0.5px] break-all uppercase"
-              style={{ fontFamily: "var(--font-qr-handle), sans-serif", color: brand.ink }}
+              style={{ fontFamily: "var(--font-geist-sans), sans-serif", color: brand.ink }}
             >
               {handle}
             </p>

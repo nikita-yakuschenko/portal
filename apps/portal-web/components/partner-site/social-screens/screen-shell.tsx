@@ -15,9 +15,9 @@ export const SCREEN_HEIGHT = 852;
  * — Inter, который создавался как его аналог и уже подключён в проекте.
  */
 export const SF_TEXT =
-  '"SF Pro Text", -apple-system, BlinkMacSystemFont, var(--font-inter), "Segoe UI", Arial, sans-serif';
+  '"SF Pro Text", -apple-system, BlinkMacSystemFont, var(--font-geist-sans), "Segoe UI", Arial, sans-serif';
 export const SF_DISPLAY =
-  '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, var(--font-inter), "Segoe UI", Arial, sans-serif';
+  '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, var(--font-geist-sans), "Segoe UI", Arial, sans-serif';
 
 /**
  * Экран рисуется в натуральных размерах телефона и масштабируется целиком.
