@@ -3,6 +3,7 @@
 import { IconChevronLeft, IconChevronRight, IconX } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
+import { catalogImageSrc } from "@/lib/catalog-image";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 export type ViewerItem = {
@@ -58,7 +59,7 @@ export function ProjectMediaViewer({
           {current ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
-              src={current.sourceUrl}
+              src={catalogImageSrc(current.sourceUrl, 1920, 75)}
               alt={current.label}
               className="max-h-full max-w-full object-contain select-none"
             />

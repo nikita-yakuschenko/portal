@@ -38,6 +38,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { catalogImageSrc } from "@/lib/catalog-image";
 import { floorPlanLabel } from "@/lib/floor-plan";
 import { cn } from "@/lib/utils";
 
@@ -1119,7 +1120,7 @@ function FloorPlanExplication({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   ref={imgRef}
-                  src={current.sourceUrl}
+                  src={catalogImageSrc(current.sourceUrl, 1200, 75)}
                   alt={assetLabel(current, projectName)}
                   loading="eager"
                   decoding="async"
@@ -1137,7 +1138,7 @@ function FloorPlanExplication({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   ref={imgRef}
-                  src={current.sourceUrl}
+                  src={catalogImageSrc(current.sourceUrl, 1200, 75)}
                   alt={assetLabel(current, projectName)}
                   loading="eager"
                   decoding="async"
@@ -1553,7 +1554,7 @@ function AssetCarousel({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={asset.sourceUrl}
+                  src={catalogImageSrc(asset.sourceUrl, asset.type === "floor_plan" ? 1200 : 1080, asset.type === "floor_plan" ? 75 : 60)}
                   alt={assetLabel(asset, projectName)}
                   loading={assetIndex === 0 ? "eager" : "lazy"}
                   decoding="async"
@@ -1618,7 +1619,7 @@ function AssetCarousel({
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={asset.sourceUrl}
+                    src={catalogImageSrc(asset.sourceUrl, 384)}
                     alt=""
                     loading="lazy"
                     decoding="async"

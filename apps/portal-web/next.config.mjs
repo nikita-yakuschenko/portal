@@ -3,6 +3,12 @@ const apiOrigin = process.env.API_BASE_URL ?? "http://localhost:4000";
 
 const nextConfig = {
   transpilePackages: ["@b2b/domain", "@b2b/site-schema"],
+  images: {
+    qualities: [60, 75],
+    remotePatterns: [
+      { protocol: "https", hostname: "cms.avgst.ru", pathname: "/api/media/file/**" }
+    ]
+  },
   eslint: {
     // ESLint в root workspace; в Docker-образе portal его нет — типы проверяет tsc в build
     ignoreDuringBuilds: true

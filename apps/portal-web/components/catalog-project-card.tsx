@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { IconCircleCheck, IconEyeOff, IconHeart } from "@tabler/icons-react";
 
+import { catalogImageSrc } from "@/lib/catalog-image";
 import { technologyBadgeCode, technologyBadgeVariant } from "@/lib/catalog-display";
 import { catalogProseDescription } from "@/lib/strip-html";
 import { cn } from "@/lib/utils";
@@ -91,7 +92,7 @@ function CatalogMediaPreview({
     >
       {current ? (
         <img
-          src={current}
+          src={catalogImageSrc(current, 828)}
           alt={alt}
           className="absolute inset-0 size-full object-cover"
           draggable={false}
