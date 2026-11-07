@@ -1,5 +1,5 @@
-// В CMS файл карточки уже WebP с качеством 80. Здесь только кадр под слот, перекодирование тоже на 80.
-const WIDTHS = [256, 384, 640, 828, 1080, 1200, 1920];
+// Кадр готовит CMS и кладёт рядом с исходником. Кабинет его только показывает.
+const WIDTHS = [384, 828, 1200, 1920];
 
 export function catalogImageSrc(src: string, width: number): string {
   if (!src) return src;
@@ -9,7 +9,11 @@ export function catalogImageSrc(src: string, width: number): string {
   } catch {
     return src;
   }
-  if (url.origin !== "https://cms.avgst.ru" || !url.pathname.startsWith("/api/media/file/")) return src;
+  if (url.origin !== "https://cms.avgst.ru") return src;
+  const file = url.pathname.match(/^\/api\/media\/file\/([^/]+)$/);
+  const fitted = url.pathname.match(/^\/api\/media\/fit\/\d+\/([^/]+)$/);
+  const name = file?.[1] ?? fitted?.[1];
+  if (!name) return src;
   const size = WIDTHS.find((value) => value >= width) ?? 1920;
-  return `/_next/image?url=${encodeURIComponent(src)}&w=${size}&q=80`;
+  return `${url.origin}/api/media/fit/${size}/${name}`;
 }
