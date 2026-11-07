@@ -138,13 +138,6 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=portal-web
           cache-to: type=gha,scope=portal-site,mode=max
-      - name: Открыть образы для скачивания сервером
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          for name in portal-api portal-web portal-site; do
-            gh api --method PUT "/users/nikita-yakuschenko/packages/container/${name}/visibility" -f visibility=public
-          done
 
   release:
     name: Выкладка кабинета
@@ -154,8 +147,20 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: none
-      packages: none
+      packages: read
     steps:
+      - name: Скачать образы в Docker сервера
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API_IMAGE: ghcr.io/nikita-yakuschenko/portal-api@${{ needs.publish.outputs.api }}
+          WEB_IMAGE: ghcr.io/nikita-yakuschenko/portal-web@${{ needs.publish.outputs.web }}
+          SITE_IMAGE: ghcr.io/nikita-yakuschenko/portal-site@${{ needs.publish.outputs.site }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u nikita-yakuschenko --password-stdin
+          docker pull "$API_IMAGE"
+          docker pull "$WEB_IMAGE"
+          docker pull "$SITE_IMAGE"
+          docker logout ghcr.io
       - name: Поднять проверенные образы через Dokploy
         env:
           API_IMAGE: ghcr.io/nikita-yakuschenko/portal-api@${{ needs.publish.outputs.api }}

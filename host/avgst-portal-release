@@ -80,7 +80,8 @@ def image_id(ref):
 
 
 def verify_image(ref, revision):
-    subprocess.run(["docker", "pull", ref], check=True, stdout=subprocess.DEVNULL)
+    # Раннер уже кладёт образ в общий Docker. Повторный pull от root нужен только если его нет.
+    subprocess.run(["docker", "pull", ref], stdout=subprocess.DEVNULL)
     details = json.loads(run("docker", "image", "inspect", ref))[0]
     labels = details.get("Config", {}).get("Labels", {}) or {}
     if labels.get("org.opencontainers.image.source") != SOURCE or labels.get("org.opencontainers.image.revision") != revision:
