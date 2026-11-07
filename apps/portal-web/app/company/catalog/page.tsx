@@ -44,11 +44,13 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
+import { catalogProjectHref } from "@/lib/catalog-path";
 import { companyCabinetLabel, companyNavigation } from "@/lib/company-nav";
 import { cn } from "@/lib/utils";
 
 type Project = {
   id: string;
+  slug: string;
   name: string;
   description: string;
   technology: "modular" | "panel_frame" | "frame";
@@ -362,7 +364,7 @@ export default function CompanyCatalogPage() {
               {filtered.map((project) => (
                 <CatalogProjectCard
                   key={project.id}
-                  href={`/company/catalog/${project.id}`}
+                  href={catalogProjectHref(project.slug)}
                   name={project.name}
                   description={project.description}
                   technology={project.technology}
@@ -395,7 +397,7 @@ export default function CompanyCatalogPage() {
                     <TableRow key={project.id}>
                       <TableCell className="font-medium">
                         <Link
-                          href={`/company/catalog/${project.id}`}
+                          href={catalogProjectHref(project.slug)}
                           className="hover:text-primary underline-offset-4 hover:underline"
                         >
                           {project.name}
@@ -418,7 +420,7 @@ export default function CompanyCatalogPage() {
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/company/catalog/${project.id}`}>Открыть</Link>
+                            <Link href={catalogProjectHref(project.slug)}>Открыть</Link>
                           </Button>
                           <Button variant="ghost" size="sm" asChild>
                             <a href={project.projectUrl} target="_blank" rel="noreferrer">

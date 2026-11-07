@@ -62,11 +62,13 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api";
+import { catalogProjectHref } from "@/lib/catalog-path";
 import { technologyBadgeCode, technologyBadgeVariant } from "@/lib/catalog-display";
 import { cn } from "@/lib/utils";
 
 type Project = {
   id: string;
+  slug: string;
   name: string;
   description: string;
   technology: "modular" | "panel_frame" | "frame";
@@ -611,7 +613,7 @@ export default function PartnerCatalogPage() {
                     >
                       {(dragHandle) => (
                         <CatalogProjectCard
-                          href={`/partner/catalog/${project.id}`}
+                          href={catalogProjectHref(project.slug)}
                           name={project.name}
                           description={project.description}
                           technology={project.technology}
@@ -630,7 +632,7 @@ export default function PartnerCatalogPage() {
                           selected={selected.has(project.id)}
                           onSelectedChange={(next) => toggleSelected(project.id, next)}
                           dragHandle={dragHandle}
-                          requestInfoHref={`/partner/catalog/${project.id}?request=1`}
+                          requestInfoHref={catalogProjectHref(project.slug, "request=1")}
                         />
                       )}
                     </SortableCard>
@@ -721,7 +723,7 @@ export default function PartnerCatalogPage() {
                             </TableCell>
                             <TableCell>
                               <Link
-                                href={`/partner/catalog/${project.id}`}
+                                href={catalogProjectHref(project.slug)}
                                 className="hover:text-primary font-medium underline-offset-4 hover:underline"
                               >
                                 {project.name}

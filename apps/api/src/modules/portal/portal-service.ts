@@ -1061,7 +1061,7 @@ export class PortalService {
 
   async getCatalogProject(projectId: string) {
     const project = await db.query.catalogProjects.findFirst({
-      where: eq(catalogProjects.id, projectId)
+      where: or(eq(catalogProjects.id, projectId), eq(catalogProjects.slug, projectId))
     });
 
     if (!project) {
@@ -1498,6 +1498,7 @@ export class PortalService {
           localPath: asset.localPath,
           type: asset.type as "exterior" | "floor_plan" | "interior" | "unknown",
           floorNumber: asset.floorNumber ?? null,
+          floorLabel: asset.floorLabel ?? null,
           variantLabel: asset.variantLabel ?? null,
           variantIndex: asset.variantIndex ?? null,
           sortOrder: asset.sortOrder,
@@ -1511,6 +1512,7 @@ export class PortalService {
           id: room.id,
           projectId: room.projectId,
           floorNumber: room.floorNumber,
+          floorLabel: room.floorLabel ?? null,
           variantLabel: room.variantLabel ?? null,
           variantIndex: room.variantIndex ?? null,
           name: room.name,

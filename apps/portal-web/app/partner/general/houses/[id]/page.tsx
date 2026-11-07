@@ -22,6 +22,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CatalogAddressRedirect } from "@/components/catalog-address-redirect";
 import { apiFetch } from "@/lib/api";
 import {
   technologyBadgeCode,
@@ -222,9 +223,8 @@ function Panel({
   );
 }
 
-export default function GeneralHouseDetailPage() {
-  const params = useParams<{ id: string }>();
-  const projectId = params.id;
+export function GeneralHouseDetail({ projectKey }: { projectKey: string }) {
+  const projectId = projectKey;
 
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -367,4 +367,9 @@ export default function GeneralHouseDetailPage() {
       ) : null}
     </PartnerShell>
   );
+}
+
+export default function GeneralHouseDetailPage() {
+  const params = useParams<{ id: string }>();
+  return <CatalogAddressRedirect projectKey={params.id} />;
 }

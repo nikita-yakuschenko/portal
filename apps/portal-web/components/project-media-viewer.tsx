@@ -61,7 +61,7 @@ export function ProjectMediaViewer({
             <img
               src={catalogImageSrc(current.sourceUrl, 1920)}
               alt={current.label}
-              className="max-h-full max-w-full object-contain select-none"
+              className="max-h-full max-w-full rounded-xl object-contain select-none"
             />
           ) : null}
 

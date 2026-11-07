@@ -56,6 +56,7 @@ type DesiredAsset = {
   sourceUrl: string;
   type: "exterior" | "floor_plan" | "interior";
   floorNumber: number | null;
+  floorLabel: string | null;
   variantLabel: string | null;
   variantIndex: number | null;
   sortOrder: number;
@@ -64,6 +65,7 @@ type DesiredAsset = {
 
 type DesiredRoom = {
   floorNumber: number;
+  floorLabel: string | null;
   variantLabel: string | null;
   variantIndex: number | null;
   name: string;
@@ -197,10 +199,10 @@ function fittedSource(url: string): string {
 function desiredAssets(item: CmsCatalogItem, plans: CmsPlans | null): DesiredAsset[] {
   const assets: DesiredAsset[] = [];
   (item.exteriors ?? []).filter(Boolean).forEach((sourceUrl, index) => {
-    assets.push({ sourceUrl, type: "exterior", floorNumber: null, variantLabel: null, variantIndex: null, sortOrder: index, isPrimary: index === 0 });
+    assets.push({ sourceUrl, type: "exterior", floorNumber: null, floorLabel: null, variantLabel: null, variantIndex: null, sortOrder: index, isPrimary: index === 0 });
   });
   (item.interiors ?? []).filter(Boolean).forEach((sourceUrl, index) => {
-    assets.push({ sourceUrl, type: "interior", floorNumber: null, variantLabel: null, variantIndex: null, sortOrder: index, isPrimary: false });
+    assets.push({ sourceUrl, type: "interior", floorNumber: null, floorLabel: null, variantLabel: null, variantIndex: null, sortOrder: index, isPrimary: false });
   });
   (plans?.variants ?? []).forEach((variant, variantIndex) => {
     const variantLabel = variant.label?.trim() || `Вариант ${variantIndex + 1}`;
@@ -210,6 +212,7 @@ function desiredAssets(item: CmsCatalogItem, plans: CmsPlans | null): DesiredAss
         sourceUrl: floor.image,
         type: "floor_plan",
         floorNumber: floorNumber(floor.label, floorIndex),
+        floorLabel: floor.label?.trim() || null,
         variantLabel,
         variantIndex,
         sortOrder: floorIndex,
@@ -230,7 +233,7 @@ function desiredRooms(plans: CmsPlans | null): DesiredRoom[] {
         const name = room.name?.trim();
         const area = roomArea(room.area);
         if (!name || area == null) return;
-        rooms.push({ floorNumber: floorNo, variantLabel, variantIndex, name, area, sortOrder });
+        rooms.push({ floorNumber: floorNo, floorLabel: floor.label?.trim() || null, variantLabel, variantIndex, name, area, sortOrder });
       });
     });
   });
@@ -332,6 +335,7 @@ export async function syncCmsCatalog() {
                 .update(catalogAssets)
                 .set({
                   floorNumber: asset.floorNumber,
+                  floorLabel: asset.floorLabel,
                   variantLabel: asset.variantLabel,
                   variantIndex: asset.variantIndex,
                   sortOrder: asset.sortOrder,
@@ -365,7 +369,7 @@ export async function syncCmsCatalog() {
               usedRooms.add(current.id);
               await tx
                 .update(catalogProjectRooms)
-                .set({ area: room.area, sortOrder: room.sortOrder, variantIndex: room.variantIndex, variantLabel: room.variantLabel })
+                .set({ area: room.area, sortOrder: room.sortOrder, variantIndex: room.variantIndex, variantLabel: room.variantLabel, floorLabel: room.floorLabel })
                 .where(eq(catalogProjectRooms.id, current.id));
             } else {
               await tx.insert(catalogProjectRooms).values({ id: randomUUID(), projectId, polygon: [], ...room });

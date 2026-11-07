@@ -19,6 +19,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiFetch } from "@/lib/api";
+import { catalogProjectHref } from "@/lib/catalog-path";
 import { formatPrice, pluralize, type GeneralHouse } from "@/lib/general-section";
 
 type Technology = "panel_frame" | "modular" | "frame";
@@ -46,7 +47,7 @@ function parseTechnology(value: string | null): Technology {
 function HouseCard({ house }: { house: GeneralHouse }) {
   return (
     <Link
-      href={`/partner/general/houses/${house.id}`}
+      href={catalogProjectHref(house.slug)}
       className="bg-card group block overflow-hidden rounded-xl border transition-colors duration-150 hover:border-ring/50 focus-visible:border-ring focus-visible:ring-ring/50 outline-none focus-visible:ring-[3px] motion-safe:active:scale-[0.995] motion-safe:transition-transform"
     >
       <div className="bg-muted relative aspect-video w-full overflow-hidden">

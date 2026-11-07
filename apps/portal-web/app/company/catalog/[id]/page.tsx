@@ -30,6 +30,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CatalogAddressRedirect } from "@/components/catalog-address-redirect";
 import { apiFetch } from "@/lib/api";
 import { companyCabinetLabel, companyNavigation } from "@/lib/company-nav";
 
@@ -117,9 +118,8 @@ function Panel({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function CompanyCatalogProjectPage() {
-  const params = useParams<{ id: string }>();
-  const id = params.id;
+export function CompanyCatalogProject({ projectKey }: { projectKey: string }) {
+  const id = projectKey;
 
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState("");
@@ -476,4 +476,9 @@ export default function CompanyCatalogProjectPage() {
       ) : null}
     </DashboardShell>
   );
+}
+
+export default function CompanyCatalogProjectPage() {
+  const params = useParams<{ id: string }>();
+  return <CatalogAddressRedirect projectKey={params.id} />;
 }

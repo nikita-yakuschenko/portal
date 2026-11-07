@@ -188,6 +188,7 @@ export const catalogAssets = pgTable("catalog_assets", {
   type: text("type").notNull(),
   // Для type=floor_plan при floors>1: номер этажа планировки
   floorNumber: integer("floor_number"),
+  floorLabel: text("floor_label"),
   variantLabel: text("variant_label"),
   variantIndex: integer("variant_index"),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -204,6 +205,7 @@ export const catalogProjectRooms = pgTable(
       .references(() => catalogProjects.id, { onDelete: "cascade" }),
     // Для одноэтажных домов всегда 1 — см. FloorPlanExplication
     floorNumber: integer("floor_number").notNull().default(1),
+    floorLabel: text("floor_label"),
     variantLabel: text("variant_label"),
     variantIndex: integer("variant_index"),
     name: text("name").notNull(),

@@ -34,6 +34,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { CatalogAddressRedirect } from "@/components/catalog-address-redirect";
 import { apiFetch } from "@/lib/api";
 import {
   ProjectDocsPanel,
@@ -169,10 +170,9 @@ function Panel({
   );
 }
 
-export default function PartnerCatalogProjectPage() {
-  const params = useParams<{ id: string }>();
+export function PartnerCatalogProject({ projectKey }: { projectKey: string }) {
   const searchParams = useSearchParams();
-  const projectId = params.id;
+  const projectId = projectKey;
 
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState("");
@@ -594,4 +594,9 @@ export default function PartnerCatalogProjectPage() {
       </Dialog>
     </PartnerShell>
   );
+}
+
+export default function PartnerCatalogProjectPage() {
+  const params = useParams<{ id: string }>();
+  return <CatalogAddressRedirect projectKey={params.id} />;
 }

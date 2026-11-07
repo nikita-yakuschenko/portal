@@ -44,7 +44,9 @@ import { cn } from "@/lib/utils";
 
 /** Одинаковые колонки в просмотре и редакторе: grip | название | действия | площадь */
 const ROOM_ROW_GRID =
-  "grid h-9 grid-cols-[1.5rem_minmax(0,1fr)_3.75rem_5.5rem] items-center gap-2 px-2 text-sm";
+  "grid h-9 grid-cols-[1.5rem_minmax(0,1fr)_3.75rem_5.5rem] items-center gap-2 pl-2 pr-3.5 text-sm";
+const ROOM_VIEW_GRID =
+  "grid h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 pl-2 pr-3.5 text-sm";
 
 export const ASSET_TYPE_OPTIONS = [
   { value: "exterior", label: "Экстерьер" },
@@ -64,6 +66,7 @@ export type AboutAsset = {
   sourceUrl: string;
   type: string;
   floorNumber?: number | null;
+  floorLabel?: string | null;
   variantLabel?: string | null;
   variantIndex?: number | null;
   sortOrder: number;
@@ -88,6 +91,7 @@ export type ProjectRoom = {
   id: string;
   projectId: string;
   floorNumber: number;
+  floorLabel?: string | null;
   variantLabel?: string | null;
   variantIndex?: number | null;
   name: string;
@@ -517,7 +521,7 @@ function ReorderRoomRow({
       >
         <IconGripVertical className="size-4" />
       </button>
-      <div className="min-w-0 whitespace-normal">
+      <div className="min-w-0 whitespace-nowrap">
         <Input
           key={`${room.id}-name`}
           defaultValue={room.name}
@@ -724,8 +728,7 @@ function FloorPlanExplication({
   // Таб-этажи ведём от floors проекта, а не от тегов ассетов — реальные фото планировок
   // часто не размечены по этажу, и без этого второй этаж пропадал
   const floorCount = Math.max(floors ?? 1, 1);
-  const floorNumbers = floorCount > 1 ? Array.from({ length: floorCount }, (_, i) => i + 1) : [1];
-  const [selectedFloor, setSelectedFloor] = useState(floorNumbers[0] ?? 1);
+  const [selectedFloor, setSelectedFloor] = useState(1);
   const [floorAssetIndex, setFloorAssetIndex] = useState(0);
   const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
   const [drawingRoomId, setDrawingRoomId] = useState<string | null>(null);
@@ -829,12 +832,33 @@ function FloorPlanExplication({
     planVariants.length > 1
       ? rooms.filter((room) => planVariantKey(room) === selectedVariant)
       : rooms;
-  const taggedForFloor =
-    floorCount === 1
-      ? planAssets
-      : planAssets.filter((asset) => asset.floorNumber === selectedFloor);
-  const untagged =
-    floorCount === 1 ? [] : planAssets.filter((asset) => asset.floorNumber == null);
+  const floorTabs = (() => {
+    const labels = new Map<number, string>();
+    const remember = (floorNumber: number | null | undefined, label?: string | null) => {
+      if (floorNumber == null || floorNumber < 1) return;
+      const title = label?.trim();
+      const current = labels.get(floorNumber);
+      if (!current || (title && current === `${floorNumber}-й этаж`)) {
+        labels.set(floorNumber, title || `${floorNumber}-й этаж`);
+      }
+    };
+    for (const asset of planAssets) remember(asset.floorNumber, asset.floorLabel);
+    for (const room of listedRooms) remember(room.floorNumber, room.floorLabel);
+    if (floorCount > 1) {
+      for (let number = 1; number <= floorCount; number += 1) {
+        if (!labels.has(number)) labels.set(number, `${number}-й этаж`);
+      }
+    }
+    if (labels.size === 0) labels.set(1, "1-й этаж");
+    return [...labels.entries()]
+      .sort((left, right) => left[0] - right[0])
+      .map(([number, label]) => ({ number, label }));
+  })();
+  const severalFloors = floorTabs.length > 1;
+  const taggedForFloor = severalFloors
+    ? planAssets.filter((asset) => asset.floorNumber === selectedFloor)
+    : planAssets;
+  const untagged = severalFloors ? planAssets.filter((asset) => asset.floorNumber == null) : [];
   // В редактировании неразмеченные фото — кандидаты на любой этаж, их нужно видеть и листать
   // независимо от того, есть ли уже тегированное фото. В обычном просмотре показываем только тегированное
   const floorAssets = onPatch ? [...taggedForFloor, ...untagged] : taggedForFloor;
@@ -952,7 +976,7 @@ function FloorPlanExplication({
 
   const assetIndex = current ? assets.indexOf(current) : -1;
   const busy = current ? busyId === current.id : false;
-  const floorOptions = Array.from({ length: Math.max(floors ?? 0, 0) }, (_, i) => i + 1);
+  const floorOptions = floorTabs.map((floor) => floor.number);
   const floorRooms = listedRooms
     .filter((room) => room.floorNumber === selectedFloor)
     .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -1150,7 +1174,7 @@ function FloorPlanExplication({
 
             {containedRect ? (
               <svg
-                className="absolute"
+                className={cn("absolute", !drawingRoomId && "pointer-events-none")}
                 style={{
                   left: containedRect.left,
                   top: containedRect.top,
@@ -1189,9 +1213,10 @@ function FloorPlanExplication({
                         points={polygonToSvgPoints(room.polygon)}
                         fill={active ? "rgba(37,99,235,0.28)" : "rgba(0,0,0,0)"}
                         stroke="none"
-                        className="pointer-events-auto cursor-pointer transition-colors duration-150"
+                        className="pointer-events-auto cursor-zoom-in transition-colors duration-150"
                         onMouseEnter={() => setHoveredRoomId(room.id)}
                         onMouseLeave={() => setHoveredRoomId((prev) => (prev === room.id ? null : prev))}
+                        onClick={() => onOpen(assetIndex)}
                       />
                     );
                   })}
@@ -1308,25 +1333,22 @@ function FloorPlanExplication({
           </>
         ) : (
           <div className="text-muted-foreground flex aspect-video w-full items-center justify-center text-center text-sm">
-            Схема {selectedFloor}-го этажа ещё не загружена
+            {floorTabs.find((floor) => floor.number === selectedFloor)?.label ?? "Схема"} ещё не загружена
           </div>
         )}
       </div>
 
-      {/* Высоту ряда задаёт медиа 16:9; колонка списка ловит её через stretch,
-          а absolute-слой не даёт длинному списку раздувать ряд обратно */}
-      <div className="min-w-0 gallery-split:relative gallery-split:min-w-0 gallery-split:flex-1">
-      <div className="flex min-w-0 flex-col gap-2 gallery-split:absolute gallery-split:inset-0">
-        {floorNumbers.length > 1 ? (
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        {severalFloors ? (
           <div className="flex shrink-0 flex-wrap items-center justify-start gap-2">
             <Tabs
               value={String(selectedFloor)}
               onValueChange={(value) => setSelectedFloor(Number(value))}
             >
               <TabsList className="h-8">
-                {floorNumbers.map((floor) => (
-                  <TabsTrigger key={floor} value={String(floor)} className="text-xs">
-                    {floor}-й этаж
+                {floorTabs.map((floor) => (
+                  <TabsTrigger key={floor.number} value={String(floor.number)} className="text-xs">
+                    {floor.label}
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -1334,7 +1356,7 @@ function FloorPlanExplication({
           </div>
         ) : null}
 
-        <div className="min-h-0 overflow-y-auto rounded-xl border gallery-split:flex-1">
+        <div className="rounded-xl border">
           {canEditRooms ? (
             <>
               <div
@@ -1391,10 +1413,8 @@ function FloorPlanExplication({
             </>
           ) : (
             <>
-              <div className={cn(ROOM_ROW_GRID, "text-foreground border-b font-medium")}>
-                <span aria-hidden />
+              <div className={cn(ROOM_VIEW_GRID, "text-foreground border-b font-medium")}>
                 <span>Помещение</span>
-                <span aria-hidden />
                 <span className="text-right">Площадь</span>
               </div>
               {floorRooms.length === 0 ? (
@@ -1408,7 +1428,7 @@ function FloorPlanExplication({
                     <div
                       key={room.id}
                       className={cn(
-                        ROOM_ROW_GRID,
+                        ROOM_VIEW_GRID,
                         "border-b last:border-b-0",
                         isHovered && "bg-muted/60"
                       )}
@@ -1417,10 +1437,8 @@ function FloorPlanExplication({
                         setHoveredRoomId((prev) => (prev === room.id ? null : prev))
                       }
                     >
-                      <span aria-hidden />
-                      <div className="min-w-0 whitespace-normal">{room.name}</div>
-                      <span aria-hidden />
-                      <div className="text-right tabular-nums">{formatArea(room.area)}</div>
+                      <div className="whitespace-nowrap">{room.name}</div>
+                      <div className="text-right whitespace-nowrap tabular-nums">{formatArea(room.area)}</div>
                     </div>
                   );
                 })
@@ -1441,7 +1459,6 @@ function FloorPlanExplication({
             Добавить помещение
           </Button>
         ) : null}
-      </div>
       </div>
     </div>
     </div>
