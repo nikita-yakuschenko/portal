@@ -1,0 +1,66 @@
+name: Проверка портала
+run-name: "Портал №${{ github.run_number }}"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portal-main
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Проверка кода и миграций
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: portal
+          POSTGRES_PASSWORD: portal
+          POSTGRES_DB: portal
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U portal -d portal"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Получить исходный код
+        uses: actions/checkout@v4
+      - name: Подготовить Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Установить зависимости
+        run: npm ci --no-audit --no-fund
+      - name: Проверить типы
+        run: npm run typecheck
+      - name: Запустить тесты
+        run: npm test
+      - name: Применить миграции к пустой базе
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgresql://portal:portal@localhost:5432/portal
+        run: npx tsx src/scripts/migrate.ts
+
+  release:
+    name: Выкладка кабинета
+    needs: verify
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'nikita-yakuschenko/portal' && vars.PORTAL_RELEASE_ENABLED == 'true'
+    runs-on: [self-hosted, Linux, avgst-portal]
+    timeout-minutes: 30
+    permissions:
+      contents: none
+    steps:
+      - name: Выложить проверенный коммит
+        run: sudo -- /usr/local/sbin/avgst-portal-release "${{ github.sha }}"

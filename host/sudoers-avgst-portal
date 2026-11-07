@@ -1,0 +1,4 @@
+# /etc/sudoers.d/avgst-portal, права 440, владелец root.
+Defaults:avgst-runner !setenv
+Defaults:avgst-runner env_reset
+avgst-runner ALL=(root) NOPASSWD: /usr/local/sbin/avgst-portal-release

@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Выкладка кабинета. Раннер передаёт только SHA, ключ Dokploy остаётся на сервере."""
+import json
+import os
+from pathlib import Path
+import re
+import sys
+import time
+import urllib.request
+
+
+def main():
+    if os.geteuid() != 0 or len(sys.argv) != 2:
+        raise RuntimeError("Нужны root и один аргумент")
+    revision = sys.argv[1]
+    if not re.fullmatch(r"[a-f0-9]{40}", revision):
+        raise RuntimeError("Неверный SHA")
+    config = {}
+    for line in Path("/etc/avgst/portal-release.env").read_text().splitlines():
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        config[key] = value
+    compose_id = config["COMPOSE_ID"]
+    title = revision[:12]
+
+    def api(method, path, body=None):
+        request = urllib.request.Request(
+            config["DOKPLOY_URL"].rstrip("/") + path,
+            data=None if body is None else json.dumps(body).encode(),
+            headers={"Content-Type": "application/json", "x-api-key": config["DOKPLOY_API_KEY"]},
+            method=method,
+        )
+        with urllib.request.urlopen(request, timeout=60) as response:
+            raw = response.read()
+            return json.loads(raw) if raw.strip() else None
+
+    api("POST", "/api/compose.deploy", {"composeId": compose_id, "title": title})
+    deadline = time.time() + 25 * 60
+    while time.time() < deadline:
+        data = api("GET", "/api/compose.one?composeId=" + compose_id)
+        matches = [item for item in (data.get("deployments") or []) if item.get("title") == title]
+        current = max(matches, key=lambda item: item.get("createdAt") or "", default=None)
+        if current and current.get("status") == "done":
+            print("Портал выложен " + revision)
+            return
+        if current and current.get("status") == "error":
+            raise RuntimeError("Выкладка завершилась с ошибкой")
+        time.sleep(15)
+    raise RuntimeError("Выкладка не завершилась вовремя")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as error:
+        print("Выкладка портала остановлена: " + type(error).__name__, file=sys.stderr)
+        sys.exit(1)
