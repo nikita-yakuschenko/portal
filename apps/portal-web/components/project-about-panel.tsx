@@ -1120,7 +1120,7 @@ function FloorPlanExplication({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   ref={imgRef}
-                  src={catalogImageSrc(current.sourceUrl, 1200, 75)}
+                  src={catalogImageSrc(current.sourceUrl, 1200)}
                   alt={assetLabel(current, projectName)}
                   loading="eager"
                   decoding="async"
@@ -1138,7 +1138,7 @@ function FloorPlanExplication({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   ref={imgRef}
-                  src={catalogImageSrc(current.sourceUrl, 1200, 75)}
+                  src={catalogImageSrc(current.sourceUrl, 1200)}
                   alt={assetLabel(current, projectName)}
                   loading="eager"
                   decoding="async"
@@ -1554,7 +1554,7 @@ function AssetCarousel({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={catalogImageSrc(asset.sourceUrl, asset.type === "floor_plan" ? 1200 : 1080, asset.type === "floor_plan" ? 75 : 60)}
+                  src={catalogImageSrc(asset.sourceUrl, asset.type === "floor_plan" ? 1200 : 1080)}
                   alt={assetLabel(asset, projectName)}
                   loading={assetIndex === 0 ? "eager" : "lazy"}
                   decoding="async"
