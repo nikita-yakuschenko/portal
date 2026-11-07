@@ -3,9 +3,9 @@
 import { useParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
-import { CompanyCatalogProject } from "@/app/company/catalog/[id]/page";
-import { PartnerCatalogProject } from "@/app/partner/catalog/[id]/page";
-import { GeneralHouseDetail } from "@/app/partner/general/houses/[id]/page";
+import { CompanyCatalogProject } from "@/components/company-catalog-project";
+import { GeneralHouseDetail } from "@/components/general-house-detail";
+import { PartnerCatalogProject } from "@/components/partner-catalog-project";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
 
