@@ -1,48 +1,118 @@
 #!/usr/bin/env python3
-"""Выкладка кабинета. Раннер передаёт только SHA, ключ Dokploy остаётся на сервере."""
+"""Выкладка портала. Раннер передаёт digest-ы и SHA, ключ Dokploy остаётся на сервере."""
 import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 import time
 import urllib.request
 
 
-def main():
-    if os.geteuid() != 0 or len(sys.argv) != 2:
-        raise RuntimeError("Нужны root и один аргумент")
-    revision = sys.argv[1]
-    if not re.fullmatch(r"[a-f0-9]{40}", revision):
-        raise RuntimeError("Неверный SHA")
+SOURCE = "https://github.com/nikita-yakuschenko/portal"
+PLACEHOLDERS = {
+    "api": "ghcr.io/nikita-yakuschenko/portal-api:main",
+    "portal": "ghcr.io/nikita-yakuschenko/portal-web:main",
+    "site-runtime": "ghcr.io/nikita-yakuschenko/portal-site:main",
+}
+CONTAINERS = {
+    "api": "b2b-yakc4p-api-1",
+    "portal": "b2b-yakc4p-portal-1",
+    "site-runtime": "b2b-yakc4p-site-runtime-1",
+}
+
+
+def run(*args):
+    return subprocess.check_output(args, text=True).strip()
+
+
+def read_config():
     config = {}
     for line in Path("/etc/avgst/portal-release.env").read_text().splitlines():
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
         config[key] = value
-    compose_id = config["COMPOSE_ID"]
-    title = revision[:12]
+    return config
 
-    def api(method, path, body=None):
-        request = urllib.request.Request(
-            config["DOKPLOY_URL"].rstrip("/") + path,
-            data=None if body is None else json.dumps(body).encode(),
-            headers={"Content-Type": "application/json", "x-api-key": config["DOKPLOY_API_KEY"]},
-            method=method,
-        )
-        with urllib.request.urlopen(request, timeout=60) as response:
-            raw = response.read()
-            return json.loads(raw) if raw.strip() else None
 
-    api("POST", "/api/compose.deploy", {"composeId": compose_id, "title": title})
+def api(config, method, path, body=None):
+    request = urllib.request.Request(
+        config["DOKPLOY_URL"].rstrip("/") + path,
+        data=None if body is None else json.dumps(body).encode(),
+        headers={"Content-Type": "application/json", "x-api-key": config["DOKPLOY_API_KEY"]},
+        method=method,
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        raw = response.read()
+        return json.loads(raw) if raw.strip() else None
+
+
+def fetch_compose(revision):
+    url = f"https://raw.githubusercontent.com/nikita-yakuschenko/portal/{revision}/docker-compose.dokploy.yml"
+    last_error = None
+    for attempt in range(5):
+        try:
+            with urllib.request.urlopen(url, timeout=30) as response:
+                text = response.read().decode()
+            if all(image in text for image in PLACEHOLDERS.values()):
+                return text
+            raise RuntimeError("В compose нет ожидаемых образов")
+        except Exception as error:
+            last_error = error
+            time.sleep(attempt + 1)
+    raise RuntimeError("Compose коммита не скачался") from last_error
+
+
+def pin(template, images):
+    text = template
+    for service, placeholder in PLACEHOLDERS.items():
+        needle = f"image: {placeholder}"
+        if text.count(needle) != 1:
+            raise RuntimeError("Строка образа в compose встречается не один раз")
+        text = text.replace(needle, f"image: {images[service]}", 1)
+    return text
+
+
+def image_id(ref):
+    return run("docker", "image", "inspect", ref, "--format", "{{.Id}}")
+
+
+def verify_image(ref, revision):
+    subprocess.run(["docker", "pull", ref], check=True, stdout=subprocess.DEVNULL)
+    details = json.loads(run("docker", "image", "inspect", ref))[0]
+    labels = details.get("Config", {}).get("Labels", {}) or {}
+    if labels.get("org.opencontainers.image.source") != SOURCE or labels.get("org.opencontainers.image.revision") != revision:
+        raise RuntimeError("Образ не совпал с репозиторием или коммитом")
+    return details["Id"]
+
+
+def healthy(expected):
+    for service, container in CONTAINERS.items():
+        state = run("docker", "inspect", container, "--format", "{{.State.Health.Status}} {{.Image}}")
+        status, current = state.split()
+        if status != "healthy" or current != expected[service]:
+            return False
+    return True
+
+
+def deploy(config, compose_file, title):
+    api(config, "POST", "/api/compose.update", {
+        "composeId": config["COMPOSE_ID"],
+        "sourceType": "raw",
+        "composeFile": compose_file,
+    })
+    api(config, "POST", "/api/compose.deploy", {"composeId": config["COMPOSE_ID"], "title": title})
+
+
+def wait_deploy(config, title):
     deadline = time.time() + 25 * 60
     while time.time() < deadline:
-        data = api("GET", "/api/compose.one?composeId=" + compose_id)
+        data = api(config, "GET", "/api/compose.one?composeId=" + config["COMPOSE_ID"])
         matches = [item for item in (data.get("deployments") or []) if item.get("title") == title]
         current = max(matches, key=lambda item: item.get("createdAt") or "", default=None)
         if current and current.get("status") == "done":
-            print("Портал выложен " + revision)
             return
         if current and current.get("status") == "error":
             raise RuntimeError("Выкладка завершилась с ошибкой")
@@ -50,9 +120,41 @@ def main():
     raise RuntimeError("Выкладка не завершилась вовремя")
 
 
+def main():
+    if os.geteuid() != 0 or len(sys.argv) != 5:
+        raise RuntimeError("Нужны root и четыре аргумента")
+    api_image, web_image, site_image, revision = sys.argv[1:]
+    images = {"api": api_image, "portal": web_image, "site-runtime": site_image}
+    digest = r"ghcr\.io/nikita-yakuschenko/portal-(?:api|web|site)@sha256:[a-f0-9]{64}"
+    if any(re.fullmatch(digest, ref) is None for ref in images.values()) or not re.fullmatch(r"[a-f0-9]{40}", revision):
+        raise RuntimeError("Неверный образ или SHA")
+    if len(set(images.values())) != 3:
+        raise RuntimeError("Образы должны быть разными")
+    config = read_config()
+    previous = {}
+    for service, container in CONTAINERS.items():
+        previous[service] = run("docker", "inspect", container, "--format", "{{.Image}}")
+    expected = {service: verify_image(ref, revision) for service, ref in images.items()}
+    template = fetch_compose(revision)
+    try:
+        deploy(config, pin(template, images), "Портал " + revision[:12])
+        wait_deploy(config, "Портал " + revision[:12])
+        deadline = time.time() + 180
+        while time.time() < deadline:
+            if healthy(expected):
+                print("Портал выложен " + revision)
+                return
+            time.sleep(5)
+        raise RuntimeError("Контейнеры не стали здоровыми")
+    except Exception:
+        deploy(config, pin(template, previous), "Откат портала " + revision[:12])
+        wait_deploy(config, "Откат портала " + revision[:12])
+        raise
+
+
 if __name__ == "__main__":
     try:
         main()
     except Exception as error:
         print("Выкладка портала остановлена: " + type(error).__name__, file=sys.stderr)
-        sys.exit(1)
+        raise SystemExit(1)

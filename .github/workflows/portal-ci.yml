@@ -1,17 +1,18 @@
-name: Проверка портала
+name: Выпуск портала
 run-name: "Портал №${{ github.run_number }}"
 
 on:
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+  packages: write
 
+# Следующий пуш ждёт. Отмена оставила бы выкладку на полпути.
 concurrency:
-  group: portal-main
+  group: portal-release-main
   cancel-in-progress: false
 
 jobs:
@@ -53,14 +54,111 @@ jobs:
           DATABASE_URL: postgresql://portal:portal@localhost:5432/portal
         run: npx tsx src/scripts/migrate.ts
 
+  publish:
+    name: Сборка и публикация образов
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      api: ${{ steps.api.outputs.digest }}
+      web: ${{ steps.web.outputs.digest }}
+      site: ${{ steps.site.outputs.digest }}
+    steps:
+      - name: Получить исходный код
+        uses: actions/checkout@v4
+      - name: Подготовить сборщик Docker
+        uses: docker/setup-buildx-action@v3
+      - name: Подключиться к хранилищу образов GitHub
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Собрать и загрузить API
+        id: api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/api/Dockerfile
+          target: runner
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          tags: |
+            ghcr.io/nikita-yakuschenko/portal-api:sha-${{ github.sha }}
+            ghcr.io/nikita-yakuschenko/portal-api:main
+          labels: |
+            org.opencontainers.image.source=https://github.com/nikita-yakuschenko/portal
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=portal-api
+          cache-to: type=gha,scope=portal-api,mode=max
+      - name: Собрать и загрузить кабинет
+        id: web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/portal-web/Dockerfile
+          target: runner
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          build-args: |
+            API_BASE_URL=http://api:4000
+            NEXT_PUBLIC_API_URL=https://b2b.avgst.ru
+          tags: |
+            ghcr.io/nikita-yakuschenko/portal-web:sha-${{ github.sha }}
+            ghcr.io/nikita-yakuschenko/portal-web:main
+          labels: |
+            org.opencontainers.image.source=https://github.com/nikita-yakuschenko/portal
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=portal-web
+          cache-to: type=gha,scope=portal-web,mode=max
+      - name: Собрать и загрузить публичный сайт партнёра
+        id: site
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/portal-web/Dockerfile
+          target: runner
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          build-args: |
+            API_BASE_URL=http://api:4000
+            NEXT_PUBLIC_API_URL=https://b2b.avgst.ru
+            NEXT_PUBLIC_APP_ROLE=site
+          tags: |
+            ghcr.io/nikita-yakuschenko/portal-site:sha-${{ github.sha }}
+            ghcr.io/nikita-yakuschenko/portal-site:main
+          labels: |
+            org.opencontainers.image.source=https://github.com/nikita-yakuschenko/portal
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=portal-web
+          cache-to: type=gha,scope=portal-site,mode=max
+      - name: Открыть образы для скачивания сервером
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for name in portal-api portal-web portal-site; do
+            gh api --method PUT "/users/nikita-yakuschenko/packages/container/${name}/visibility" -f visibility=public
+          done
+
   release:
     name: Выкладка кабинета
-    needs: verify
+    needs: publish
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'nikita-yakuschenko/portal' && vars.PORTAL_RELEASE_ENABLED == 'true'
     runs-on: [self-hosted, Linux, avgst-portal]
     timeout-minutes: 30
     permissions:
       contents: none
+      packages: none
     steps:
-      - name: Выложить проверенный коммит
-        run: sudo -- /usr/local/sbin/avgst-portal-release "${{ github.sha }}"
+      - name: Поднять проверенные образы через Dokploy
+        env:
+          API_IMAGE: ghcr.io/nikita-yakuschenko/portal-api@${{ needs.publish.outputs.api }}
+          WEB_IMAGE: ghcr.io/nikita-yakuschenko/portal-web@${{ needs.publish.outputs.web }}
+          SITE_IMAGE: ghcr.io/nikita-yakuschenko/portal-site@${{ needs.publish.outputs.site }}
+        run: sudo -- /usr/local/sbin/avgst-portal-release "$API_IMAGE" "$WEB_IMAGE" "$SITE_IMAGE" "${{ github.sha }}"

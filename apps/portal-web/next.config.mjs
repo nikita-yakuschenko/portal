@@ -1,7 +1,13 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 /** @type {import('next').NextConfig} */
 const apiOrigin = process.env.API_BASE_URL ?? "http://localhost:4000";
+const appDir = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig = {
+  output: "standalone",
+  outputFileTracingRoot: path.join(appDir, "../.."),
   transpilePackages: ["@b2b/domain", "@b2b/site-schema"],
   images: {
     qualities: [80],

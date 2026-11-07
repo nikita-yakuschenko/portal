@@ -7,12 +7,14 @@
 #
 # Чтобы хост БД резолвился, все сервисы должны быть в dokploy-network
 # (там же живут Databases Dokploy).
+#
+# Образы собирает GitHub Actions и кладёт в ghcr.io.
+# Скрипт выпуска подставляет digest вместо тега :main.
+# Dokploy этот файл только скачивает и поднимает, без сборки на сервере.
 
 services:
   api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    image: ghcr.io/nikita-yakuschenko/portal-api:main
     restart: unless-stopped
     networks:
       - default
@@ -68,13 +70,7 @@ services:
 
   # Имя сервиса = то, что указано в Dokploy Domains (сейчас: portal)
   portal:
-    build:
-      context: .
-      dockerfile: apps/portal-web/Dockerfile
-      args:
-        # Rewrites в next.config запекаются на билде — не localhost
-        API_BASE_URL: ${API_BASE_URL:-http://api:4000}
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://b2b.avgst.ru}
+    image: ghcr.io/nikita-yakuschenko/portal-web:main
     restart: unless-stopped
     depends_on:
       - api
@@ -89,12 +85,7 @@ services:
       - "3410"
 
   site-runtime:
-    build:
-      context: .
-      dockerfile: apps/site-runtime/Dockerfile
-      args:
-        API_BASE_URL: ${API_BASE_URL:-http://api:4000}
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://b2b.avgst.ru}
+    image: ghcr.io/nikita-yakuschenko/portal-site:main
     restart: unless-stopped
     depends_on:
       - api
