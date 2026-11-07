@@ -15,7 +15,7 @@ export const PREVIEW_BASE = isPublicSiteRuntime ? "" : "/partner/site/preview";
 export const previewPaths = {
   home: PREVIEW_BASE || "/",
   catalog: `${PREVIEW_BASE}/catalog`,
-  catalogByTechnology: (technology: "modular" | "panel_frame") =>
+  catalogByTechnology: (technology: "modular" | "panel_frame" | "frame") =>
     `${PREVIEW_BASE}/catalog?technology=${technology}`,
   project: (slug: string) => `${PREVIEW_BASE}/catalog/${slug}`,
   about: `${PREVIEW_BASE}/about`,
@@ -40,7 +40,7 @@ export type StorefrontProject = {
   slug?: string;
   name: string;
   description?: string | null;
-  technology: "modular" | "panel_frame";
+  technology: "modular" | "panel_frame" | "frame";
   area: number | null;
   floors: number | null;
   bedrooms: number | null;

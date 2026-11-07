@@ -30,14 +30,6 @@ services:
       PARTNER_FULL_NAME: ${PARTNER_FULL_NAME:-Демо Партнёр}
       PARTNER_COMPANY_NAME: ${PARTNER_COMPANY_NAME:-Демо Дилер}
       PARTNER_REGION: ${PARTNER_REGION:-Нижний Новгород}
-      TILDA_PUBLIC_KEY: ${TILDA_PUBLIC_KEY:-}
-      TILDA_SECRET_KEY: ${TILDA_SECRET_KEY:-}
-      TILDA_API_BASE: ${TILDA_API_BASE:-https://store.tildaapi.com/api/getproductslist/}
-      TILDA_MODULAR_STOREPARTUID: ${TILDA_MODULAR_STOREPARTUID:-}
-      TILDA_MODULAR_RECID: ${TILDA_MODULAR_RECID:-}
-      TILDA_PANEL_STOREPARTUID: ${TILDA_PANEL_STOREPARTUID:-}
-      TILDA_PANEL_RECID: ${TILDA_PANEL_RECID:-}
-      TILDA_SITE_BASE_URL: ${TILDA_SITE_BASE_URL:-https://avgst.ru}
       # Снимки профилей соцсетей
       SOCIAL_PROFILE_TTL_MINUTES: ${SOCIAL_PROFILE_TTL_MINUTES:-20}
       INSTAGRAM_PROVIDER: ${INSTAGRAM_PROVIDER:-auto}
@@ -63,6 +55,8 @@ services:
       S3_BUCKET: ${S3_BUCKET:-b2b}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      CMS_BASE_URL: ${CMS_BASE_URL:-https://cms.avgst.ru}
+      CMS_SITE_API_KEY: ${CMS_SITE_API_KEY:-}
     expose:
       - "4000"
     healthcheck:

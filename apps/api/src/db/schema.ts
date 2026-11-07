@@ -24,11 +24,12 @@ export const roleEnum = pgEnum("role", [
   "company_manager",
   "partner_owner",
   "partner_member",
-  // Общий дилерский доступ на время переезда с Tilda: один логин на всех,
+  // Общий дилерский доступ: один логин на всех,
   // видит только общий раздел и ничего не может изменить
   "dealer_guest"
 ]);
-export const catalogSourceEnum = pgEnum("catalog_source", ["tilda"]);
+/** Значение в базе. Каталог из этого источника больше не загружается. */
+export const catalogSourceEnum = pgEnum("catalog_source", ["tilda", "cms"]);
 export const crmProviderEnum = pgEnum("crm_provider", ["amocrm", "bitrix24"]);
 /**
  * Судьба заявки на пути в CRM.
@@ -58,8 +59,8 @@ export const dealEventTypeEnum = pgEnum("site_request_event_type", [
   "contact_changed"
 ]);
 /**
- * Продукция завода помимо домов. Дома живут в catalog_projects и приезжают
- * из Tilda, а это заводится руками в кабинете HQ.
+ * Продукция завода помимо домов. Дома живут в catalog_projects,
+ * а это заводится руками в кабинете HQ.
  */
 export const factoryProductKindEnum = pgEnum("factory_product_kind", ["truss", "roof_panel"]);
 export const inquiryStatusEnum = pgEnum("inquiry_status", ["new", "answered"]);
@@ -166,7 +167,7 @@ export const catalogProjects = pgTable(
     currency: text("currency").notNull().default("RUB"),
     projectUrl: text("project_url").notNull(),
     active: boolean("active").notNull().default(true),
-    // Ручные правки HQ: поля с true не перезаписываются синком Tilda
+    // Ручные правки HQ: поля с true не перезаписываются при обновлении каталога
     syncOverrides: jsonb("sync_overrides").notNull().default({}),
     sourcePayload: jsonb("source_payload").notNull().default({}),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull(),
@@ -187,6 +188,8 @@ export const catalogAssets = pgTable("catalog_assets", {
   type: text("type").notNull(),
   // Для type=floor_plan при floors>1: номер этажа планировки
   floorNumber: integer("floor_number"),
+  variantLabel: text("variant_label"),
+  variantIndex: integer("variant_index"),
   sortOrder: integer("sort_order").notNull().default(0),
   isPrimary: boolean("is_primary").notNull().default(false),
   isHidden: boolean("is_hidden").notNull().default(false)
@@ -201,6 +204,8 @@ export const catalogProjectRooms = pgTable(
       .references(() => catalogProjects.id, { onDelete: "cascade" }),
     // Для одноэтажных домов всегда 1 — см. FloorPlanExplication
     floorNumber: integer("floor_number").notNull().default(1),
+    variantLabel: text("variant_label"),
+    variantIndex: integer("variant_index"),
     name: text("name").notNull(),
     area: real("area").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),

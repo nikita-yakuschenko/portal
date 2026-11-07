@@ -51,10 +51,16 @@ const PACKAGE_NOTES: Record<string, string> = {
   стандартная: "Базовая заводская комплектация проекта."
 };
 
+export function normalizeCatalogTechnology(value: string | null | undefined): CatalogTechnology {
+  if (value === "panel_frame" || value === "panel") return "panel_frame";
+  if (value === "frame") return "frame";
+  return "modular";
+}
+
 export function defaultOptionGroups(
   technology: CatalogTechnology
 ): CatalogProjectDetails["optionGroups"] {
-  if (technology === "panel_frame") {
+  if (technology === "panel_frame" || technology === "frame") {
     return [
       {
         id: "supply_assembly",
@@ -139,60 +145,48 @@ export function defaultTechDocs(projectName: string): CatalogProjectDetails["tec
       title: `Паспорт проекта «${projectName}»`,
       kind: "passport",
       status: "on_request",
-      note: "Выдаётся заводом по запросу партнёра"
+      note: ""
     },
     {
       id: "spec",
       title: "Спецификация комплектации",
       kind: "spec",
       status: "on_request",
-      note: "Состав материалов и узлов по выбранной комплектации"
+      note: ""
     },
     {
       id: "plan",
       title: "Планировочное решение / экспликация",
       kind: "plan",
       status: "on_request",
-      note: "Актуальные чертежи и экспликация помещений"
+      note: ""
     },
     {
       id: "manual",
       title: "Инструкция по монтажу",
       kind: "manual",
       status: "on_request",
-      note: "Регламент сборки и узловые решения"
+      note: ""
     }
   ];
 }
 
-export function defaultCargo(technology: CatalogTechnology): CatalogProjectDetails["cargo"] {
-  if (technology === "modular") {
-    return {
-      modulesNote: "Поставка модульными блоками заводской готовности",
-      dimensionsNote: "Габариты модулей уточняются по проекту и схеме отгрузки",
-      weightNote: "Масса модулей — по спецификации отгрузки завода",
-      packingNote: "Заводская упаковка для автомобильной перевозки"
-    };
-  }
-
+export function defaultCargo(_technology: CatalogTechnology): CatalogProjectDetails["cargo"] {
   return {
-    modulesNote: "Поставка панельно-каркасного домокомплекта пакетами",
-    dimensionsNote: "Габариты пакетов зависят от раскроя и схемы погрузки",
-    weightNote: "Масса комплекта — по отгрузочной ведомости",
-    packingNote: "Комплектация маркируется по осям и узлам монтажа"
+    modulesNote: "",
+    dimensionsNote: "",
+    weightNote: "",
+    packingNote: ""
   };
 }
 
-export function defaultTransport(technology: CatalogTechnology): CatalogProjectDetails["transport"] {
+export function defaultTransport(_technology: CatalogTechnology): CatalogProjectDetails["transport"] {
   return {
-    method: technology === "modular" ? "Авто / трал (модули)" : "Автотранспорт (панельный комплект)",
-    leadTimeNote: "Срок производства и готовности к отгрузке — по подтверждению завода",
-    deliveryNote: "Доставка до участка или согласованного склада партнёра",
-    unloadingNote: "Разгрузка краном / манипулятором по условиям площадки",
-    mountingNote:
-      technology === "modular"
-        ? "Монтаж модулей на подготовленный фундамент по регламенту завода"
-        : "Сборка каркаса и панелей на участке по монтажной документации"
+    method: "",
+    leadTimeNote: "",
+    deliveryNote: "",
+    unloadingNote: "",
+    mountingNote: ""
   };
 }
 
@@ -222,10 +216,6 @@ export function buildProjectDetails(input: {
       cargo.weightNote = `Масса упаковки: ${input.pack.m} кг`;
     }
   }
-  if (input.dimensionsLabel) {
-    cargo.dimensionsNote = `Габариты дома: ${input.dimensionsLabel}${cargo.dimensionsNote ? `. ${cargo.dimensionsNote}` : ""}`;
-  }
-
   const details: CatalogProjectDetails = {
     characteristics: input.characteristics ?? [],
     packages,

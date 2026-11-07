@@ -3,23 +3,13 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { IconExternalLink, IconFileText } from "@tabler/icons-react";
 
 import { PartnerShell } from "@/components/partner-shell";
 import { PageAlert } from "@/components/page-alert";
 import { ProjectAboutPanel } from "@/components/project-about-panel";
+import { ProjectDocsPanel, ProjectLogisticsPanel } from "@/components/project-supply-panels";
 import { ProjectSpecsStrip } from "@/components/project-specs-strip";
 import { ProjectSummaryCard } from "@/components/project-summary-card";
-import {
-  Attachment,
-  AttachmentAction,
-  AttachmentActions,
-  AttachmentContent,
-  AttachmentDescription,
-  AttachmentMedia,
-  AttachmentTitle,
-  AttachmentTrigger
-} from "@/components/ui/attachment";
 import { Badge } from "@/components/ui/badge";
 import {
   Breadcrumb,
@@ -39,10 +29,22 @@ import {
 } from "@/lib/catalog-display";
 import { formatPrice } from "@/lib/general-section";
 import { factoryOptionKey } from "@/lib/partner-pricing";
-import { cn } from "@/lib/utils";
-
 type ProjectDetails = {
+  series?: string;
   dimensions?: { label?: string };
+  cargo?: {
+    modulesNote?: string;
+    dimensionsNote?: string;
+    weightNote?: string;
+    packingNote?: string;
+  };
+  transport?: {
+    method?: string;
+    leadTimeNote?: string;
+    deliveryNote?: string;
+    unloadingNote?: string;
+    mountingNote?: string;
+  };
   techDocs: Array<{
     id: string;
     title: string;
@@ -59,7 +61,7 @@ type Project = {
   id: string;
   name: string;
   description: string;
-  technology: "modular" | "panel_frame";
+  technology: "modular" | "panel_frame" | "frame";
   details: ProjectDetails;
   area: number | null;
   floors: number | null;
@@ -94,15 +96,8 @@ type Project = {
 
 const TECH_TITLE: Record<Project["technology"], string> = {
   panel_frame: "Панельно-каркасные дома",
-  modular: "Модульные дома"
-};
-
-const DOC_KIND_LABEL: Record<string, string> = {
-  passport: "Паспорт",
-  spec: "Спецификация",
-  plan: "План",
-  manual: "Инструкция",
-  other: "Документ"
+  modular: "Модульные дома",
+  frame: "Каркасные дома"
 };
 
 /** Группы опций — те же, что в партнёрском прайсе, но без тумблеров */
@@ -258,7 +253,6 @@ export default function GeneralHouseDetailPage() {
     [project]
   );
 
-  const docsWithUrl = details?.techDocs.filter((doc) => Boolean(doc.url)) ?? [];
   const listHref = project
     ? `/partner/general/houses?technology=${project.technology}`
     : "/partner/general/houses";
@@ -313,6 +307,7 @@ export default function GeneralHouseDetailPage() {
                 className="mt-auto"
                 area={project.area}
                 dimensionsLabel={details.dimensions?.label}
+                blankDimensions
                 floors={project.floors}
                 bedrooms={project.bedrooms}
                 bathrooms={project.bathrooms}
@@ -334,9 +329,8 @@ export default function GeneralHouseDetailPage() {
             <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
               <TabsTrigger value="about">О проекте</TabsTrigger>
               <TabsTrigger value="packages">Комплектация</TabsTrigger>
-              <TabsTrigger value="docs" disabled={docsWithUrl.length === 0}>
-                Документация
-              </TabsTrigger>
+              <TabsTrigger value="docs">Документация</TabsTrigger>
+              <TabsTrigger value="logistics">Логистика</TabsTrigger>
             </TabsList>
 
             <TabsContent value="about" className="mt-0">
@@ -344,6 +338,7 @@ export default function GeneralHouseDetailPage() {
                 <ProjectAboutPanel
                   projectName={project.name}
                   description={project.description}
+                  seriesLabel={details.series ?? null}
                   assets={assets}
                   floors={project.floors}
                   rooms={project.rooms}
@@ -362,38 +357,10 @@ export default function GeneralHouseDetailPage() {
             </TabsContent>
 
             <TabsContent value="docs" className="mt-0">
-              <div className={cn("flex flex-col gap-2", docsWithUrl.length === 0 && "hidden")}>
-                {docsWithUrl.map((doc) => {
-                  const kindLabel = DOC_KIND_LABEL[doc.kind] ?? "Документ";
-                  return (
-                    <Attachment key={doc.id} className="w-full max-w-none flex-nowrap" state="done">
-                      <AttachmentMedia>
-                        <IconFileText />
-                      </AttachmentMedia>
-                      <AttachmentContent>
-                        <AttachmentTitle>{doc.title}</AttachmentTitle>
-                        <AttachmentDescription>{kindLabel} · Доступен</AttachmentDescription>
-                      </AttachmentContent>
-                      {doc.url ? (
-                        <>
-                          <AttachmentActions>
-                            <AttachmentAction asChild aria-label={`Открыть «${doc.title}»`}>
-                              <a href={doc.url} target="_blank" rel="noreferrer">
-                                <IconExternalLink />
-                              </a>
-                            </AttachmentAction>
-                          </AttachmentActions>
-                          <AttachmentTrigger asChild>
-                            <a href={doc.url} target="_blank" rel="noreferrer" className="sr-only">
-                              Открыть
-                            </a>
-                          </AttachmentTrigger>
-                        </>
-                      ) : null}
-                    </Attachment>
-                  );
-                })}
-              </div>
+              <ProjectDocsPanel details={details} />
+            </TabsContent>
+            <TabsContent value="logistics" className="mt-0">
+              <ProjectLogisticsPanel details={details} />
             </TabsContent>
           </Tabs>
         </div>

@@ -28,12 +28,12 @@ import { Slider } from "@/components/ui/slider";
 import { TECHNOLOGY_LABELS } from "@/lib/catalog-display";
 import { cn } from "@/lib/utils";
 
-type TechnologyFilter = "all" | "modular" | "panel_frame";
+type TechnologyFilter = "all" | "modular" | "panel_frame" | "frame";
 type FloorsFilter = "all" | "1" | "2";
 type SortBy = "default" | "price" | "area";
 
 function parseTechnologyFilter(value: string | null): TechnologyFilter {
-  if (value === "modular" || value === "panel_frame") return value;
+  if (value === "modular" || value === "panel_frame" || value === "frame") return value;
   return "all";
 }
 
@@ -376,6 +376,7 @@ function PartnerSiteProjectsContent() {
                 <SelectItem value="all">Технология: все</SelectItem>
                 <SelectItem value="modular">{TECHNOLOGY_LABELS.modular}</SelectItem>
                 <SelectItem value="panel_frame">{TECHNOLOGY_LABELS.panel_frame}</SelectItem>
+                <SelectItem value="frame">{TECHNOLOGY_LABELS.frame}</SelectItem>
               </SelectContent>
             </Select>
             {technology !== "all" ? (

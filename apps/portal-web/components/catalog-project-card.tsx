@@ -23,7 +23,7 @@ type CatalogProjectCardProps = {
   href: string;
   name: string;
   description: string;
-  technology: "modular" | "panel_frame";
+  technology: "modular" | "panel_frame" | "frame";
   area: number | null;
   floors: number | null;
   bedrooms: number | null;

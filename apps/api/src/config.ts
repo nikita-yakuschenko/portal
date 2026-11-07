@@ -18,7 +18,7 @@ const configSchema = z.object({
   ADMIN_EMAIL: z.email().default("admin@avgst.local"),
   ADMIN_PASSWORD: z.string().min(8).default("ChangeMe123!"),
   ADMIN_FULL_NAME: z.string().min(2).default("AVGST Admin"),
-  /** Общий дилерский вход на время переезда с Tilda: один логин на всех */
+  /** Общий дилерский вход: один логин на всех */
   DEALER_EMAIL: z.email().default("dealer@avgst.ru"),
   DEALER_PASSWORD: z.string().min(8).default("avgst_dealer_25"),
   PARTNER_EMAIL: z.email().default("partner@avgst.local"),
@@ -26,14 +26,6 @@ const configSchema = z.object({
   PARTNER_FULL_NAME: z.string().min(2).default("Демо Партнёр"),
   PARTNER_COMPANY_NAME: z.string().min(2).default("Демо Дилер"),
   PARTNER_REGION: z.string().min(2).default("Нижний Новгород"),
-  TILDA_PUBLIC_KEY: z.string().default(""),
-  TILDA_SECRET_KEY: z.string().default(""),
-  TILDA_API_BASE: z.string().url().default("https://store.tildaapi.com/api/getproductslist/"),
-  TILDA_MODULAR_STOREPARTUID: z.string().default(""),
-  TILDA_MODULAR_RECID: z.string().default(""),
-  TILDA_PANEL_STOREPARTUID: z.string().default(""),
-  TILDA_PANEL_RECID: z.string().default(""),
-  TILDA_SITE_BASE_URL: z.string().url().default("https://avgst.ru"),
   // Снимки публичных профилей соцсетей: TTL и лимиты outbound-запросов
   SOCIAL_PROFILE_TTL_MINUTES: z.coerce.number().int().positive().default(20),
   SOCIAL_FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
@@ -60,7 +52,9 @@ const configSchema = z.object({
   S3_REGION: z.string().default("garage"),
   S3_BUCKET: z.string().default(""),
   S3_ACCESS_KEY: z.string().default(""),
-  S3_SECRET_KEY: z.string().default("")
+  S3_SECRET_KEY: z.string().default(""),
+  CMS_BASE_URL: z.string().url().default("https://cms.avgst.ru"),
+  CMS_SITE_API_KEY: z.string().default("")
 });
 
 // Dokploy часто прокидывает пустые строки вместо отсутствия ключа —
@@ -97,26 +91,6 @@ export const config = {
   partnerFullName: parsedConfig.PARTNER_FULL_NAME,
   partnerCompanyName: parsedConfig.PARTNER_COMPANY_NAME,
   partnerRegion: parsedConfig.PARTNER_REGION,
-  tilda: {
-    publicKey: parsedConfig.TILDA_PUBLIC_KEY,
-    secretKey: parsedConfig.TILDA_SECRET_KEY,
-    apiBase: parsedConfig.TILDA_API_BASE,
-    siteBaseUrl: parsedConfig.TILDA_SITE_BASE_URL,
-    sources: [
-      {
-        key: "modular",
-        storepartuid: parsedConfig.TILDA_MODULAR_STOREPARTUID,
-        recid: parsedConfig.TILDA_MODULAR_RECID,
-        catalogPath: "/catalog/modulnye-doma"
-      },
-      {
-        key: "panel",
-        storepartuid: parsedConfig.TILDA_PANEL_STOREPARTUID,
-        recid: parsedConfig.TILDA_PANEL_RECID,
-        catalogPath: "/catalog/panelno-karkasnye-doma"
-      }
-    ].filter((source) => source.storepartuid && source.recid)
-  },
   social: {
     profileTtlMinutes: parsedConfig.SOCIAL_PROFILE_TTL_MINUTES,
     fetchTimeoutMs: parsedConfig.SOCIAL_FETCH_TIMEOUT_MS,
@@ -150,5 +124,9 @@ export const config = {
     bucket: parsedConfig.S3_BUCKET,
     accessKey: parsedConfig.S3_ACCESS_KEY,
     secretKey: parsedConfig.S3_SECRET_KEY
+  },
+  cms: {
+    baseUrl: parsedConfig.CMS_BASE_URL.replace(/\/$/, ""),
+    apiKey: parsedConfig.CMS_SITE_API_KEY
   }
 };

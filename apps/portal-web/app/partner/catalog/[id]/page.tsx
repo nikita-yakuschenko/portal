@@ -34,17 +34,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Attachment,
-  AttachmentAction,
-  AttachmentActions,
-  AttachmentContent,
-  AttachmentDescription,
-  AttachmentMedia,
-  AttachmentTitle,
-  AttachmentTrigger
-} from "@/components/ui/attachment";
 import { apiFetch } from "@/lib/api";
+import {
+  ProjectDocsPanel,
+  ProjectLogisticsPanel
+} from "@/components/project-supply-panels";
 import {
   technologyBadgeCode,
   technologyBadgeVariant
@@ -60,7 +54,7 @@ import { PartnerProjectSiteVisibility } from "@/components/partner-project-site-
 import { ProjectAboutPanel } from "@/components/project-about-panel";
 import { ProjectSpecsStrip } from "@/components/project-specs-strip";
 import { ProjectSummaryCard } from "@/components/project-summary-card";
-import { IconExternalLink, IconFileText, IconHeart } from "@tabler/icons-react";
+import { IconHeart } from "@tabler/icons-react";
 import { toast } from "sonner";
 
 type PricingMode = "markup" | "exact" | "on_request";
@@ -71,17 +65,10 @@ type PricingHint = {
   publicPrice: number | null;
 };
 
-const DOC_KIND_LABEL: Record<string, string> = {
-  passport: "Паспорт",
-  spec: "Спецификация",
-  plan: "План",
-  manual: "Инструкция",
-  other: "Документ"
-};
-
 type ProjectDetails = {
   summary?: string;
   mark?: string;
+  series?: string;
   dimensions?: { lengthM?: number; widthM?: number; label?: string };
   characteristics: Array<{ title: string; value: string }>;
   packages: Array<{ id: string; name: string; price?: number; description?: string }>;
@@ -117,7 +104,7 @@ type Project = {
   id: string;
   name: string;
   description: string;
-  technology: "modular" | "panel_frame";
+  technology: "modular" | "panel_frame" | "frame";
   details: ProjectDetails;
   area: number | null;
   floors: number | null;
@@ -166,21 +153,6 @@ function loadFavorites(): Set<string> {
 
 function saveFavorites(ids: Set<string>) {
   localStorage.setItem(FAVORITES_KEY, JSON.stringify([...ids]));
-}
-
-function MetaList({ items }: { items: Array<{ label: string; value: string }> }) {
-  const visible = items.filter((item) => item.value.trim() && item.value !== "—");
-  if (visible.length === 0) return null;
-  return (
-    <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {visible.map((item) => (
-        <div key={item.label} className="bg-muted rounded-lg px-3 py-2.5">
-          <dt className="text-muted-foreground text-xs tracking-wide uppercase">{item.label}</dt>
-          <dd className="mt-1 text-sm font-medium">{item.value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
 }
 
 function Panel({
@@ -463,6 +435,7 @@ export default function PartnerCatalogProjectPage() {
                   className="mt-auto"
                   area={project.area}
                   dimensionsLabel={details.dimensions?.label}
+                  blankDimensions
                   floors={project.floors}
                   bedrooms={project.bedrooms}
                   bathrooms={project.bathrooms}
@@ -497,12 +470,8 @@ export default function PartnerCatalogProjectPage() {
                 <TabsTrigger value="price">Цена</TabsTrigger>
                 <TabsTrigger value="packages">Комплектация</TabsTrigger>
                 <TabsTrigger value="options">Опции</TabsTrigger>
-                <TabsTrigger value="docs" disabled title="Скоро">
-                  Документация
-                </TabsTrigger>
-                <TabsTrigger value="logistics" disabled title="Скоро">
-                  Логистика
-                </TabsTrigger>
+                <TabsTrigger value="docs">Документация</TabsTrigger>
+                <TabsTrigger value="logistics">Логистика</TabsTrigger>
               </TabsList>
 
               <TabsContent value="about" className="mt-0">
@@ -510,6 +479,7 @@ export default function PartnerCatalogProjectPage() {
                   <ProjectAboutPanel
                     projectName={project.name}
                     description={project.description}
+                    seriesLabel={details.series ?? null}
                     assets={project.assets}
                     floors={project.floors}
                     rooms={project.rooms}
@@ -565,103 +535,11 @@ export default function PartnerCatalogProjectPage() {
               </TabsContent>
 
               <TabsContent value="docs" className="mt-0">
-                <div className="flex flex-col gap-2">
-                  {details.techDocs.map((doc) => {
-                    const available = Boolean(doc.url);
-                    const kindLabel = DOC_KIND_LABEL[doc.kind] ?? "Документ";
-                    const description = available
-                      ? `${kindLabel} · Доступен`
-                      : `${kindLabel} · По запросу`;
-
-                    return (
-                      <Attachment
-                        key={doc.id}
-                        className="w-full max-w-none flex-nowrap"
-                        state="done"
-                      >
-                        <AttachmentMedia>
-                          <IconFileText />
-                        </AttachmentMedia>
-                        <AttachmentContent>
-                          <AttachmentTitle>{doc.title}</AttachmentTitle>
-                          <AttachmentDescription>{description}</AttachmentDescription>
-                        </AttachmentContent>
-                        {available && doc.url ? (
-                          <>
-                            <AttachmentActions>
-                              <AttachmentAction asChild aria-label={`Открыть «${doc.title}»`}>
-                                <a href={doc.url} target="_blank" rel="noreferrer">
-                                  <IconExternalLink />
-                                </a>
-                              </AttachmentAction>
-                            </AttachmentActions>
-                            <AttachmentTrigger asChild>
-                              <a
-                                href={doc.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                aria-label={`Открыть «${doc.title}»`}
-                              />
-                            </AttachmentTrigger>
-                          </>
-                        ) : null}
-                      </Attachment>
-                    );
-                  })}
-                </div>
+                <ProjectDocsPanel details={details} />
               </TabsContent>
 
-              <TabsContent value="logistics" className="mt-0 space-y-4">
-                <Panel>
-                  <h4 className="mb-3 text-sm font-semibold">Груз</h4>
-                  <MetaList
-                    items={[
-                      {
-                        label: "Состав отгрузки",
-                        value: details.cargo.modulesNote ?? "—"
-                      },
-                      {
-                        label: "Габариты / пакеты",
-                        value: details.cargo.dimensionsNote ?? "—"
-                      },
-                      {
-                        label: "Масса",
-                        value: details.cargo.weightNote ?? "—"
-                      },
-                      {
-                        label: "Упаковка",
-                        value: details.cargo.packingNote ?? "—"
-                      }
-                    ]}
-                  />
-                </Panel>
-                <Panel>
-                  <h4 className="mb-3 text-sm font-semibold">Доставка и монтаж</h4>
-                  <MetaList
-                    items={[
-                      {
-                        label: "Способ доставки",
-                        value: details.transport.method ?? "—"
-                      },
-                      {
-                        label: "Сроки",
-                        value: details.transport.leadTimeNote ?? "—"
-                      },
-                      {
-                        label: "Доставка",
-                        value: details.transport.deliveryNote ?? "—"
-                      },
-                      {
-                        label: "Разгрузка",
-                        value: details.transport.unloadingNote ?? "—"
-                      },
-                      {
-                        label: "Монтаж",
-                        value: details.transport.mountingNote ?? "—"
-                      }
-                    ]}
-                  />
-                </Panel>
+              <TabsContent value="logistics" className="mt-0">
+                <ProjectLogisticsPanel details={details} />
               </TabsContent>
             </Tabs>
           </div>

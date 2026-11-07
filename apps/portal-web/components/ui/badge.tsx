@@ -23,6 +23,8 @@ const badgeVariants = cva(
         modular: "border-0 bg-primary/10 text-primary [a&]:hover:bg-primary/15",
         panel:
           "border-0 bg-brand-yellow/25 text-brand-yellow-foreground [a&]:hover:bg-brand-yellow/35",
+        frame:
+          "border-0 bg-sky-600/15 text-sky-950 [a&]:hover:bg-sky-600/20 dark:text-sky-200",
       },
     },
     defaultVariants: {

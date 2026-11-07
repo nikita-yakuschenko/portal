@@ -22,6 +22,8 @@ export type ProjectSpecsStripProps = {
   className?: string;
   /** Только HQ edit: пустые ячейки как «—» */
   showEmpty?: boolean;
+  /** Габариты всегда на месте: пустая строка, пока в CMS нет размера */
+  blankDimensions?: boolean;
   /** Только HQ edit: обернуть значение */
   renderValue?: (key: SpecKey, valueNode: ReactNode) => ReactNode;
 };
@@ -35,6 +37,7 @@ export function ProjectSpecsStrip({
   bathrooms,
   className,
   showEmpty = false,
+  blankDimensions = false,
   renderValue
 }: ProjectSpecsStripProps) {
   const rows: Array<{ key: SpecKey; icon: SpecIcon; label: string; value: string }> = [];
@@ -53,8 +56,13 @@ export function ProjectSpecsStrip({
       label: "Габариты",
       value: dimensionsLabel.trim()
     });
-  } else if (showEmpty) {
-    rows.push({ key: "dimensions", icon: IconDimensions, label: "Габариты", value: "—" });
+  } else if (blankDimensions || showEmpty) {
+    rows.push({
+      key: "dimensions",
+      icon: IconDimensions,
+      label: "Габариты",
+      value: blankDimensions ? "" : "—"
+    });
   }
 
   if (floors) {
@@ -87,7 +95,7 @@ export function ProjectSpecsStrip({
       {rows.map((row, index) => {
         const Icon = row.icon;
         const valueNode = (
-          <p className="mt-1 text-base font-semibold tabular-nums leading-none sm:text-lg">
+          <p className="mt-1 min-h-5 text-base font-semibold tabular-nums leading-none sm:min-h-6 sm:text-lg">
             {row.value}
           </p>
         );

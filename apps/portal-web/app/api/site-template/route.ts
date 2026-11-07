@@ -21,7 +21,7 @@ export async function GET() {
 
     let html = await upstream.text();
 
-    // Абсолютная база — стили/скрипты/картинки Tilda с CDN и относительные пути
+    // Абсолютная база — стили, скрипты и картинки эталона, включая относительные пути
     if (/<head[^>]*>/i.test(html)) {
       html = html.replace(/<head([^>]*)>/i, `<head$1><base href="${TEMPLATE_URL}">`);
     } else {

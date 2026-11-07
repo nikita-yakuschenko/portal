@@ -63,6 +63,8 @@ export type AboutAsset = {
   sourceUrl: string;
   type: string;
   floorNumber?: number | null;
+  variantLabel?: string | null;
+  variantIndex?: number | null;
   sortOrder: number;
   isPrimary: boolean;
   isHidden?: boolean;
@@ -85,11 +87,20 @@ export type ProjectRoom = {
   id: string;
   projectId: string;
   floorNumber: number;
+  variantLabel?: string | null;
+  variantIndex?: number | null;
   name: string;
   area: number;
   sortOrder: number;
   polygon: RoomPoint[];
 };
+
+function planVariantKey(item: { variantLabel?: string | null; variantIndex?: number | null }) {
+  const label = item.variantLabel?.trim() ?? "";
+  if (label) return label;
+  if (item.variantIndex != null) return `index:${item.variantIndex}`;
+  return "";
+}
 
 export type RoomPatch = {
   name?: string;
@@ -115,6 +126,7 @@ function sortAssets(items: AboutAsset[]) {
 export function ProjectAboutPanel({
   projectName,
   description,
+  seriesLabel,
   assets,
   floors,
   rooms = [],
@@ -133,6 +145,7 @@ export function ProjectAboutPanel({
 }: {
   projectName: string;
   description: string;
+  seriesLabel?: string | null;
   assets: AboutAsset[];
   floors: number | null;
   rooms?: ProjectRoom[];
@@ -187,6 +200,10 @@ export function ProjectAboutPanel({
 
   return (
     <div className="space-y-3">
+      <div className="bg-muted max-w-xs rounded-lg px-3 py-2.5">
+        <p className="text-muted-foreground text-xs tracking-wide uppercase">Серия</p>
+        <p className="mt-1 min-h-5 text-sm font-medium">{seriesLabel?.trim() ?? ""}</p>
+      </div>
       <Tabs defaultValue={defaultTab}>
         <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
           {showDescription ? (
@@ -196,8 +213,8 @@ export function ProjectAboutPanel({
                 {descriptionProtected ? (
                   <span
                     className="bg-amber-500/90 absolute top-0 left-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                    title="Защищено от синхронизации Tilda"
-                    aria-label="Описание защищено от синхронизации Tilda"
+                    title="Не перезаписывается при обновлении каталога"
+                    aria-label="Описание не перезаписывается при обновлении каталога"
                   />
                 ) : null}
               </span>
@@ -704,7 +721,7 @@ function FloorPlanExplication({
   onDeleteRoom?: (roomId: string) => void;
 }) {
   // Таб-этажи ведём от floors проекта, а не от тегов ассетов — реальные фото планировок
-  // часто не размечены по этажу (особенно после синка из Tilda), и без этого второй этаж пропадал
+  // часто не размечены по этажу, и без этого второй этаж пропадал
   const floorCount = Math.max(floors ?? 1, 1);
   const floorNumbers = floorCount > 1 ? Array.from({ length: floorCount }, (_, i) => i + 1) : [1];
   const [selectedFloor, setSelectedFloor] = useState(floorNumbers[0] ?? 1);
@@ -720,6 +737,33 @@ function FloorPlanExplication({
   const boxRef = useRef<HTMLDivElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const [toolbarPos, setToolbarPos] = useState<{ top: number; left: number } | null>(null);
+
+  const planVariants = useMemo(() => {
+    const groups = new Map<string, { key: string; label: string; index: number }>();
+    const consider = (item: { variantLabel?: string | null; variantIndex?: number | null }) => {
+      const key = planVariantKey(item);
+      if (!key) return;
+      const label = item.variantLabel?.trim() || `Вариант ${(item.variantIndex ?? groups.size) + 1}`;
+      const index = item.variantIndex ?? groups.size;
+      const current = groups.get(key);
+      if (!current || index < current.index) groups.set(key, { key, label, index });
+    };
+    for (const asset of assets) consider(asset);
+    for (const room of rooms) consider(room);
+    return [...groups.values()].sort((a, b) => a.index - b.index || a.label.localeCompare(b.label, "ru"));
+  }, [assets, rooms]);
+  const [selectedVariant, setSelectedVariant] = useState("");
+
+  useEffect(() => {
+    setSelectedVariant((current) =>
+      planVariants.some((variant) => variant.key === current) ? current : (planVariants[0]?.key ?? "")
+    );
+  }, [planVariants]);
+
+  useEffect(() => {
+    setSelectedFloor(1);
+    setFloorAssetIndex(0);
+  }, [selectedVariant]);
 
   useEffect(() => {
     setFloorAssetIndex(0);
@@ -776,12 +820,20 @@ function FloorPlanExplication({
 
   // Дом одноэтажный — разметка по этажу не нужна, любой ассет планировки однозначно 1-й этаж.
   // Если этажность здания вырастет, ассеты автоматически перестанут маркироваться неявно.
+  const planAssets =
+    planVariants.length > 1
+      ? assets.filter((asset) => planVariantKey(asset) === selectedVariant)
+      : assets;
+  const listedRooms =
+    planVariants.length > 1
+      ? rooms.filter((room) => planVariantKey(room) === selectedVariant)
+      : rooms;
   const taggedForFloor =
     floorCount === 1
-      ? assets
-      : assets.filter((asset) => asset.floorNumber === selectedFloor);
+      ? planAssets
+      : planAssets.filter((asset) => asset.floorNumber === selectedFloor);
   const untagged =
-    floorCount === 1 ? [] : assets.filter((asset) => asset.floorNumber == null);
+    floorCount === 1 ? [] : planAssets.filter((asset) => asset.floorNumber == null);
   // В редактировании неразмеченные фото — кандидаты на любой этаж, их нужно видеть и листать
   // независимо от того, есть ли уже тегированное фото. В обычном просмотре показываем только тегированное
   const floorAssets = onPatch ? [...taggedForFloor, ...untagged] : taggedForFloor;
@@ -900,7 +952,7 @@ function FloorPlanExplication({
   const assetIndex = current ? assets.indexOf(current) : -1;
   const busy = current ? busyId === current.id : false;
   const floorOptions = Array.from({ length: Math.max(floors ?? 0, 0) }, (_, i) => i + 1);
-  const floorRooms = rooms
+  const floorRooms = listedRooms
     .filter((room) => room.floorNumber === selectedFloor)
     .sort((a, b) => a.sortOrder - b.sortOrder);
   const canEditRooms = Boolean(onPatchRoom);
@@ -919,14 +971,14 @@ function FloorPlanExplication({
 
   useEffect(() => {
     if (isReorderingRef.current) return;
-    const next = rooms
+    const next = listedRooms
       .filter((room) => room.floorNumber === selectedFloor)
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((room) => room.id);
     setOrderedRoomIds((prev) =>
       prev.length === next.length && prev.every((id, index) => id === next[index]) ? prev : next
     );
-  }, [selectedFloor, roomsOrderKey, rooms]);
+  }, [selectedFloor, roomsOrderKey, listedRooms]);
 
   function persistRoomOrder(ids: string[]) {
     ids.forEach((id, index) => {
@@ -949,6 +1001,24 @@ function FloorPlanExplication({
   }
 
   return (
+    <div className="flex flex-col gap-3">
+      {planVariants.length > 1 ? (
+        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Варианты планировки">
+          {planVariants.map((variant) => (
+            <Button
+              key={variant.key}
+              type="button"
+              role="tab"
+              size="sm"
+              variant={variant.key === selectedVariant ? "default" : "outline"}
+              aria-selected={variant.key === selectedVariant}
+              onClick={() => setSelectedVariant(variant.key)}
+            >
+              {variant.label}
+            </Button>
+          ))}
+        </div>
+      ) : null}
     <div className="flex flex-col gap-2 gallery-split:flex-row gallery-split:items-stretch">
       {drawingRoomId && toolbarPos && typeof document !== "undefined"
         ? createPortal(
@@ -1372,6 +1442,7 @@ function FloorPlanExplication({
         ) : null}
       </div>
       </div>
+    </div>
     </div>
   );
 }

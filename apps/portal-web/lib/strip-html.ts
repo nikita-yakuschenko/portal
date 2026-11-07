@@ -1,4 +1,4 @@
-/** Убирает HTML из описаний Tilda для безопасного текстового вывода */
+/** Убирает HTML из описаний для безопасного текстового вывода */
 export function stripHtml(value: string | null | undefined): string {
   if (!value) return "";
 
@@ -17,7 +17,7 @@ export function stripHtml(value: string | null | undefined): string {
     .trim();
 }
 
-/** Описание Tilda часто — только характеристики (площадь и т.д.), их не дублируем в карточке */
+/** Если описание состоит только из характеристик, в карточке его не дублируем */
 export function catalogProseDescription(value: string | null | undefined): string {
   const text = stripHtml(value);
   if (!text) return "";

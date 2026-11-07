@@ -16,6 +16,7 @@ import {
   ProjectAboutPanel,
   type AboutAssetPatch
 } from "@/components/project-about-panel";
+import { ProjectDocsPanel, ProjectLogisticsPanel } from "@/components/project-supply-panels";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -71,14 +72,29 @@ type Project = {
   id: string;
   name: string;
   description: string;
-  technology: "modular" | "panel_frame";
+  technology: "modular" | "panel_frame" | "frame";
   area: number | null;
   floors: number | null;
   bedrooms: number | null;
   bathrooms: string | null;
   basePrice: number | null;
   details?: {
+    series?: string;
     dimensions?: { label?: string } | null;
+    techDocs?: Array<{ kind?: string; title?: string; url?: string; note?: string }>;
+    cargo?: {
+      modulesNote?: string;
+      dimensionsNote?: string;
+      weightNote?: string;
+      packingNote?: string;
+    };
+    transport?: {
+      method?: string;
+      leadTimeNote?: string;
+      deliveryNote?: string;
+      unloadingNote?: string;
+      mountingNote?: string;
+    };
   } | null;
   factoryOffer?: {
     importedAt?: string;
@@ -332,12 +348,8 @@ export default function CompanyCatalogProjectPage() {
               <TabsTrigger value="about">О проекте</TabsTrigger>
               <TabsTrigger value="packages">Комплектация</TabsTrigger>
               <TabsTrigger value="options">Опции</TabsTrigger>
-              <TabsTrigger value="docs" disabled title="Скоро">
-                Документация
-              </TabsTrigger>
-              <TabsTrigger value="logistics" disabled title="Скоро">
-                Логистика
-              </TabsTrigger>
+              <TabsTrigger value="docs">Документация</TabsTrigger>
+              <TabsTrigger value="logistics">Логистика</TabsTrigger>
             </TabsList>
 
             <TabsContent value="about" className="mt-0">
@@ -345,6 +357,7 @@ export default function CompanyCatalogProjectPage() {
                 <ProjectAboutPanel
                   projectName={project.name}
                   description={project.description}
+                  seriesLabel={project.details?.series ?? null}
                   assets={project.assets}
                   floors={project.floors}
                   rooms={project.rooms}
@@ -401,7 +414,7 @@ export default function CompanyCatalogProjectPage() {
                           </div>
                         ) : null}
                         <div className="flex justify-between gap-2">
-                          <dt>Ссылка Tilda</dt>
+                          <dt>Страница проекта</dt>
                           <dd className="text-foreground max-w-[60%] truncate text-right">
                             <a
                               href={project.projectUrl}
@@ -416,7 +429,7 @@ export default function CompanyCatalogProjectPage() {
                       </dl>
                       {hasSyncOverrides ? (
                         <p className="text-muted-foreground text-xs">
-                          Поля с янтарной точкой не перезаписываются Tilda. Сброс — кнопкой
+                          Поля с янтарной точкой не перезаписываются при обновлении каталога. Сброс — кнопкой
                           слева от «Готово» в режиме редактирования.
                         </p>
                       ) : null}
@@ -450,6 +463,13 @@ export default function CompanyCatalogProjectPage() {
                   onSave={(next) => void saveFactoryOffer(next)}
                 />
               </Panel>
+            </TabsContent>
+
+            <TabsContent value="docs" className="mt-0">
+              <ProjectDocsPanel details={project.details ?? null} />
+            </TabsContent>
+            <TabsContent value="logistics" className="mt-0">
+              <ProjectLogisticsPanel details={project.details ?? null} />
             </TabsContent>
           </Tabs>
         </div>

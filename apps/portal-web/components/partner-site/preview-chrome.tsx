@@ -389,6 +389,14 @@ function SiteFooter({ draft }: { draft: PartnerSiteDraft }) {
                   Панельно-каркасные дома
                 </Link>
               </li>
+              <li>
+                <Link
+                  href={previewPaths.catalogByTechnology("frame")}
+                  className="transition hover:text-avgst-green"
+                >
+                  Каркасные дома
+                </Link>
+              </li>
             </ul>
           </nav>
 

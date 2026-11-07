@@ -16,11 +16,11 @@ import {
   verifyApiSignedDownload,
   type UploadPurpose
 } from "./lib/object-storage.js";
-import { StoreTildaClient, verifyOfficialTildaKeys } from "./modules/catalog/tilda-client.js";
 import { hashResetToken } from "./modules/auth/passwords.js";
 import { partnerSiteService } from "./modules/partners/partner-site-service.js";
 import { notificationService } from "./modules/notifications/notification-service.js";
 import { messengerService } from "./modules/messenger/messenger-service.js";
+import { syncCmsCatalog } from "./modules/catalog/cms-sync.js";
 import { PortalService } from "./modules/portal/portal-service.js";
 import { socialProfileService } from "./modules/social/social-profile-service.js";
 import { resolvePartnerSocialUrl } from "./modules/social/social-urls.js";
@@ -164,7 +164,7 @@ const createSiteRequestSchema = z.object({
 });
 
 const generalHousesQuerySchema = z.object({
-  technology: z.enum(["panel_frame", "modular"])
+  technology: z.enum(["panel_frame", "modular", "frame"])
 });
 
 const factoryProductQuerySchema = z.object({
@@ -284,7 +284,7 @@ const socialMediaQuerySchema = z.object({
 const updateCatalogProjectSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
-  technology: z.enum(["modular", "panel_frame"]).optional(),
+  technology: z.enum(["modular", "panel_frame", "frame"]).optional(),
   area: z.number().int().positive().nullable().optional(),
   floors: z.number().int().positive().nullable().optional(),
   bedrooms: z.number().int().nonnegative().nullable().optional(),
@@ -359,7 +359,7 @@ export async function buildApp() {
     // Traefik/Dokploy: иначе request.ip — адрес прокси, rate limit бесполезен
     trustProxy: true
   });
-  const portalService = new PortalService(new StoreTildaClient());
+  const portalService = new PortalService();
 
   await app.register(cors, {
     origin: true,
@@ -896,37 +896,14 @@ export async function buildApp() {
     }
   });
 
-  app.post("/api/company/catalog/sync/tilda", async (request, reply) => {
+  app.post("/api/company/catalog/sync", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
-    if (roleCheck) {
-      return roleCheck;
-    }
-
+    if (roleCheck) return roleCheck;
     try {
-      return await portalService.syncCatalogFromTilda(getAuthUser(request)!.sub);
+      return await syncCmsCatalog();
     } catch (error) {
-      return reply.status(502).send({
-        message: error instanceof Error ? error.message : "Tilda sync failed"
-      });
+      return reply.status(400).send({ message: error instanceof Error ? error.message : "Синхронизация не выполнена" });
     }
-  });
-
-  app.get("/api/company/catalog/tilda-status", async (request, reply) => {
-    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
-    if (roleCheck) {
-      return roleCheck;
-    }
-
-    const official = await verifyOfficialTildaKeys();
-    return {
-      officialApi: official,
-      storeSources: config.tilda.sources.map((source) => ({
-        key: source.key,
-        storepartuid: source.storepartuid,
-        recid: source.recid,
-        catalogPath: source.catalogPath
-      }))
-    };
   });
 
   app.get("/api/company/catalog/sync-runs", async (request, reply) => {
@@ -945,7 +922,7 @@ export async function buildApp() {
     return portalService.listCatalogProjects();
   });
 
-  // Обновление заводских цен из Excel (модульные / ПКД), без синка Tilda
+  // Обновление заводских цен из Excel (модульные / ПКД)
   app.post("/api/company/catalog/prices/import", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
     if (roleCheck) {
@@ -973,7 +950,7 @@ export async function buildApp() {
     const files: Array<{
       fileName: string;
       buffer: Buffer;
-      technology: "modular" | "panel_frame";
+      technology: "modular" | "panel_frame" | "frame";
     }> = [];
 
     try {
@@ -1867,7 +1844,7 @@ export async function buildApp() {
     }
   });
 
-  // --- Общий дилерский раздел: то же, что было в закрытом разделе на Tilda ---
+  // --- Общий дилерский раздел ---
 
   app.get("/api/partner/general/overview", async (request, reply) => {
     const roleCheck = await requireRoles(request, reply, [

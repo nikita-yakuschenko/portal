@@ -51,7 +51,7 @@ type Project = {
   id: string;
   name: string;
   description: string;
-  technology: "modular" | "panel_frame";
+  technology: "modular" | "panel_frame" | "frame";
   area: number | null;
   floors: number | null;
   bedrooms: number | null;
@@ -331,9 +331,7 @@ export default function CompanyCatalogPage() {
                   <IconBuildingStore />
                 </EmptyMedia>
                 <EmptyTitle>Каталог пуст</EmptyTitle>
-                <EmptyDescription>
-                  Запустите синхронизацию с Tilda в разделе «Синхронизации».
-                </EmptyDescription>
+                <EmptyDescription>Список домов пока не загружен.</EmptyDescription>
               </EmptyHeader>
             </Empty>
           ) : filtered.length === 0 ? (

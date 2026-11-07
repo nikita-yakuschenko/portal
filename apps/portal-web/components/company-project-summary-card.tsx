@@ -36,7 +36,7 @@ type SyncOverrides = Partial<
 export type CompanySummaryProject = {
   id: string;
   name: string;
-  technology: "modular" | "panel_frame";
+  technology: "modular" | "panel_frame" | "frame";
   area: number | null;
   floors: number | null;
   bedrooms: number | null;
@@ -55,7 +55,7 @@ function SyncDot({ on }: { on?: boolean | undefined }) {
   return (
     <span
       className="bg-amber-500/90 size-1.5 shrink-0 rounded-full"
-      title="Защищено от синхронизации Tilda"
+      title="Не перезаписывается при обновлении каталога"
     />
   );
 }
@@ -176,7 +176,8 @@ export function CompanyProjectSummaryCard({
           value={project.technology}
           options={[
             { value: "modular", label: TECHNOLOGY_LABELS.modular },
-            { value: "panel_frame", label: TECHNOLOGY_LABELS.panel_frame }
+            { value: "panel_frame", label: TECHNOLOGY_LABELS.panel_frame },
+            { value: "frame", label: TECHNOLOGY_LABELS.frame }
           ]}
           onCommit={(next) => patch({ technology: next })}
           display={technologyNode}
@@ -203,6 +204,7 @@ export function CompanyProjectSummaryCard({
           className="mt-auto"
           area={project.area}
           dimensionsLabel={project.details?.dimensions?.label}
+          blankDimensions
           floors={project.floors}
           bedrooms={project.bedrooms}
           bathrooms={project.bathrooms}

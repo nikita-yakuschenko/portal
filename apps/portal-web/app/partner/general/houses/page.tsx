@@ -21,12 +21,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiFetch } from "@/lib/api";
 import { formatPrice, pluralize, type GeneralHouse } from "@/lib/general-section";
 
-type Technology = "panel_frame" | "modular";
+type Technology = "panel_frame" | "modular" | "frame";
 type SortKey = "price_asc" | "price_desc" | "name_asc" | "area_desc";
 
 const TECH_TITLE: Record<Technology, string> = {
   panel_frame: "Панельно-каркасные дома",
-  modular: "Модульные дома"
+  modular: "Модульные дома",
+  frame: "Каркасные дома"
 };
 
 const SORT_LABEL: Record<SortKey, string> = {
@@ -37,7 +38,8 @@ const SORT_LABEL: Record<SortKey, string> = {
 };
 
 function parseTechnology(value: string | null): Technology {
-  return value === "modular" ? "modular" : "panel_frame";
+  if (value === "modular" || value === "frame" || value === "panel_frame") return value;
+  return "panel_frame";
 }
 
 /** Карточка проекта: фото ведёт, под ним характеристики и заводская цена */
@@ -146,6 +148,7 @@ function GeneralHousesContent() {
           <TabsList>
             <TabsTrigger value="panel_frame">Панельно-каркасные</TabsTrigger>
             <TabsTrigger value="modular">Модульные</TabsTrigger>
+            <TabsTrigger value="frame">Каркасные</TabsTrigger>
           </TabsList>
         </Tabs>
       }

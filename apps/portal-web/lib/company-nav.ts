@@ -2,7 +2,6 @@ import {
   IconBuildingFactory2,
   IconLayoutDashboard,
   IconMessageCircle,
-  IconRefresh,
   IconSmartHome,
   IconUsers,
   IconUserShield
@@ -20,7 +19,6 @@ export const companyNavigation: NavigationItem[] = [
 
 /** Пункты в меню профиля (низ сайдбара) */
 export const companyAccountMenu: NavigationItem[] = [
-  { title: "Синхронизации", href: "/company/sync", icon: IconRefresh },
   { title: "Команда", href: "/company/team", icon: IconUserShield }
 ];
 

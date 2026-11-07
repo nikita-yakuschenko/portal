@@ -36,7 +36,7 @@ function isValidEmail(value: string): boolean {
 }
 
 function technologyPhrase(technology?: string): string | null {
-  if (technology !== "modular" && technology !== "panel_frame") return null;
+  if (technology !== "modular" && technology !== "panel_frame" && technology !== "frame") return null;
   return technologyBadgeCode(technology).toLowerCase();
 }
 

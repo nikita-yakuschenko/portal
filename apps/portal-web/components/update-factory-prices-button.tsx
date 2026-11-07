@@ -114,7 +114,7 @@ export function UpdateFactoryPricesButton({ onDone }: { onDone?: () => void }) {
             <DialogTitle>Обновить заводские цены</DialogTitle>
             <DialogDescription>
               Загрузите прайсы Excel (модульные и/или ПКД). Обновятся только проекты, которые
-              уже есть в каталоге. Цена дома защитится от перезаписи синком Tilda.
+              уже есть в каталоге. Цена дома после этого не сбрасывается обновлением каталога.
             </DialogDescription>
           </DialogHeader>
 

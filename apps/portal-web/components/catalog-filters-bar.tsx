@@ -16,7 +16,7 @@ import { Slider } from "@/components/ui/slider";
 import { TECHNOLOGY_LABELS } from "@/lib/catalog-display";
 import { cn } from "@/lib/utils";
 
-export type CatalogTechnologyFilter = "all" | "modular" | "panel_frame";
+export type CatalogTechnologyFilter = "all" | "modular" | "panel_frame" | "frame";
 export type CatalogFloorsFilter = "all" | "1" | "2";
 
 export type CatalogRangeBounds = { min: number; max: number };
@@ -162,6 +162,7 @@ export function CatalogFiltersBar({
               <SelectItem value="all">Технология: все</SelectItem>
               <SelectItem value="modular">{TECHNOLOGY_LABELS.modular}</SelectItem>
               <SelectItem value="panel_frame">{TECHNOLOGY_LABELS.panel_frame}</SelectItem>
+              <SelectItem value="frame">{TECHNOLOGY_LABELS.frame}</SelectItem>
             </SelectContent>
           </Select>
           {technology !== "all" ? (

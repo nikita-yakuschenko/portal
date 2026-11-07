@@ -246,6 +246,20 @@
       "when": 1788500000000,
       "tag": "0034_dealer_material_storage",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1788600000000,
+      "tag": "0035_plan_variants",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788700000000,
+      "tag": "0036_catalog_source_cms",
+      "breakpoints": true
     }
   ]
 }

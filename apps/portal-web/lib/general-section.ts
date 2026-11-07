@@ -1,4 +1,4 @@
-/** Общий дилерский раздел — то, что раньше жило в закрытом разделе на Tilda */
+/** Общий дилерский раздел */
 
 export type GeneralOverview = {
   panelFrame: number;
@@ -7,6 +7,9 @@ export type GeneralOverview = {
   modular: number;
   modularCover: string | null;
   modularFrom: number | null;
+  frame: number;
+  frameCover: string | null;
+  frameFrom: number | null;
   trusses: number;
   trussCover: string | null;
   roofPanels: number;
@@ -19,7 +22,7 @@ export type GeneralHouse = {
   id: string;
   slug: string;
   name: string;
-  technology: "panel_frame" | "modular";
+  technology: "panel_frame" | "modular" | "frame";
   area: number | null;
   floors: number | null;
   bedrooms: number | null;

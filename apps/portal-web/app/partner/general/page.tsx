@@ -150,7 +150,7 @@ export default function PartnerGeneralPage() {
         </Card>
       ) : (
         <div className="flex flex-col gap-3">
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-3">
             <CoverTile
               href="/partner/general/houses?technology=panel_frame"
               title="Панельно-каркасные дома"
@@ -170,6 +170,16 @@ export default function PartnerGeneralPage() {
                   : ""
               }`}
               cover={overview.modularCover}
+            />
+            <CoverTile
+              href="/partner/general/houses?technology=frame"
+              title="Каркасные дома"
+              hint={`${pluralize(overview.frame, ["проект", "проекта", "проектов"])}${
+                overview.frameFrom !== null
+                  ? ` · от ${formatPrice(overview.frameFrom)}`
+                  : ""
+              }`}
+              cover={overview.frameCover}
             />
           </div>
 

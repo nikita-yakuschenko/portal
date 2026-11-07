@@ -5,7 +5,6 @@
  *
  * DATABASE_URL — из .env или окружения (прод / локаль).
  */
-import { StoreTildaClient } from "../modules/catalog/tilda-client.js";
 import { PortalService } from "../modules/portal/portal-service.js";
 import { sql } from "../db/client.js";
 
@@ -44,7 +43,7 @@ if (password.length < 8) {
   process.exit(1);
 }
 
-const portalService = new PortalService(new StoreTildaClient());
+const portalService = new PortalService();
 
 try {
   const result = await portalService.createPartnerAccount({

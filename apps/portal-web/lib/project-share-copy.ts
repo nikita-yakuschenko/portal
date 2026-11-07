@@ -30,7 +30,9 @@ function floorsGenitive(floors: number | null | undefined): string | null {
 }
 
 function technologyGenitive(technology: string): string {
-  return technology === "panel_frame" ? "панельно-каркасного" : "модульного";
+  if (technology === "panel_frame") return "панельно-каркасного";
+  if (technology === "frame") return "каркасного";
+  return "модульного";
 }
 
 export function parseBathroomCount(value: string | number | null | undefined): number | null {

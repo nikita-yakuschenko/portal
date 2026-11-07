@@ -5,6 +5,7 @@ import { alias } from "drizzle-orm/pg-core";
 
 import type {
   CatalogProjectDetails,
+  CatalogTechnology,
   CrmSendResult,
   PartnerPricingMode,
   PartnerProjectExtraGroup
@@ -39,12 +40,9 @@ import {
   passwordResetTokens,
   users
 } from "../../db/schema.js";
-import { projectSlug } from "../../lib/slug.js";
 import { createCrmAdapters } from "../crm/adapters.js";
 import { createResetToken, hashPassword, verifyPassword } from "../auth/passwords.js";
-import { mapTildaProduct } from "../catalog/catalog-service.js";
-import { buildProjectDetails, defaultOptionGroups } from "../catalog/project-details.js";
-import type { TildaClient } from "../catalog/tilda-client.js";
+import { buildProjectDetails, defaultOptionGroups, normalizeCatalogTechnology } from "../catalog/project-details.js";
 import {
   buildFactoryOffer,
   findCatalogMatches,
@@ -78,7 +76,7 @@ type SessionUser = {
   fullName: string;
 };
 
-/** Поля каталога, которые HQ может защитить от перезаписи синком Tilda */
+/** Поля каталога, которые HQ может защитить от перезаписи при обновлении каталога */
 const CATALOG_SYNC_OVERRIDE_FIELDS = [
   "name",
   "description",
@@ -133,8 +131,6 @@ function normalizeOptionalString(value: string | null): string | undefined {
 export class PortalService {
   private readonly crmAdapters = createCrmAdapters();
 
-  constructor(private readonly tildaClient: TildaClient) {}
-
   async ensureCompanyAdmin(input: {
     email: string;
     password: string;
@@ -158,8 +154,8 @@ export class PortalService {
   }
 
   /**
-   * Общий дилерский вход на время переезда с Tilda: один логин на всех,
-   * те же креды, что были в закрытом разделе сайта. Партнёра ему не заводим —
+   * Общий дилерский вход: один логин на всех.
+   * Партнёра ему не заводим —
    * у роли dealer_guest нет ни своего сайта, ни сделок, ни каталога цен.
    */
   async ensureDealerGuest(input: { email: string; password: string }): Promise<void> {
@@ -212,9 +208,8 @@ export class PortalService {
   }
 
   /**
-   * Канон общего раздела с закрытого кабинета Tilda: фермы МЗП, кровельные
-   * панели и подборка материалов. Дописывает картинки к уже заведённым
-   * позициям без фото — иначе после первого пустого сида раздел остаётся слепым.
+   * Фермы на МЗП, кровельные панели и подборка материалов.
+   * Дописывает картинки к уже заведённым позициям без фото.
    */
   async ensureFactoryCatalog(): Promise<void> {
     const canon: Array<{
@@ -234,9 +229,7 @@ export class PortalService {
         description:
           "Односкатные фермы обычно применяются для устройства односкатных кровель или в случае наличия опоры внутри здания (стена, балки или подстропильные фермы) для устройства скатов кровель.",
         sizes: "6х6, 7х7, 8х8, 9х9, 10х10",
-        imageUrls: [
-          "https://static.tildacdn.com/tild3263-3632-4466-b139-373330343434/2.jpg"
-        ],
+        imageUrls: [],
         price: null,
         priceUnit: "",
         sortOrder: 10
@@ -247,9 +240,7 @@ export class PortalService {
         description:
           "Двускатные фермы применяются для устройства двускатных кровель или как одни из типов ферм для вальмовых или полу вальмовых кровель.",
         sizes: "6х6, 7х7, 8х8, 9х9, 10х10",
-        imageUrls: [
-          "https://static.tildacdn.com/tild3966-3430-4533-a531-383736373638/2.jpg"
-        ],
+        imageUrls: [],
         price: null,
         priceUnit: "",
         sortOrder: 20
@@ -260,9 +251,7 @@ export class PortalService {
         description:
           "Ножничные фермы с подъёмом нижнего пояса устанавливают над конкретными помещениями: гостиные, залы для занятия спортом, часто применяют для устройства навесов над парковками автотранспорта или павильонов.",
         sizes: "6х6, 7х7, 8х8, 9х9, 10х10",
-        imageUrls: [
-          "https://static.tildacdn.com/tild6161-3165-4632-b234-303862623337/2.jpg"
-        ],
+        imageUrls: [],
         price: null,
         priceUnit: "",
         sortOrder: 30
@@ -273,9 +262,7 @@ export class PortalService {
         description:
           "Вальмовая ферма отличается от двускатной отсутствием фронтона — вместо него появляется дополнительный скат. К достоинствам такой крыши можно отнести лучшее восприятие ветровой нагрузки, лучшую защиту стен от осадков.",
         sizes: "9х12",
-        imageUrls: [
-          "https://static.tildacdn.com/tild6166-3434-4135-b538-303134383065/2.jpg"
-        ],
+        imageUrls: [],
         price: null,
         priceUnit: "",
         sortOrder: 40
@@ -286,10 +273,7 @@ export class PortalService {
         description:
           "В готовую кровельную панель входят: стропильная система, контробрешетка для вентиляции межкровельного пространства, обрешетка кровли, утепление 200 мм, пароизоляционная пленка 200 мкрн, гидро-ветрозащитная кровельная мембрана.",
         sizes: "",
-        imageUrls: [
-          "https://static.tildacdn.com/tild6232-3938-4461-a439-316131636539/--.jpg",
-          "https://static.tildacdn.com/tild3466-6365-4137-b162-646432653331/--.jpg"
-        ],
+        imageUrls: [],
         price: 4200,
         priceUnit: "за м²",
         sortOrder: 10
@@ -721,145 +705,6 @@ export class PortalService {
       .where(eq(passwordResetTokens.id, resetToken.id));
   }
 
-  async syncCatalogFromTilda(actorUserId: string) {
-    const syncRunId = randomUUID();
-    await db.insert(catalogSyncRuns).values({
-      id: syncRunId,
-      status: "running"
-    });
-
-    try {
-      const products = await this.tildaClient.fetchProducts();
-      let createdCount = 0;
-      let updatedCount = 0;
-      let assetsDiscovered = 0;
-
-      for (const product of products) {
-        const mapped = mapTildaProduct(product, new Date().toISOString());
-        assetsDiscovered += mapped.assets.length;
-        const area = mapped.area === undefined ? null : Math.round(mapped.area);
-        const floors = mapped.floors === undefined ? null : mapped.floors;
-        const bedrooms = mapped.bedrooms === undefined ? null : mapped.bedrooms;
-        const bathrooms = mapped.bathrooms === undefined ? null : mapped.bathrooms;
-        const basePrice = mapped.basePrice === undefined ? null : mapped.basePrice;
-
-        const existing = await db.query.catalogProjects.findFirst({
-          where: and(eq(catalogProjects.source, "tilda"), eq(catalogProjects.sourceUid, product.id))
-        });
-
-        if (existing) {
-          const overrides = normalizeSyncOverrides(existing.syncOverrides);
-          await db
-            .update(catalogProjects)
-            .set({
-              ...(overrides.name
-                ? {}
-                : { name: mapped.name, slug: projectSlug(mapped.name) }),
-              ...(overrides.description ? {} : { description: mapped.description }),
-              ...(overrides.technology ? {} : { technology: mapped.technology }),
-              details: mapped.details,
-              ...(overrides.area ? {} : { area }),
-              ...(overrides.floors ? {} : { floors }),
-              ...(overrides.bedrooms ? {} : { bedrooms }),
-              ...(overrides.bathrooms ? {} : { bathrooms }),
-              ...(overrides.basePrice ? {} : { basePrice }),
-              currency: mapped.currency,
-              projectUrl: mapped.projectUrl,
-              ...(overrides.active ? {} : { active: true }),
-              sourcePayload: mapped.sourcePayload,
-              lastSyncedAt: new Date(mapped.lastSyncedAt)
-            })
-            .where(eq(catalogProjects.id, existing.id));
-
-          // Сохраняем ручные правки (тип / главный / скрыт) по URL при пересинхронизации
-          const previousAssets = await db
-            .select()
-            .from(catalogAssets)
-            .where(eq(catalogAssets.projectId, existing.id));
-          const previousByUrl = new Map(previousAssets.map((asset) => [asset.sourceUrl, asset]));
-
-          await db.delete(catalogAssets).where(eq(catalogAssets.projectId, existing.id));
-          if (mapped.assets.length > 0) {
-            await db.insert(catalogAssets).values(
-              mapped.assets.map((asset) => {
-                const previous = previousByUrl.get(asset.sourceUrl);
-                return {
-                  ...asset,
-                  projectId: existing.id,
-                  type: previous?.type ?? asset.type,
-                  floorNumber: previous?.floorNumber ?? asset.floorNumber ?? null,
-                  isPrimary: previous?.isPrimary ?? asset.isPrimary,
-                  isHidden: previous?.isHidden ?? false
-                };
-              })
-            );
-          }
-
-          updatedCount += 1;
-        } else {
-          await db.insert(catalogProjects).values({
-            id: mapped.id,
-            source: mapped.source,
-            sourceUid: mapped.sourceUid,
-            name: mapped.name,
-            slug: mapped.slug,
-            description: mapped.description,
-            technology: mapped.technology,
-            details: mapped.details,
-            area,
-            floors,
-            bedrooms,
-            bathrooms,
-            basePrice,
-            currency: mapped.currency,
-            projectUrl: mapped.projectUrl,
-            active: mapped.active,
-            sourcePayload: mapped.sourcePayload,
-            lastSyncedAt: new Date(mapped.lastSyncedAt)
-          });
-          if (mapped.assets.length > 0) {
-            await db.insert(catalogAssets).values(mapped.assets);
-          }
-          createdCount += 1;
-        }
-      }
-
-      await db
-        .update(catalogSyncRuns)
-        .set({
-          status: "completed",
-          createdCount,
-          updatedCount,
-          assetsDiscovered,
-          finishedAt: new Date()
-        })
-        .where(eq(catalogSyncRuns.id, syncRunId));
-
-      await this.writeAuditLog(actorUserId, "catalog.sync", "catalog_sync_run", syncRunId, {
-        createdCount,
-        updatedCount
-      });
-
-      return {
-        id: syncRunId,
-        createdCount,
-        updatedCount,
-        assetsDiscovered
-      };
-    } catch (error) {
-      const errors = [error instanceof Error ? error.message : "Unknown sync error"];
-      await db
-        .update(catalogSyncRuns)
-        .set({
-          status: "failed",
-          errors,
-          finishedAt: new Date()
-        })
-        .where(eq(catalogSyncRuns.id, syncRunId));
-      throw error;
-    }
-  }
-
   async listCatalogProjects() {
     const projects = await db.select().from(catalogProjects).orderBy(catalogProjects.name);
 
@@ -1236,7 +1081,7 @@ export class PortalService {
     patch: {
       name?: string | undefined;
       description?: string | undefined;
-      technology?: "modular" | "panel_frame" | undefined;
+      technology?: CatalogTechnology | undefined;
       area?: number | null | undefined;
       floors?: number | null | undefined;
       bedrooms?: number | null | undefined;
@@ -1377,17 +1222,11 @@ export class PortalService {
       }
 
       const targets = catalog
-        .filter((row) =>
-          file.technology === "panel_frame"
-            ? row.technology === "panel_frame"
-            : row.technology !== "panel_frame"
-        )
+        .filter((row) => normalizeCatalogTechnology(row.technology) === file.technology)
         .map((row) => ({
           id: row.id,
           name: row.name,
-          technology: (row.technology === "panel_frame" ? "panel_frame" : "modular") as
-            | "modular"
-            | "panel_frame"
+          technology: file.technology
         }));
 
       for (const block of blocks) {
@@ -1609,9 +1448,7 @@ export class PortalService {
     assets: Array<typeof catalogAssets.$inferSelect>,
     rooms: Array<typeof catalogProjectRooms.$inferSelect> = []
   ) {
-    const technology = (project.technology === "panel_frame" ? "panel_frame" : "modular") as
-      | "modular"
-      | "panel_frame";
+    const technology = normalizeCatalogTechnology(project.technology);
     const storedDetails = project.details as CatalogProjectDetails | Record<string, unknown> | null;
     const hasDetails =
       storedDetails &&
@@ -1661,6 +1498,8 @@ export class PortalService {
           localPath: asset.localPath,
           type: asset.type as "exterior" | "floor_plan" | "interior" | "unknown",
           floorNumber: asset.floorNumber ?? null,
+          variantLabel: asset.variantLabel ?? null,
+          variantIndex: asset.variantIndex ?? null,
           sortOrder: asset.sortOrder,
           isPrimary: asset.isPrimary,
           isHidden: asset.isHidden
@@ -1672,6 +1511,8 @@ export class PortalService {
           id: room.id,
           projectId: room.projectId,
           floorNumber: room.floorNumber,
+          variantLabel: room.variantLabel ?? null,
+          variantIndex: room.variantIndex ?? null,
           name: room.name,
           area: room.area,
           sortOrder: room.sortOrder,
@@ -2621,7 +2462,7 @@ export class PortalService {
    * Общий дилерский раздел: витрина завода до того, как дилер получил свой
    * кабинет с персональными ценами. Цены здесь заводские, одни на всех.
    */
-  async listGeneralHouses(technology: "panel_frame" | "modular") {
+  async listGeneralHouses(technology: CatalogTechnology) {
     const rows = await db
       .select({
         id: catalogProjects.id,
@@ -2658,7 +2499,7 @@ export class PortalService {
         id: row.id,
         slug: row.slug,
         name: row.name,
-        technology: row.technology,
+        technology: normalizeCatalogTechnology(row.technology),
         area: row.area,
         floors: row.floors,
         bedrooms: row.bedrooms,
@@ -2715,9 +2556,10 @@ export class PortalService {
 
   /** Сводка для главной общего раздела: счётчики и обложки разделов */
   async getGeneralOverview() {
-    const [panel, modular, products, materials] = await Promise.all([
+    const [panel, modular, frame, products, materials] = await Promise.all([
       this.listGeneralHouses("panel_frame"),
       this.listGeneralHouses("modular"),
+      this.listGeneralHouses("frame"),
       db.select().from(factoryProducts).where(eq(factoryProducts.isActive, true)),
       db
         .select({ id: dealerMaterials.id })
@@ -2740,6 +2582,13 @@ export class PortalService {
       modular: modular.length,
       modularCover: cover(modular),
       modularFrom: modular.reduce<number | null>(
+        (min, house) =>
+          house.basePrice !== null && (min === null || house.basePrice < min) ? house.basePrice : min,
+        null
+      ),
+      frame: frame.length,
+      frameCover: cover(frame),
+      frameFrom: frame.reduce<number | null>(
         (min, house) =>
           house.basePrice !== null && (min === null || house.basePrice < min) ? house.basePrice : min,
         null
