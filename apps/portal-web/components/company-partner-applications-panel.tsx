@@ -35,6 +35,14 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/api";
 
+export type PartnerCompanyCard = {
+  legalName: string;
+  phone: string;
+  kpp: string | null;
+  ogrn: string;
+  legalAddress: string;
+};
+
 export type PartnerApplication = {
   id: string;
   inn: string;
@@ -45,18 +53,37 @@ export type PartnerApplication = {
   region: string;
   interests: string;
   message: string | null;
+  companyCard: PartnerCompanyCard | null;
   status: string;
   reviewComment: string | null;
   createdAt: string;
   reviewedAt: string | null;
 };
 
+type ReviewAction = "contract" | "edo" | "approve" | "reject";
+
 const STATUS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" }> = {
   new: { label: "Новая", variant: "secondary" },
   under_review: { label: "На рассмотрении", variant: "secondary" },
-  approved: { label: "Одобрена", variant: "default" },
+  contract: { label: "Договор", variant: "secondary" },
+  edo: { label: "ЭДО", variant: "secondary" },
+  approved: { label: "Доступ открыт", variant: "default" },
   rejected: { label: "Отклонена", variant: "destructive" }
 };
+
+const ACTION_LABEL: Record<ReviewAction, string> = {
+  contract: "К договору",
+  edo: "К ЭДО",
+  approve: "Открыть доступ",
+  reject: "Отклонить"
+};
+
+function nextStep(status: string): ReviewAction | null {
+  if (status === "new" || status === "under_review") return "contract";
+  if (status === "contract") return "edo";
+  if (status === "edo") return "approve";
+  return null;
+}
 
 const INTEREST_LABELS: Record<string, string> = {
   modular: "Модульные",
@@ -88,7 +115,7 @@ export function CompanyPartnerApplicationsPanel({
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PartnerApplication | null>(null);
-  const [reviewAction, setReviewAction] = useState<"approve" | "reject" | null>(null);
+  const [reviewAction, setReviewAction] = useState<ReviewAction | null>(null);
   const [comment, setComment] = useState("");
 
   const load = useCallback(async () => {
@@ -106,7 +133,7 @@ export function CompanyPartnerApplicationsPanel({
     void load();
   }, [load]);
 
-  function openReview(item: PartnerApplication, action: "approve" | "reject") {
+  function openReview(item: PartnerApplication, action: ReviewAction) {
     setDetail(item);
     setReviewAction(action);
     setComment("");
@@ -123,18 +150,21 @@ export function CompanyPartnerApplicationsPanel({
           body: JSON.stringify({ comment: comment.trim() || undefined })
         }
       );
+      const sent = result.mailSent
+        ? "Письмо отправлено."
+        : "Статус обновлён, письмо не отправилось.";
       if (reviewAction === "approve") {
-        toast.success("Заявка одобрена", {
+        toast.success("Доступ открыт", {
           description: result.mailSent
             ? "Письмо с доступом отправлено партнёру."
             : "Партнёр создан, но письмо не ушло. Сбросьте пароль на карточке партнёра."
         });
+      } else if (reviewAction === "contract") {
+        toast.success("Заявка переведена к договору", { description: sent });
+      } else if (reviewAction === "edo") {
+        toast.success("Заявка переведена к ЭДО", { description: sent });
       } else {
-        toast.success("Заявка отклонена", {
-          description: result.mailSent
-            ? "Письмо об отклонении отправлено."
-            : "Статус обновлён, письмо не отправилось."
-        });
+        toast.success("Заявка отклонена", { description: sent });
       }
       setReviewAction(null);
       setDetail(null);
@@ -216,38 +246,17 @@ export function CompanyPartnerApplicationsPanel({
                           {new Date(item.createdAt).toLocaleDateString("ru-RU")}
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setDetail(item);
-                                setReviewAction(null);
-                                setComment("");
-                              }}
-                            >
-                              Открыть
-                            </Button>
-                            {item.status === "new" ? (
-                              <>
-                                <Button
-                                  size="sm"
-                                  disabled={busyId === item.id}
-                                  onClick={() => openReview(item, "approve")}
-                                >
-                                  Одобрить
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={busyId === item.id}
-                                  onClick={() => openReview(item, "reject")}
-                                >
-                                  Отклонить
-                                </Button>
-                              </>
-                            ) : null}
-                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setDetail(item);
+                              setReviewAction(null);
+                              setComment("");
+                            }}
+                          >
+                            Открыть
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );
@@ -276,10 +285,14 @@ export function CompanyPartnerApplicationsPanel({
                 <DialogTitle>{detail.companyName}</DialogTitle>
                 <DialogDescription>
                   {reviewAction === "approve"
-                    ? "Одобрение заявки — будет создан кабинет партнёра."
-                    : reviewAction === "reject"
-                      ? "Отклонение заявки — доступ в кабинет не выдаётся."
-                      : "Детали заявки на подключение."}
+                    ? "Договор и ЭДО отмечены. Сейчас откроется кабинет партнёра."
+                    : reviewAction === "contract"
+                      ? "Заявка перейдёт к договору. Кабинет ещё не создаётся."
+                      : reviewAction === "edo"
+                        ? "Договор отмечен. Заявка перейдёт к подключению ЭДО."
+                        : reviewAction === "reject"
+                          ? "Отклонение заявки — доступ в кабинет не выдаётся."
+                          : "Сначала карточка компании, затем договор и ЭДО, и только потом доступ."}
                 </DialogDescription>
               </DialogHeader>
 
@@ -299,6 +312,22 @@ export function CompanyPartnerApplicationsPanel({
                 <div className="flex justify-between gap-4 py-2">
                   <dt className="text-muted-foreground">ИНН</dt>
                   <dd className="text-right font-medium">{detail.inn || "—"}</dd>
+                </div>
+                <div className="flex justify-between gap-4 py-2">
+                  <dt className="text-muted-foreground">Юридическое название</dt>
+                  <dd className="text-right font-medium">{detail.companyCard?.legalName || "—"}</dd>
+                </div>
+                <div className="flex justify-between gap-4 py-2">
+                  <dt className="text-muted-foreground">{detail.inn.length === 12 ? "ОГРНИП" : "ОГРН"}</dt>
+                  <dd className="text-right font-medium">{detail.companyCard?.ogrn || "—"}</dd>
+                </div>
+                <div className="flex justify-between gap-4 py-2">
+                  <dt className="text-muted-foreground">КПП</dt>
+                  <dd className="text-right font-medium">{detail.companyCard?.kpp || "—"}</dd>
+                </div>
+                <div className="flex flex-col gap-1 py-2">
+                  <dt className="text-muted-foreground">Юридический адрес</dt>
+                  <dd className="font-medium">{detail.companyCard?.legalAddress || "—"}</dd>
                 </div>
                 <div className="flex justify-between gap-4 py-2">
                   <dt className="text-muted-foreground">Регион</dt>
@@ -355,20 +384,16 @@ export function CompanyPartnerApplicationsPanel({
                       disabled={Boolean(busyId)}
                       onClick={() => void submitReview()}
                     >
-                      {busyId
-                        ? "Сохранение…"
-                        : reviewAction === "approve"
-                          ? "Одобрить"
-                          : "Отклонить"}
+                      {busyId ? "Сохранение…" : ACTION_LABEL[reviewAction]}
                     </Button>
                   </>
-                ) : detail.status === "new" ? (
+                ) : nextStep(detail.status) ? (
                   <>
                     <Button type="button" variant="outline" onClick={() => openReview(detail, "reject")}>
                       Отклонить
                     </Button>
-                    <Button type="button" onClick={() => openReview(detail, "approve")}>
-                      Одобрить
+                    <Button type="button" onClick={() => openReview(detail, nextStep(detail.status)!)}>
+                      {ACTION_LABEL[nextStep(detail.status)!]}
                     </Button>
                   </>
                 ) : (

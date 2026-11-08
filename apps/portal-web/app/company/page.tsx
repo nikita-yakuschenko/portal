@@ -39,7 +39,12 @@ export default function CompanyPage() {
     void load();
   }, [load]);
 
-  const pending = (data?.applications ?? []).filter((item) => item.status === "new");
+  const pending = (data?.applications ?? []).filter((item) =>
+    item.status === "new" ||
+    item.status === "under_review" ||
+    item.status === "contract" ||
+    item.status === "edo"
+  );
 
   return (
     <DashboardShell
@@ -55,7 +60,7 @@ export default function CompanyPage() {
         <StatCard
           title="Заявки на подключение"
           value={data ? String(pending.length) : "—"}
-          hint="Новые заявки в очереди"
+          hint="Заявки до открытия доступа"
         />
         <StatCard
           title="Активные партнёры"

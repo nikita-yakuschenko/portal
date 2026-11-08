@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 
 // Публичные зоны всегда светлые: лендинг, вход/регистрация и витрина покупателя
-const LIGHT_ONLY_PATHS = ["/", "/login", "/signup", "/apply"];
+const LIGHT_ONLY_PATHS = ["/", "/login", "/signup", "/apply", "/forgot-password", "/reset-password"];
 
 function isLightOnly(pathname: string): boolean {
   return (

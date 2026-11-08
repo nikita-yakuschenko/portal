@@ -14,9 +14,20 @@ import {
 export const partnerApplicationStatusEnum = pgEnum("partner_application_status", [
   "new",
   "under_review",
+  "contract",
+  "edo",
   "approved",
   "rejected"
 ]);
+
+/** Карточка компании из заявки: реквизиты, не коммерческое название. */
+export type PartnerCompanyCard = {
+  legalName: string;
+  phone: string;
+  kpp: string | null;
+  ogrn: string;
+  legalAddress: string;
+};
 
 export const partnerStatusEnum = pgEnum("partner_status", ["pending", "active", "suspended"]);
 export const roleEnum = pgEnum("role", [
@@ -89,6 +100,7 @@ export const partnerApplications = pgTable(
     region: text("region").notNull(),
     interests: text("interests"),
     message: text("message"),
+    companyCard: jsonb("company_card").$type<PartnerCompanyCard | null>(),
     passwordHash: text("password_hash"),
     status: partnerApplicationStatusEnum("status").notNull().default("new"),
     reviewComment: text("review_comment"),

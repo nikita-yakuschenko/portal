@@ -33,6 +33,7 @@ import {
   deals,
   factoryProducts,
   partnerApplications,
+  type PartnerCompanyCard,
   partnerInquiries,
   partnerProjectPrices,
   partners,
@@ -64,6 +65,7 @@ import { appLoginUrl, appResetPasswordUrl, sendMailSafe } from "../mail/mailer.j
 import {
   applicationReceivedMail,
   applicationRejectedMail,
+  applicationStepMail,
   partnerAccessMail,
   passwordResetMail
 } from "../mail/messages.js";
@@ -126,6 +128,58 @@ function maskSecret(value: string): string {
 
 function normalizeOptionalString(value: string | null): string | undefined {
   return value ?? undefined;
+}
+
+function onlyDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+/** Карточка из заявки: юрлицо (ИНН 10) требует КПП и ОГРН, ИП (ИНН 12) — ОГРНИП. */
+function parseCompanyCard(input: {
+  inn: string;
+  legalName: string;
+  phone: string;
+  kpp?: string | undefined;
+  ogrn: string;
+  legalAddress: string;
+}): PartnerCompanyCard {
+  const inn = onlyDigits(input.inn);
+  const phone = onlyDigits(input.phone);
+  const kpp = onlyDigits(input.kpp ?? "");
+  const ogrn = onlyDigits(input.ogrn);
+  const legalName = input.legalName.trim();
+  const legalAddress = input.legalAddress.trim();
+  const company = inn.length === 10;
+
+  if (legalName.length < 2) {
+    throw new Error("Укажите юридическое название.");
+  }
+  if (phone.length < 10) {
+    throw new Error("Укажите телефон.");
+  }
+  if (legalAddress.length < 5) {
+    throw new Error("Укажите юридический адрес.");
+  }
+  if (company && kpp.length !== 9) {
+    throw new Error("Для организации нужен КПП из 9 цифр.");
+  }
+  if (!company && kpp.length > 0 && kpp.length !== 9) {
+    throw new Error("КПП должен содержать 9 цифр.");
+  }
+  if (company && ogrn.length !== 13) {
+    throw new Error("ОГРН должен содержать 13 цифр.");
+  }
+  if (!company && ogrn.length !== 15) {
+    throw new Error("ОГРНИП должен содержать 15 цифр.");
+  }
+
+  return {
+    legalName,
+    phone,
+    kpp: kpp || null,
+    ogrn,
+    legalAddress
+  };
 }
 
 export class PortalService {
@@ -494,34 +548,54 @@ export class PortalService {
     region: string;
     interests: Array<"modular" | "panel_frame" | "farms">;
     message?: string;
+    companyCard: {
+      legalName: string;
+      phone: string;
+      kpp?: string | undefined;
+      ogrn: string;
+      legalAddress: string;
+    };
   }) {
-    const existing = await db.query.partnerApplications.findFirst({
-      where: eq(partnerApplications.email, input.email)
-    });
+    const email = input.email.trim().toLowerCase();
+    const companyCard = parseCompanyCard({ inn: input.inn, ...input.companyCard });
+    const [existingApplication, existingUser] = await Promise.all([
+      db.query.partnerApplications.findFirst({
+        where: or(eq(partnerApplications.email, email), eq(partnerApplications.email, input.email.trim()))
+      }),
+      db.query.users.findFirst({
+        where: or(eq(users.email, email), eq(users.email, input.email.trim()))
+      })
+    ]);
 
-    if (existing) {
+    if (existingUser) {
+      throw new Error("Кабинет с таким email уже есть. Войдите или сбросьте пароль.");
+    }
+
+    if (existingApplication) {
       throw new Error("Заявка с таким email уже есть.");
     }
 
     const application = {
       id: randomUUID(),
-      inn: input.inn,
-      companyName: input.companyName,
-      contactName: input.contactName,
-      email: input.email,
-      phone: null,
-      region: input.region,
+      inn: onlyDigits(input.inn),
+      companyName: input.companyName.trim(),
+      contactName: input.contactName.trim(),
+      email,
+      phone: companyCard.phone,
+      region: input.region.trim(),
       interests: JSON.stringify(input.interests),
-      message: input.message,
+      message: input.message?.trim() || null,
+      companyCard,
       passwordHash: null,
       status: "new" as const
     };
 
     await db.insert(partnerApplications).values(application);
-    await sendMailSafe(application.email, applicationReceivedMail(application.contactName));
+    const mailSent = await sendMailSafe(application.email, applicationReceivedMail(application.contactName));
     return {
       id: application.id,
-      status: application.status
+      status: application.status,
+      mailSent
     };
   }
 
@@ -540,11 +614,15 @@ export class PortalService {
     });
 
     if (!application) {
-      throw new Error("Application not found.");
+      throw new Error("Заявка не найдена.");
     }
 
     if (application.status === "approved" || application.status === "rejected") {
-      throw new Error("Application is already reviewed.");
+      throw new Error("Заявка уже закрыта.");
+    }
+
+    if (input.action === "approve" && application.status !== "edo") {
+      throw new Error("Доступ открывается после договора и ЭДО.");
     }
 
     if (input.action === "reject") {
@@ -576,12 +654,12 @@ export class PortalService {
     await db.insert(partners).values({
       id: partnerId,
       companyName: application.companyName,
-      legalName: application.companyName,
+      legalName: application.companyCard?.legalName ?? application.companyName,
       inn: application.inn,
       status: "active",
       region: application.region,
       email: application.email,
-      phone: application.phone ?? ""
+      phone: application.companyCard?.phone ?? application.phone ?? ""
     });
 
     await db.insert(users).values({
@@ -630,9 +708,66 @@ export class PortalService {
     };
   }
 
+  async advancePartnerApplication(input: {
+    applicationId: string;
+    actorUserId: string;
+    stage: "contract" | "edo";
+    comment?: string;
+  }) {
+    const application = await db.query.partnerApplications.findFirst({
+      where: eq(partnerApplications.id, input.applicationId)
+    });
+
+    if (!application) {
+      throw new Error("Заявка не найдена.");
+    }
+
+    if (application.status === "approved" || application.status === "rejected") {
+      throw new Error("Заявка уже закрыта.");
+    }
+
+    const allowed =
+      input.stage === "contract"
+        ? application.status === "new" || application.status === "under_review"
+        : application.status === "contract";
+
+    if (!allowed) {
+      throw new Error(
+        input.stage === "contract"
+          ? "К договору можно перейти только из новой заявки."
+          : "К ЭДО можно перейти только после договора."
+      );
+    }
+
+    await db
+      .update(partnerApplications)
+      .set({
+        status: input.stage,
+        reviewComment: input.comment,
+        reviewedAt: new Date()
+      })
+      .where(eq(partnerApplications.id, input.applicationId));
+
+    await this.writeAuditLog(
+      input.actorUserId,
+      input.stage === "contract" ? "application.contract" : "application.edo",
+      "partner_application",
+      input.applicationId,
+      { comment: input.comment ?? "" }
+    );
+
+    const mailSent = await sendMailSafe(
+      application.email,
+      applicationStepMail(application.contactName, input.stage)
+    );
+
+    return { status: input.stage, mailSent };
+  }
+
   async login(email: string, password: string): Promise<SessionUser | null> {
+    const raw = email.trim();
     const user = await db.query.users.findFirst({
-      where: eq(users.email, email)
+      where: or(eq(users.email, raw), eq(users.email, raw.toLowerCase()))
     });
 
     if (!user || !user.isActive) {
@@ -672,16 +807,20 @@ export class PortalService {
       expiresAt: new Date(Date.now() + 1000 * 60 * 60)
     });
 
-    await sendMailSafe(
+    const mailSent = await sendMailSafe(
       user.email,
       passwordResetMail({
         name: user.fullName,
         resetUrl: appResetPasswordUrl(token)
       })
     );
+
+    if (!mailSent) {
+      throw new Error("Письмо не отправилось. Почта кабинета сейчас недоступна.");
+    }
   }
 
-  async resetPassword(tokenHash: string, nextPassword: string) {
+  async resetPassword(tokenHash: string, nextPassword: string): Promise<SessionUser> {
     const resetToken = await db.query.passwordResetTokens.findFirst({
       where: eq(passwordResetTokens.tokenHash, tokenHash)
     });
@@ -703,6 +842,22 @@ export class PortalService {
         usedAt: new Date()
       })
       .where(eq(passwordResetTokens.id, resetToken.id));
+
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, resetToken.userId)
+    });
+
+    if (!user || !user.isActive) {
+      throw new Error("Пользователь не найден.");
+    }
+
+    return {
+      id: user.id,
+      partnerId: user.partnerId,
+      role: user.role,
+      email: user.email,
+      fullName: user.fullName
+    };
   }
 
   async listCatalogProjects() {

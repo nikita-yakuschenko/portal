@@ -27,7 +27,7 @@ import { resolvePartnerSocialUrl } from "./modules/social/social-urls.js";
 import { fetchProxiedMedia } from "./modules/social/media-proxy.js";
 import { OutboundError } from "./modules/social/social-http.js";
 import { consumeRateLimit } from "./modules/social/rate-limit.js";
-import { appLoginUrl, sendMailSafe } from "./modules/mail/mailer.js";
+import { appLoginUrl, isMailConfigured, sendMailSafe } from "./modules/mail/mailer.js";
 import { partnerAccessMail } from "./modules/mail/messages.js";
 import { partnerSiteDraftSchema } from "@b2b/site-schema";
 import type { SocialProfileSnapshot } from "@b2b/domain";
@@ -41,7 +41,14 @@ const applicationSchema = z.object({
   interests: z
     .array(z.enum(["modular", "panel_frame", "farms"]))
     .min(1, "Выберите хотя бы один интерес"),
-  message: z.string().optional()
+  message: z.string().optional(),
+  companyCard: z.object({
+    legalName: z.string().min(2),
+    phone: z.string().min(10),
+    kpp: z.string().optional(),
+    ogrn: z.string().min(13),
+    legalAddress: z.string().min(5)
+  })
 });
 
 const loginSchema = z.object({
@@ -511,13 +518,21 @@ export async function buildApp() {
         region: string;
         interests: Array<"modular" | "panel_frame" | "farms">;
         message?: string;
+        companyCard: {
+          legalName: string;
+          phone: string;
+          kpp?: string | undefined;
+          ogrn: string;
+          legalAddress: string;
+        };
       } = {
         inn: parsed.data.inn,
         companyName: parsed.data.companyName,
         contactName: parsed.data.contactName,
         email: parsed.data.email,
         region: parsed.data.region,
-        interests: parsed.data.interests
+        interests: parsed.data.interests,
+        companyCard: parsed.data.companyCard
       };
 
       if (parsed.data.message) {
@@ -792,8 +807,20 @@ export async function buildApp() {
       return reply.status(429).send({ message: "Слишком много попыток. Подождите немного." });
     }
 
-    await portalService.requestPasswordReset(parsed.data.email);
-    return { ok: true };
+    if (!isMailConfigured()) {
+      return reply.status(503).send({
+        message: "Почта кабинета сейчас не настроена. Напишите заводу, чтобы сбросить пароль."
+      });
+    }
+
+    try {
+      await portalService.requestPasswordReset(parsed.data.email);
+      return { ok: true };
+    } catch (error) {
+      return reply.status(503).send({
+        message: error instanceof Error ? error.message : "Письмо не отправилось."
+      });
+    }
   });
 
   app.post("/api/auth/password-reset/confirm", async (request, reply) => {
@@ -807,8 +834,16 @@ export async function buildApp() {
     }
 
     try {
-      await portalService.resetPassword(hashResetToken(parsed.data.token), parsed.data.password);
-      return { ok: true };
+      const user = await portalService.resetPassword(hashResetToken(parsed.data.token), parsed.data.password);
+      const token = await reply.jwtSign({
+        sub: user.id,
+        partnerId: user.partnerId,
+        role: user.role,
+        email: user.email,
+        fullName: user.fullName
+      } satisfies JwtPayload);
+      reply.setCookie("b2b_session", token, sessionCookieOptions);
+      return { user };
     } catch (error) {
       return reply.status(400).send({ message: error instanceof Error ? error.message : "Reset failed" });
     }
@@ -894,6 +929,43 @@ export async function buildApp() {
     } catch (error) {
       return reply.status(400).send({ message: error instanceof Error ? error.message : "Reject failed" });
     }
+  });
+
+  async function advanceApplication(
+    request: { jwtVerify: () => Promise<unknown>; user?: unknown; body: unknown; params: unknown },
+    reply: { status: (code: number) => { send: (body: unknown) => unknown } },
+    stage: "contract" | "edo"
+  ) {
+    const roleCheck = await requireRoles(request, reply as never, ["company_admin", "company_manager"]);
+    if (roleCheck) {
+      return roleCheck;
+    }
+
+    const parsed = reviewSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+
+    try {
+      return await portalService.advancePartnerApplication({
+        applicationId: z.object({ id: z.string() }).parse(request.params).id,
+        actorUserId: getAuthUser(request)!.sub,
+        stage,
+        ...(parsed.data.comment !== undefined ? { comment: parsed.data.comment } : {})
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        message: error instanceof Error ? error.message : "Не удалось сменить шаг заявки"
+      });
+    }
+  }
+
+  app.post("/api/company/applications/:id/contract", async (request, reply) => {
+    return advanceApplication(request, reply, "contract");
+  });
+
+  app.post("/api/company/applications/:id/edo", async (request, reply) => {
+    return advanceApplication(request, reply, "edo");
   });
 
   app.post("/api/company/catalog/sync", async (request, reply) => {

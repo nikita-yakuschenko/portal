@@ -48,11 +48,11 @@ function ResetPasswordFormInner({ className, ...props }: React.ComponentProps<"d
     setResultMessage("");
 
     try {
-      await apiFetch("/api/auth/password-reset/confirm", {
+      const result = await apiFetch<{ user: { role: string } }>("/api/auth/password-reset/confirm", {
         method: "POST",
         body: JSON.stringify({ token, password })
       });
-      router.replace("/login");
+      router.replace(result.user.role === "dealer_guest" ? "/portal/general" : "/portal");
     } catch (err) {
       setResultMessage(
         err instanceof Error ? err.message : "Не удалось сменить пароль. Попробуйте ещё раз."

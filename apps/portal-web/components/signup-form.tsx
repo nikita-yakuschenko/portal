@@ -28,6 +28,11 @@ type FormState = {
   companyName: string;
   contactName: string;
   email: string;
+  phone: string;
+  legalName: string;
+  kpp: string;
+  ogrn: string;
+  legalAddress: string;
   region: string;
   interests: InterestId[];
   message: string;
@@ -38,13 +43,18 @@ const initialState: FormState = {
   companyName: "",
   contactName: "",
   email: "",
+  phone: "",
+  legalName: "",
+  kpp: "",
+  ogrn: "",
+  legalAddress: "",
   region: "",
   interests: [],
   message: ""
 };
 
 export function SignupForm({ className, ...props }: React.ComponentProps<"div">) {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [form, setForm] = useState<FormState>(initialState);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -61,7 +71,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
     }));
   }
 
-  function goToStep(next: 1 | 2) {
+  function goToStep(next: 1 | 2 | 3) {
     setStep(next);
     setAnimKey((key) => key + 1);
   }
@@ -73,9 +83,49 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
       setMessage("ИНН должен содержать 10 или 12 цифр.");
       return;
     }
+    if (form.phone.replace(/\D/g, "").length < 10) {
+      setStatus("error");
+      setMessage("Укажите телефон.");
+      return;
+    }
     setStatus("idle");
     setMessage("");
     goToStep(2);
+  }
+
+  function goCard(event: React.FormEvent) {
+    event.preventDefault();
+    const company = form.inn.length === 10;
+    const kpp = form.kpp.replace(/\D/g, "");
+    const ogrn = form.ogrn.replace(/\D/g, "");
+    if (form.legalName.trim().length < 2) {
+      setStatus("error");
+      setMessage("Укажите юридическое название.");
+      return;
+    }
+    if (form.legalAddress.trim().length < 5) {
+      setStatus("error");
+      setMessage("Укажите юридический адрес.");
+      return;
+    }
+    if (company && kpp.length !== 9) {
+      setStatus("error");
+      setMessage("Для организации нужен КПП из 9 цифр.");
+      return;
+    }
+    if (!company && kpp.length > 0 && kpp.length !== 9) {
+      setStatus("error");
+      setMessage("КПП должен содержать 9 цифр.");
+      return;
+    }
+    if ((company && ogrn.length !== 13) || (!company && ogrn.length !== 15)) {
+      setStatus("error");
+      setMessage(company ? "ОГРН должен содержать 13 цифр." : "ОГРНИП должен содержать 15 цифр.");
+      return;
+    }
+    setStatus("idle");
+    setMessage("");
+    goToStep(3);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -91,7 +141,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
     setMessage("Отправляем заявку...");
 
     try {
-      await apiFetch("/api/public/partner-applications", {
+      const result = await apiFetch<{ mailSent: boolean }>("/api/public/partner-applications", {
         method: "POST",
         body: JSON.stringify({
           inn: form.inn,
@@ -100,12 +150,23 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
           email: form.email,
           region: form.region,
           interests: form.interests,
-          message: form.message || undefined
+          message: form.message || undefined,
+          companyCard: {
+            legalName: form.legalName,
+            phone: form.phone,
+            kpp: form.kpp || undefined,
+            ogrn: form.ogrn,
+            legalAddress: form.legalAddress
+          }
         })
       });
 
       setStatus("success");
-      setMessage("Заявка принята. Мы отправили письмо на указанный email.");
+      setMessage(
+        result.mailSent
+          ? "Заявка принята. Письмо ушло на указанную почту. Дальше завод проверит карточку, договор и ЭДО."
+          : "Заявка принята. Письмо не отправилось, завод увидит её в кабинете."
+      );
       setForm(initialState);
       goToStep(1);
     } catch (err) {
@@ -125,7 +186,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
           <div className="min-w-0 p-5 md:p-7">
             <div className="mb-4">
               <h1 className="text-2xl font-bold">Регистрация</h1>
-              <p className="mt-1 text-sm text-muted-foreground">Шаг {step} из 2</p>
+              <p className="mt-1 text-sm text-muted-foreground">Шаг {step} из 3</p>
             </div>
 
             <div key={animKey} className="signup-step-enter min-w-0">
@@ -180,10 +241,85 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
                         onChange={(event) => updateField("email", event.target.value)}
                       />
                     </Field>
+                    <Field className="min-w-0">
+                      <FieldLabel htmlFor="phone">Телефон</FieldLabel>
+                      <Input
+                        id="phone"
+                        className="max-w-full"
+                        inputMode="tel"
+                        required
+                        value={form.phone}
+                        onChange={(event) => updateField("phone", event.target.value)}
+                      />
+                    </Field>
                     <Field>
                       <Button type="submit" className="w-full">
                         Далее
                       </Button>
+                    </Field>
+                  </FieldGroup>
+                </form>
+              ) : step === 2 ? (
+                <form onSubmit={goCard}>
+                  <FieldGroup className="gap-3.5">
+                    <Field className="min-w-0">
+                      <FieldLabel htmlFor="legalName">Юридическое название</FieldLabel>
+                      <Input
+                        id="legalName"
+                        className="max-w-full"
+                        required
+                        value={form.legalName}
+                        onChange={(event) => updateField("legalName", event.target.value)}
+                      />
+                    </Field>
+                    <Field className="min-w-0">
+                      <FieldLabel htmlFor="kpp">
+                        {form.inn.length === 12 ? "КПП, если есть" : "КПП"}
+                      </FieldLabel>
+                      <Input
+                        id="kpp"
+                        className="max-w-full"
+                        inputMode="numeric"
+                        maxLength={9}
+                        required={form.inn.length !== 12}
+                        value={form.kpp}
+                        onChange={(event) =>
+                          updateField("kpp", event.target.value.replace(/\D/g, "").slice(0, 9))
+                        }
+                      />
+                    </Field>
+                    <Field className="min-w-0">
+                      <FieldLabel htmlFor="ogrn">{form.inn.length === 12 ? "ОГРНИП" : "ОГРН"}</FieldLabel>
+                      <Input
+                        id="ogrn"
+                        className="max-w-full"
+                        inputMode="numeric"
+                        maxLength={form.inn.length === 12 ? 15 : 13}
+                        required
+                        value={form.ogrn}
+                        onChange={(event) =>
+                          updateField(
+                            "ogrn",
+                            event.target.value.replace(/\D/g, "").slice(0, form.inn.length === 12 ? 15 : 13)
+                          )
+                        }
+                      />
+                    </Field>
+                    <Field className="min-w-0">
+                      <FieldLabel htmlFor="legalAddress">Юридический адрес</FieldLabel>
+                      <Input
+                        id="legalAddress"
+                        className="max-w-full"
+                        required
+                        value={form.legalAddress}
+                        onChange={(event) => updateField("legalAddress", event.target.value)}
+                      />
+                    </Field>
+                    <Field className="grid grid-cols-2 gap-2">
+                      <Button type="button" variant="outline" onClick={() => goToStep(1)}>
+                        Назад
+                      </Button>
+                      <Button type="submit">Далее</Button>
                     </Field>
                   </FieldGroup>
                 </form>
@@ -236,7 +372,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
                       />
                     </Field>
                     <Field className="grid grid-cols-2 gap-2">
-                      <Button type="button" variant="outline" onClick={() => goToStep(1)}>
+                      <Button type="button" variant="outline" onClick={() => goToStep(2)}>
                         Назад
                       </Button>
                       <Button type="submit" disabled={status === "loading"}>
