@@ -7,10 +7,13 @@ export const isPublicSiteRuntime = process.env.NEXT_PUBLIC_APP_ROLE === "site";
 /** Клиентский fallback: на партнёрском домене путь не из кабинета */
 export function isPublicSitePathname(pathname: string): boolean {
   if (isPublicSiteRuntime) return true;
+  if (pathname.startsWith("/portal/site/preview") || pathname.startsWith("/partner/site/preview")) {
+    return false;
+  }
   return Boolean(pathname) && !pathname.startsWith("/partner/");
 }
 
-export const PREVIEW_BASE = isPublicSiteRuntime ? "" : "/partner/site/preview";
+export const PREVIEW_BASE = isPublicSiteRuntime ? "" : "/portal/site/preview";
 
 export const previewPaths = {
   home: PREVIEW_BASE || "/",

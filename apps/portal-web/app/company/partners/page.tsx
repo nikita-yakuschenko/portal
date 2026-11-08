@@ -134,7 +134,7 @@ function CompanyPartnersContent() {
   function setTab(next: string) {
     const value = parseTab(next);
     const qs = value === "partners" ? "" : `?tab=${value}`;
-    router.replace(`/company/partners${qs}`);
+    router.replace(`/portal/partners${qs}`);
   }
 
   async function handleCreate() {
@@ -190,7 +190,7 @@ function CompanyPartnersContent() {
     <DashboardShell
       cabinetKind="company"
       cabinetLabel={companyCabinetLabel}
-      currentPath="/company/partners"
+      currentPath="/portal/partners"
       navigation={companyNavigation}
       title="Партнёры"
     >
@@ -250,7 +250,7 @@ function CompanyPartnersContent() {
                           <TableRow key={partner.id} className="group">
                             <TableCell>
                               <Link
-                                href={`/company/partners/${partner.id}`}
+                                href={`/portal/partners/${partner.id}`}
                                 className="font-medium underline-offset-4 hover:underline"
                               >
                                 {partner.companyName}
@@ -292,7 +292,7 @@ function CompanyPartnersContent() {
                                 asChild
                                 title="Открыть карточку"
                               >
-                                <Link href={`/company/partners/${partner.id}`}>
+                                <Link href={`/portal/partners/${partner.id}`}>
                                   <IconChevronRight />
                                 </Link>
                               </Button>
@@ -429,7 +429,7 @@ export default function CompanyPartnersPage() {
         <DashboardShell
           cabinetKind="company"
           cabinetLabel={companyCabinetLabel}
-          currentPath="/company/partners"
+          currentPath="/portal/partners"
           navigation={companyNavigation}
           title="Партнёры"
         >

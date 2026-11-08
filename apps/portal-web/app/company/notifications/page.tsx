@@ -8,7 +8,7 @@ export default function CompanyNotificationsPage() {
   return (
     <DashboardShell
       cabinetLabel={companyCabinetLabel}
-      currentPath="/company/notifications"
+      currentPath="/portal/notifications"
       navigation={companyNavigation}
       title="Уведомления"
     >

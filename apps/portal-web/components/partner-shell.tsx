@@ -69,8 +69,10 @@ export function PartnerShell({
       setRoleReady(true);
       // Ручной заход на чужую страницу кабинета: API её всё равно не отдаст,
       // но упереться в ошибку хуже, чем вернуться туда, где есть содержимое
-      if (guest && !currentPath.startsWith("/partner/general")) {
-        router.replace("/partner/general");
+      const onSharedHouse =
+        currentPath === "/portal/catalog" || currentPath.startsWith("/portal/catalog/");
+      if (guest && currentPath !== "/portal" && !currentPath.startsWith("/portal/general") && !onSharedHouse) {
+        router.replace("/portal/general");
       }
       setBrandTitle(guest ? "Дилерам AVGST" : name);
       setBrandLogoSrc(logo);
@@ -86,7 +88,7 @@ export function PartnerShell({
       cabinetLabel={partnerCabinetLabel}
       brandTitle={brandTitle}
       brandLogoSrc={brandLogoSrc}
-      brandHref={isGuest ? "/partner/general" : "/partner"}
+      brandHref={isGuest ? "/portal/general" : "/portal"}
       currentPath={currentPath}
       navigation={isGuest ? dealerGuestNavigation : partnerNavigation}
       accountMenuItems={roleReady && !isGuest ? partnerAccountMenu : []}

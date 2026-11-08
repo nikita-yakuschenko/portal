@@ -475,7 +475,7 @@ export default function PartnerCatalogPage() {
   }
 
   return (
-    <PartnerShell currentPath="/partner/catalog">
+    <PartnerShell currentPath="/portal/catalog">
       <PageAlert message={error} variant="destructive" />
 
       <div className="flex flex-wrap items-center gap-2">

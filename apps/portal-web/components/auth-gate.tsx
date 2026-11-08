@@ -25,14 +25,9 @@ function apiBaseUrl(): string {
   return process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 }
 
-export function cabinetHomeForRole(
-  role: SessionUser["role"]
-): "/company" | "/partner" | "/partner/general" {
-  if (role === "company_admin" || role === "company_manager") {
-    return "/company";
-  }
+export function cabinetHomeForRole(role: SessionUser["role"]): "/portal" | "/portal/general" {
   // У общего дилерского входа кабинета нет — его дом это общий раздел
-  return role === "dealer_guest" ? "/partner/general" : "/partner";
+  return role === "dealer_guest" ? "/portal/general" : "/portal";
 }
 
 /** Текущий пользователь из cookie-сессии или null (для публичных страниц). */

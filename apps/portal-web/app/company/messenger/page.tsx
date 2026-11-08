@@ -15,7 +15,7 @@ export default function CompanyMessengerPage() {
     <DashboardShell
       cabinetKind="company"
       cabinetLabel={companyCabinetLabel}
-      currentPath="/company/messenger"
+      currentPath="/portal/messenger"
       navigation={companyNavigation}
       breadcrumbs={<MessengerSectionTitle />}
       headerCenter={<MessengerHeaderSearch value={search} onChange={setSearch} />}

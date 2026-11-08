@@ -232,7 +232,7 @@ export default function CompanyCatalogPage() {
     <DashboardShell
       cabinetKind="company"
       cabinetLabel={companyCabinetLabel}
-      currentPath="/company/catalog"
+      currentPath="/portal/catalog"
       navigation={companyNavigation}
       title="Каталог"
     >

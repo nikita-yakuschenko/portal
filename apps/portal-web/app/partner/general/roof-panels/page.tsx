@@ -51,7 +51,7 @@ export default function GeneralRoofPanelsPage() {
   const images = useMemo(() => parseProductImageUrls(panel?.imageUrl), [panel]);
 
   return (
-    <PartnerShell currentPath="/partner/general" title="Кровельные панели">
+    <PartnerShell currentPath="/portal/general" title="Кровельные панели">
       <PageAlert message={error} variant="destructive" />
 
       {loading ? (

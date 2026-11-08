@@ -22,14 +22,8 @@ type LoginUser = {
 };
 
 function cabinetPathForRole(role: LoginUser["role"]) {
-  if (role === "company_admin" || role === "company_manager") {
-    return "/company";
-  }
   // Общему дилерскому входу главная кабинета не нужна — ему нужен общий раздел
-  if (role === "dealer_guest") {
-    return "/partner/general";
-  }
-  return "/partner";
+  return role === "dealer_guest" ? "/portal/general" : "/portal";
 }
 
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {

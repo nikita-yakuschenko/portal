@@ -131,7 +131,7 @@ export default function CompanyTeamPage() {
   return (
     <DashboardShell
       cabinetLabel={companyCabinetLabel}
-      currentPath="/company/team"
+      currentPath="/portal/team"
       navigation={companyNavigation}
     >
       <PageAlert message={error} variant="destructive" />

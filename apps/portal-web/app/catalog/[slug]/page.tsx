@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import { CompanyCatalogProject } from "@/components/company-catalog-project";
@@ -14,6 +14,7 @@ type Role = "company_admin" | "company_manager" | "partner_owner" | "partner_mem
 function CatalogProject() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
+  const router = useRouter();
   const [role, setRole] = useState<Role | null>(null);
   const [error, setError] = useState("");
 
@@ -31,6 +32,27 @@ function CatalogProject() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!role || !slug) return;
+    let cancelled = false;
+    const endpoint =
+      role === "company_admin" || role === "company_manager"
+        ? `/api/company/catalog/projects/${slug}`
+        : role === "dealer_guest"
+          ? `/api/partner/general/houses/${slug}`
+          : `/api/partner/catalog/projects/${slug}`;
+    void apiFetch<{ slug: string }>(endpoint)
+      .then((project) => {
+        if (!cancelled && project.slug && project.slug !== slug) {
+          router.replace(`/portal/catalog/${project.slug}`);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [role, slug, router]);
 
   if (error) return null;
   if (!role) return <Skeleton className="h-96 w-full" />;

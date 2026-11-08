@@ -12,7 +12,7 @@ export default function PartnerMessengerPage() {
 
   return (
     <PartnerShell
-      currentPath="/partner/messenger"
+      currentPath="/portal/messenger"
       breadcrumbs={<MessengerSectionTitle />}
       headerCenter={<MessengerHeaderSearch value={search} onChange={setSearch} />}
       fluidContent

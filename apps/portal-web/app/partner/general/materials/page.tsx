@@ -43,7 +43,7 @@ export default function GeneralMaterialsPage() {
   }, []);
 
   return (
-    <PartnerShell currentPath="/partner/general" title="Материалы для дилеров">
+    <PartnerShell currentPath="/portal/general" title="Материалы для дилеров">
       <PageAlert message={error} variant="destructive" />
 
       {loading ? (

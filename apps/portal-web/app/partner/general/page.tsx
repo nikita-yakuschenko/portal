@@ -127,7 +127,7 @@ export default function PartnerGeneralPage() {
   }, []);
 
   return (
-    <PartnerShell currentPath="/partner/general" title="Общий раздел">
+    <PartnerShell currentPath="/portal/general" title="Общий раздел">
       <PageAlert message={error} variant="destructive" />
 
       {loading ? (
@@ -152,7 +152,7 @@ export default function PartnerGeneralPage() {
         <div className="flex flex-col gap-3">
           <div className="grid gap-3 md:grid-cols-3">
             <CoverTile
-              href="/partner/general/houses?technology=panel_frame"
+              href="/portal/general/houses?technology=panel_frame"
               title="Панельно-каркасные дома"
               hint={`${pluralize(overview.panelFrame, ["проект", "проекта", "проектов"])}${
                 overview.panelFrameFrom !== null
@@ -162,7 +162,7 @@ export default function PartnerGeneralPage() {
               cover={overview.panelFrameCover}
             />
             <CoverTile
-              href="/partner/general/houses?technology=modular"
+              href="/portal/general/houses?technology=modular"
               title="Модульные дома"
               hint={`${pluralize(overview.modular, ["проект", "проекта", "проектов"])}${
                 overview.modularFrom !== null
@@ -172,7 +172,7 @@ export default function PartnerGeneralPage() {
               cover={overview.modularCover}
             />
             <CoverTile
-              href="/partner/general/houses?technology=frame"
+              href="/portal/general/houses?technology=frame"
               title="Каркасные дома"
               hint={`${pluralize(overview.frame, ["проект", "проекта", "проектов"])}${
                 overview.frameFrom !== null
@@ -185,13 +185,13 @@ export default function PartnerGeneralPage() {
 
           <div className="grid gap-3 sm:grid-cols-3">
             <CoverTile
-              href="/partner/general/trusses"
+              href="/portal/general/trusses"
               title="Фермы на МЗП"
               hint="Стропильные фермы для кровли"
               cover={overview.trussCover}
             />
             <CoverTile
-              href="/partner/general/roof-panels"
+              href="/portal/general/roof-panels"
               title="Кровельные панели"
               hint={
                 overview.roofPanelPrice
@@ -201,7 +201,7 @@ export default function PartnerGeneralPage() {
               cover={overview.roofPanelCover}
             />
             <ProductTile
-              href="/partner/general/materials"
+              href="/portal/general/materials"
               title="Материалы для дилеров"
               hint={`${pluralize(overview.materials, ["подборка", "подборки", "подборок"])} · фото, видео и презентации`}
               icon={IconFolders}

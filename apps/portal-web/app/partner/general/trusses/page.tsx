@@ -30,7 +30,7 @@ export default function GeneralTrussesPage() {
   }, []);
 
   return (
-    <PartnerShell currentPath="/partner/general" title="Фермы на МЗП">
+    <PartnerShell currentPath="/portal/general" title="Фермы на МЗП">
       <PageAlert message={error} variant="destructive" />
 
       {loading ? (

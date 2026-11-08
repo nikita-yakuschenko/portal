@@ -116,7 +116,7 @@ function PartnerSettingsContent() {
       params.set("tab", next);
     }
     const query = params.toString();
-    router.replace(query ? `/partner/settings?${query}` : "/partner/settings");
+    router.replace(query ? `/portal/settings?${query}` : "/portal/settings");
   }
 
   async function handleSaveProfile(event: FormEvent) {
@@ -161,7 +161,7 @@ function PartnerSettingsContent() {
   }
 
   return (
-    <PartnerShell currentPath="/partner/settings" title="Настройки">
+    <PartnerShell currentPath="/portal/settings" title="Настройки">
       <PageAlert message={error} variant="destructive" />
 
       <Tabs value={tab} activationMode="manual" onValueChange={handleTabChange}>
@@ -305,7 +305,7 @@ function PartnerSettingsContent() {
                     коммерческое название. Пришлите карточку компании заводу, и их внесут.
                   </p>
                   <Button type="button" variant="outline" asChild>
-                    <a href="/partner/messenger">Написать заводу</a>
+                    <a href="/portal/messenger">Написать заводу</a>
                   </Button>
                 </div>
               )}
@@ -338,7 +338,7 @@ export default function PartnerSettingsPage() {
   return (
     <Suspense
       fallback={
-        <PartnerShell currentPath="/partner/settings" title="Настройки">
+        <PartnerShell currentPath="/portal/settings" title="Настройки">
           <Skeleton className="h-10 w-full max-w-md" />
           <Skeleton className="h-64 w-full" />
         </PartnerShell>

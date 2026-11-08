@@ -74,7 +74,7 @@ function PartnerDealsContent() {
     if (parseView(next) === "board") params.delete("view");
     else params.set("view", "table");
     const query = params.toString();
-    router.replace(query ? `/partner/deals?${query}` : "/partner/deals", { scroll: false });
+    router.replace(query ? `/portal/deals?${query}` : "/portal/deals", { scroll: false });
   }
 
   const applyUpdate = useCallback((next: Deal) => {
@@ -100,7 +100,7 @@ function PartnerDealsContent() {
 
   return (
     <PartnerShell
-      currentPath="/partner/deals"
+      currentPath="/portal/deals"
       title="Сделки"
       headerActions={
         !loading && items.length > 0 ? (
@@ -120,7 +120,7 @@ function PartnerDealsContent() {
         <p className="text-muted-foreground text-sm">
           CRM не подключена — сделки ведутся здесь.{" "}
           <Link
-            href="/partner/settings?tab=integrations"
+            href="/portal/settings?tab=integrations"
             className="text-foreground underline underline-offset-4"
           >
             Подключить
@@ -239,7 +239,7 @@ export default function PartnerDealsPage() {
   return (
     <Suspense
       fallback={
-        <PartnerShell currentPath="/partner/deals" title="Сделки">
+        <PartnerShell currentPath="/portal/deals" title="Сделки">
           <Skeleton className="h-64 w-full" />
         </PartnerShell>
       }

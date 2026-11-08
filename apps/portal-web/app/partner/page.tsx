@@ -33,7 +33,7 @@ export default function PartnerPage() {
   }, []);
 
   return (
-    <PartnerShell currentPath="/partner">
+    <PartnerShell currentPath="/portal">
       <PageAlert message={error} variant="destructive" />
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -42,7 +42,7 @@ export default function PartnerPage() {
           value={loading ? "…" : String(counts.projects)}
           hint="Проектов с завода"
         />
-        <Link href="/partner/settings?tab=team" className="block transition-opacity hover:opacity-90">
+        <Link href="/portal/settings?tab=team" className="block transition-opacity hover:opacity-90">
           <StatCard
             title="Команда"
             value={loading ? "…" : String(counts.team)}

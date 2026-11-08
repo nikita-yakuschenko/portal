@@ -8,7 +8,11 @@ import { ThemeProvider as NextThemesProvider } from "next-themes";
 const LIGHT_ONLY_PATHS = ["/", "/login", "/signup", "/apply"];
 
 function isLightOnly(pathname: string): boolean {
-  return LIGHT_ONLY_PATHS.includes(pathname) || pathname.startsWith("/partner/site/preview");
+  return (
+    LIGHT_ONLY_PATHS.includes(pathname) ||
+    pathname.startsWith("/partner/site/preview") ||
+    pathname.startsWith("/portal/site/preview")
+  );
 }
 
 export function ThemeProvider({

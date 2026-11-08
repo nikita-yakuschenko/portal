@@ -5,7 +5,7 @@ import { NotificationsPageContent } from "@/components/notifications-page-conten
 
 export default function PartnerNotificationsPage() {
   return (
-    <PartnerShell currentPath="/partner/notifications" title="Уведомления">
+    <PartnerShell currentPath="/portal/notifications" title="Уведомления">
       <NotificationsPageContent />
     </PartnerShell>
   );

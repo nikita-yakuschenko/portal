@@ -325,7 +325,7 @@ export function PartnerCatalogProject({ projectKey }: { projectKey: string }) {
           action: {
             label: "Открыть",
             onClick: () => {
-              window.location.href = `/partner/messenger?c=${created.id}`;
+              window.location.href = `/portal/messenger?c=${created.id}`;
             }
           }
         }
@@ -342,19 +342,19 @@ export function PartnerCatalogProject({ projectKey }: { projectKey: string }) {
 
   return (
     <PartnerShell
-      currentPath={`/partner/catalog/${projectId}`}
+      currentPath={`/portal/catalog/${projectId}`}
       breadcrumbs={
         <Breadcrumb>
           <BreadcrumbList className="text-sm">
             <BreadcrumbItem>
               <BreadcrumbLink asChild>
-                <Link href="/partner">Главная</Link>
+                <Link href="/portal">Главная</Link>
               </BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
               <BreadcrumbLink asChild>
-                <Link href="/partner/catalog">Каталог</Link>
+                <Link href="/portal/catalog">Каталог</Link>
               </BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />

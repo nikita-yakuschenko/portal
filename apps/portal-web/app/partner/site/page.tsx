@@ -215,7 +215,7 @@ function PartnerSiteContent() {
       if (next === "general") params.delete("tab");
       else params.set("tab", next);
       const query = params.toString();
-      router.replace(query ? `/partner/site?${query}` : "/partner/site", { scroll: false });
+      router.replace(query ? `/portal/site?${query}` : "/portal/site", { scroll: false });
     },
     [router, searchParams]
   );
@@ -346,10 +346,10 @@ function PartnerSiteContent() {
   async function openPreview() {
     // Предпросмотр читает сохранённый черновик, поэтому сначала сохраняем
     if (dirty && !(await persistSite({ silent: true }))) return;
-    const opened = window.open("/partner/site/preview", "_blank", "noopener,noreferrer");
+    const opened = window.open("/portal/site/preview", "_blank", "noopener,noreferrer");
     if (!opened) {
       toast.info("Браузер заблокировал новую вкладку", {
-        description: "Откройте предпросмотр по адресу /partner/site/preview"
+        description: "Откройте предпросмотр по адресу /portal/site/preview"
       });
     }
   }
@@ -393,7 +393,7 @@ function PartnerSiteContent() {
   const errorCount = submitAttempted ? countErrors(errors) : 0;
 
   return (
-    <PartnerShell currentPath="/partner/site" title="Сайт">
+    <PartnerShell currentPath="/portal/site" title="Сайт">
       <PageAlert message={error} variant="destructive" />
 
       {loading ? (
@@ -1057,7 +1057,7 @@ export default function PartnerSitePage() {
   return (
     <Suspense
       fallback={
-        <PartnerShell currentPath="/partner/site" title="Сайт">
+        <PartnerShell currentPath="/portal/site" title="Сайт">
           <Skeleton className="h-28 w-full" />
           <Skeleton className="h-64 w-full" />
         </PartnerShell>

@@ -76,7 +76,7 @@ export function FactoryRequestCard({
             </p>
           </div>
           <Button variant="outline" size="sm" asChild>
-            <Link href="/partner/messenger">Открыть мессенджер</Link>
+            <Link href="/portal/messenger">Открыть мессенджер</Link>
           </Button>
         </CardContent>
       </Card>

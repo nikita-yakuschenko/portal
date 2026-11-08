@@ -108,7 +108,7 @@ function PartnerDetailContent() {
   function setTab(next: string) {
     const value = parseTab(next);
     const qs = value === "overview" ? "" : `?tab=${value}`;
-    router.replace(`/company/partners/${id}${qs}`);
+    router.replace(`/portal/partners/${id}${qs}`);
   }
 
   async function handleStatus(status: "active" | "suspended") {
@@ -193,13 +193,13 @@ function PartnerDetailContent() {
   return (
     <DashboardShell
       cabinetLabel={companyCabinetLabel}
-      currentPath="/company/partners"
+      currentPath="/portal/partners"
       navigation={companyNavigation}
       title={partner?.companyName ?? "Партнёр"}
     >
       <div className="mb-4">
         <Button variant="ghost" size="sm" asChild className="-ml-2">
-          <Link href="/company/partners">
+          <Link href="/portal/partners">
             <IconChevronLeft />
             К списку партнёров
           </Link>
@@ -500,7 +500,7 @@ export default function CompanyPartnerDetailPage() {
       fallback={
         <DashboardShell
           cabinetLabel={companyCabinetLabel}
-          currentPath="/company/partners"
+          currentPath="/portal/partners"
           navigation={companyNavigation}
           title="Партнёр"
         >

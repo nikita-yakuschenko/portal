@@ -45,7 +45,7 @@ export default function CompanyPage() {
     <DashboardShell
       cabinetKind="company"
       cabinetLabel={companyCabinetLabel}
-      currentPath="/company"
+      currentPath="/portal"
       navigation={companyNavigation}
       title="Главная"
     >
@@ -82,13 +82,13 @@ export default function CompanyPage() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button asChild>
-            <Link href="/company/partners?tab=applications">
+            <Link href="/portal/partners?tab=applications">
               Заявки на подключение
               {data && pending.length > 0 ? ` (${pending.length})` : ""}
             </Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/company/partners">Список партнёров</Link>
+            <Link href="/portal/partners">Список партнёров</Link>
           </Button>
         </CardContent>
       </Card>

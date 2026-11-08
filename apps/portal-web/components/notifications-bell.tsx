@@ -29,7 +29,7 @@ export type AppNotification = {
 };
 
 type NotificationsBellProps = {
-  /** Базовый путь списка: /partner/notifications или /company/notifications */
+  /** Базовый путь списка: /portal/notifications */
   listHref: string;
 };
 

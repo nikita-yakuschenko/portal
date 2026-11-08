@@ -261,7 +261,7 @@ export default function CompanyGeneralPage() {
     <DashboardShell
       cabinetKind="company"
       cabinetLabel={companyCabinetLabel}
-      currentPath="/company/general"
+      currentPath="/portal/general"
       navigation={companyNavigation}
       title="Общий раздел"
     >

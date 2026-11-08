@@ -123,7 +123,7 @@ export function DashboardShell(props: {
         plainBrandMark={!isPartnerCabinet}
         brandTitle={props.brandTitle ?? (isPartnerCabinet ? "Партнёр" : "Авангард Строй")}
         brandLogoSrc={props.brandLogoSrc ?? null}
-        brandHref={props.brandHref ?? (isPartnerCabinet ? "/partner" : "/")}
+        brandHref={props.brandHref ?? "/portal"}
       />
       <SidebarInset className="flex min-h-0 min-w-0 flex-col overflow-hidden">
         {isPartnerCabinet ? <PartnerTestModeBanner /> : null}
@@ -150,7 +150,7 @@ export function DashboardShell(props: {
           <div className="ml-auto flex shrink-0 items-center gap-2">
             {props.headerActions}
             <NotificationsBell
-              listHref={isPartnerCabinet ? "/partner/notifications" : "/company/notifications"}
+              listHref="/portal/notifications"
             />
           </div>
         </header>

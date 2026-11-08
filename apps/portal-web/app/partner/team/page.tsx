@@ -10,7 +10,7 @@ export default function PartnerTeamRedirectPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/partner/settings?tab=team");
+    router.replace("/portal/settings?tab=team");
   }, [router]);
 
   return (

@@ -510,7 +510,7 @@ export function MessengerPageContent({
   const searchParams = useSearchParams();
   const initialId = searchParams.get("c");
   const isCompany = audience === "company";
-  const basePath = isCompany ? "/company/messenger" : "/partner/messenger";
+  const basePath = "/portal/messenger";
 
   const [tab, setTabState] = useState<TabKey>(() => parseTab(searchParams.get("tab")));
   const [listLoading, setListLoading] = useState(true);
@@ -1399,11 +1399,7 @@ export function MessengerPageContent({
                       ) : null}
                       {active?.type === "request" && active.projectId ? (
                         <Link
-                          href={
-                            isCompany
-                              ? `/company/catalog/${active.projectId}`
-                              : `/partner/catalog/${active.projectId}`
-                          }
+                          href={`/portal/catalog/${active.projectId}`}
                           className="hover:text-foreground underline-offset-2 hover:underline"
                         >
                           {active.projectName || "Проект"}

@@ -252,19 +252,19 @@ export function GeneralHouseDetail({ projectKey }: { projectKey: string }) {
   );
 
   const listHref = project
-    ? `/partner/general/houses?technology=${project.technology}`
-    : "/partner/general/houses";
+    ? `/portal/general/houses?technology=${project.technology}`
+    : "/portal/general/houses";
 
   return (
     <PartnerShell
-      currentPath="/partner/general"
+      currentPath="/portal/general"
       title={project?.name ?? "Проект"}
       breadcrumbs={
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
               <BreadcrumbLink asChild>
-                <Link href="/partner/general">Общий раздел</Link>
+                <Link href="/portal/general">Общий раздел</Link>
               </BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />

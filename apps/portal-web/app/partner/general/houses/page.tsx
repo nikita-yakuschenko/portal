@@ -135,14 +135,14 @@ function GeneralHousesContent() {
   }, [houses, query, sort]);
 
   function changeTechnology(next: string) {
-    router.replace(`/partner/general/houses?technology=${parseTechnology(next)}`, {
+    router.replace(`/portal/general/houses?technology=${parseTechnology(next)}`, {
       scroll: false
     });
   }
 
   return (
     <PartnerShell
-      currentPath="/partner/general"
+      currentPath="/portal/general"
       title={TECH_TITLE[technology]}
       breadcrumbs={
         <Tabs value={technology} onValueChange={changeTechnology}>
@@ -220,7 +220,7 @@ export default function GeneralHousesPage() {
   return (
     <Suspense
       fallback={
-        <PartnerShell currentPath="/partner/general" title="Дома">
+        <PartnerShell currentPath="/portal/general" title="Дома">
           <Skeleton className="h-96 w-full" />
         </PartnerShell>
       }

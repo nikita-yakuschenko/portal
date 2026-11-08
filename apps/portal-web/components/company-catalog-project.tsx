@@ -278,7 +278,7 @@ export function CompanyCatalogProject({ projectKey }: { projectKey: string }) {
     <DashboardShell
       cabinetKind="company"
       cabinetLabel={companyCabinetLabel}
-      currentPath={`/company/catalog/${id}`}
+      currentPath={`/portal/catalog/${id}`}
       navigation={companyNavigation}
       title={project?.name ?? "Проект"}
       breadcrumbs={
@@ -286,13 +286,13 @@ export function CompanyCatalogProject({ projectKey }: { projectKey: string }) {
           <BreadcrumbList className="text-sm">
             <BreadcrumbItem>
               <BreadcrumbLink asChild>
-                <Link href="/company">Главная</Link>
+                <Link href="/portal">Главная</Link>
               </BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
               <BreadcrumbLink asChild>
-                <Link href="/company/catalog">Каталог</Link>
+                <Link href="/portal/catalog">Каталог</Link>
               </BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
