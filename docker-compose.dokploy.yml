@@ -48,8 +48,11 @@ services:
       SMTP_PORT: ${SMTP_PORT:-465}
       SMTP_SECURE: ${SMTP_SECURE:-true}
       SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-AVGST <noreply@avgst.ru>}
+      SMTP_PASS: ${SMTP_PASSWORD:-${SMTP_PASS:-}}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-}
+      SMTP_FROM: "${SMTP_FROM:-${SMTP_FROM_NAME:-Авангард Строй} <${SMTP_FROM_EMAIL:-noreply@avgst.ru}>}"
       # Garage S3 (внутренний DNS приложения garage в том же проекте Dokploy)
       S3_ENDPOINT: ${S3_ENDPOINT:-http://b2b-garage-r78evh:3900}
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-}

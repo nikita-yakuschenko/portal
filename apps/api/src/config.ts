@@ -45,7 +45,10 @@ const configSchema = z.object({
   SMTP_SECURE: z.string().optional(),
   SMTP_USER: z.string().default(""),
   SMTP_PASS: z.string().default(""),
-  SMTP_FROM: z.string().min(3).default("AVGST <noreply@avgst.ru>"),
+  SMTP_PASSWORD: z.string().default(""),
+  SMTP_FROM: z.string().default(""),
+  SMTP_FROM_EMAIL: z.string().default(""),
+  SMTP_FROM_NAME: z.string().default(""),
   // Garage / S3 (path-style). Пусто → локальный диск uploads/ (только dev)
   S3_ENDPOINT: z.string().default(""),
   S3_PUBLIC_ENDPOINT: z.string().default(""),
@@ -73,6 +76,15 @@ function unwrapQuotes(value: string): string {
     return trimmed.slice(1, -1);
   }
   return trimmed;
+}
+
+function mailFrom(): string {
+  const email = unwrapQuotes(parsedConfig.SMTP_FROM_EMAIL);
+  const name = unwrapQuotes(parsedConfig.SMTP_FROM_NAME);
+  if (email) {
+    return name ? `${name} <${email}>` : email;
+  }
+  return unwrapQuotes(parsedConfig.SMTP_FROM) || "Авангард Строй <noreply@avgst.ru>";
 }
 
 export const config = {
@@ -114,8 +126,8 @@ export const config = {
         ? parsedConfig.SMTP_PORT === 465
         : !["false", "0", "no"].includes(parsedConfig.SMTP_SECURE.toLowerCase()),
     user: unwrapQuotes(parsedConfig.SMTP_USER),
-    pass: unwrapQuotes(parsedConfig.SMTP_PASS),
-    from: unwrapQuotes(parsedConfig.SMTP_FROM)
+    pass: unwrapQuotes(parsedConfig.SMTP_PASSWORD || parsedConfig.SMTP_PASS),
+    from: mailFrom()
   },
   s3: {
     endpoint: parsedConfig.S3_ENDPOINT.replace(/\/$/, ""),
