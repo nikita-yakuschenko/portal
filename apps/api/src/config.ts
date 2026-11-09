@@ -19,7 +19,7 @@ const configSchema = z.object({
   ADMIN_PASSWORD: z.string().min(8).default("ChangeMe123!"),
   ADMIN_FULL_NAME: z.string().min(2).default("AVGST Admin"),
   /** Общий дилерский вход: один логин на всех */
-  DEALER_EMAIL: z.email().default("dealer@avgst.ru"),
+  DEALER_EMAIL: z.email().default("general@avgst.ru"),
   DEALER_PASSWORD: z.string().min(8).default("avgst_dealer_25"),
   PARTNER_EMAIL: z.email().default("partner@avgst.local"),
   PARTNER_PASSWORD: z.string().min(8).default("ChangeMe123!"),
