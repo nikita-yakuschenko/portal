@@ -253,7 +253,7 @@ function SelectableLines({
         const key = factoryOptionKey(item.name);
         const checked = selectedKeys.has(key);
         return (
-          <li key={item.id} className="flex items-center justify-between gap-4 py-2 text-sm">
+          <li key={item.id} className="flex items-center justify-between gap-4 py-1.5 text-sm">
             <div className="flex min-w-0 items-center gap-2.5">
               <Switch
                 checked={checked}
@@ -285,6 +285,7 @@ export function FactoryPackagesEditor({
   selectedKeys,
   canManage,
   saving,
+  totalLabel = "Базовая стоимость",
   onChange
 }: {
   housePrice?: number | null;
@@ -292,6 +293,7 @@ export function FactoryPackagesEditor({
   selectedKeys: string[];
   canManage: boolean;
   saving?: boolean;
+  totalLabel?: string;
   onChange: (nextKeys: string[]) => void;
 }) {
   const assembly = offer?.assembly ?? [];
@@ -332,7 +334,7 @@ export function FactoryPackagesEditor({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="font-medium">Домокомплект</p>
         <p className="text-base font-semibold tabular-nums">
@@ -342,7 +344,7 @@ export function FactoryPackagesEditor({
 
       {packageTabs.length > 0 ? (
         <Tabs defaultValue={packageTabs[0]!.id} className="gap-2 md:gap-2">
-          <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
+          <TabsList className="h-auto w-full flex-wrap justify-start gap-1">
             {packageTabs.map((tab) => (
               <TabsTrigger key={tab.id} value={tab.id}>
                 {tab.title}
@@ -364,7 +366,7 @@ export function FactoryPackagesEditor({
 
       <div className="border-t pt-2">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="font-medium">Базовая стоимость</p>
+          <p className="font-medium">{totalLabel}</p>
           <p className="text-base font-semibold tabular-nums">
             {dealerBase != null ? formatRub(dealerBase) : "—"}
           </p>

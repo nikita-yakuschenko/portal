@@ -48,7 +48,7 @@ export function CompanyProjectCatalogVisibility({
   }
 
   return (
-    <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap">
+    <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1">
       <Badge
         variant={active ? "default" : "warning"}
         className="min-w-[12.5rem] justify-center"

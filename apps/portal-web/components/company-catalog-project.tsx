@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { CompanyProjectSummaryCard } from "@/components/company-project-summary-card";
 import { DashboardShell } from "@/components/dashboard-shell";
 import {
+  FactoryPackagesEditor,
   FactoryPackagesPriceEditor,
   type FactoryOfferLine
 } from "@/components/factory-offer-panel";
@@ -108,9 +109,9 @@ type Project = {
   rooms: Room[];
 };
 
-function Panel({ children }: { children: React.ReactNode }) {
+function Panel({ children, compact = false }: { children: React.ReactNode; compact?: boolean }) {
   return (
-    <Card className="pb-[23px]">
+    <Card className={compact ? "py-3" : "pb-[23px]"}>
       <CardContent>{children}</CardContent>
     </Card>
   );
@@ -126,6 +127,7 @@ export function CompanyCatalogProject({ projectKey }: { projectKey: string }) {
   const [clearingSync, setClearingSync] = useState(false);
   const [savingDescription, setSavingDescription] = useState(false);
   const [savingOffer, setSavingOffer] = useState(false);
+  const [previewOptions, setPreviewOptions] = useState<string[]>([]);
   const [assetBusyId, setAssetBusyId] = useState<string | null>(null);
   const [roomBusyId, setRoomBusyId] = useState<string | null>(null);
 
@@ -143,6 +145,7 @@ export function CompanyCatalogProject({ projectKey }: { projectKey: string }) {
   }
 
   useEffect(() => {
+    setPreviewOptions([]);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on id
   }, [id]);
@@ -342,7 +345,7 @@ export function CompanyCatalogProject({ projectKey }: { projectKey: string }) {
           />
 
           <Tabs defaultValue="about" className="gap-[15px] md:gap-[23px]">
-            <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto">
+            <TabsList className="h-auto w-full flex-wrap justify-start gap-1">
               <TabsTrigger value="about">О проекте</TabsTrigger>
               <TabsTrigger value="packages">Комплектация</TabsTrigger>
               <TabsTrigger value="options">Опции</TabsTrigger>
@@ -438,15 +441,26 @@ export function CompanyCatalogProject({ projectKey }: { projectKey: string }) {
             </TabsContent>
 
             <TabsContent value="packages" className="mt-0">
-              <Panel>
-                <FactoryPackagesPriceEditor
-                  section={!project.factoryOffer?.assembly?.length && project.factoryOffer?.extras?.length ? "extras" : "assembly"}
+              <Panel compact>
+                <FactoryPackagesEditor
                   housePrice={project.basePrice}
                   offer={project.factoryOffer}
-                  saving={savingOffer}
-                  editable={editMode}
-                  onSave={(next) => void saveFactoryOffer(next)}
+                  selectedKeys={previewOptions}
+                  canManage
+                  totalLabel="Предпросмотр стоимости"
+                  onChange={setPreviewOptions}
                 />
+                {editMode && project.factoryOffer?.assembly?.length ? (
+                  <div className="mt-4 border-t pt-4">
+                    <FactoryPackagesPriceEditor
+                      section="assembly"
+                      housePrice={project.basePrice}
+                      offer={project.factoryOffer}
+                      saving={savingOffer}
+                      onSave={(next) => void saveFactoryOffer(next)}
+                    />
+                  </div>
+                ) : null}
               </Panel>
             </TabsContent>
 
