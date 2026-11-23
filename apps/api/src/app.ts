@@ -307,6 +307,17 @@ const updateCatalogAssetSchema = z.object({
   isHidden: z.boolean().optional()
 });
 
+const catalogOptionGroupsSchema = z.array(z.object({
+  id: z.string().min(1).max(100),
+  title: z.string().trim().min(1).max(200),
+  items: z.array(z.object({
+    id: z.string().min(1).max(100),
+    name: z.string().trim().min(1).max(240),
+    note: z.string().trim().max(1000).optional(),
+    price: z.number().int().min(0).max(1_000_000_000).optional()
+  })).max(100)
+})).max(50);
+
 const roomPolygonPointSchema = z.object({
   x: z.number().min(0).max(100),
   y: z.number().min(0).max(100)
@@ -1078,6 +1089,17 @@ export async function buildApp() {
       return reply.status(404).send({ message: "Проект не найден" });
     }
     return project;
+  });
+
+  app.put("/api/company/catalog/projects/:id/option-groups", async (request, reply) => {
+    const roleCheck = await requireRoles(request, reply, ["company_admin", "company_manager"]);
+    if (roleCheck) return roleCheck;
+    const parsed = catalogOptionGroupsSchema.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ message: "Проверьте названия разделов, опций и цены" });
+    const { id } = request.params as { id: string };
+    const saved = await portalService.updateCatalogOptionGroups(id, parsed.data);
+    if (!saved) return reply.status(404).send({ message: "Проект не найден" });
+    return parsed.data;
   });
 
   app.put("/api/company/catalog/projects/:id/factory-offer", async (request, reply) => {

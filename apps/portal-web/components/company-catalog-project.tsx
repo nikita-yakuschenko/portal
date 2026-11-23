@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { CompanyProjectSummaryCard } from "@/components/company-project-summary-card";
+import { CompanyProjectOptions } from "@/components/company-project-options";
+import type { CatalogProjectDetails } from "@b2b/domain";
 import { DashboardShell } from "@/components/dashboard-shell";
 import {
   FactoryPackagesEditor,
@@ -79,6 +81,7 @@ type Project = {
   bathrooms: string | null;
   basePrice: number | null;
   details?: {
+    optionGroups?: CatalogProjectDetails["optionGroups"];
     series?: string;
     dimensions?: { label?: string } | null;
     techDocs?: Array<{ kind?: string; title?: string; url?: string; note?: string }>;
@@ -461,18 +464,29 @@ export function CompanyCatalogProject({ projectKey }: { projectKey: string }) {
                     />
                   </div>
                 ) : null}
+                {editMode && project.factoryOffer?.extras?.length ? (
+                  <div className="mt-4 border-t pt-4">
+                    <FactoryPackagesPriceEditor
+                      section="extras"
+                      housePrice={project.basePrice}
+                      offer={project.factoryOffer}
+                      saving={savingOffer}
+                      onSave={(next) => void saveFactoryOffer(next)}
+                    />
+                  </div>
+                ) : null}
               </Panel>
             </TabsContent>
 
             <TabsContent value="options" className="mt-0">
               <Panel>
-                <FactoryPackagesPriceEditor
-                  section="extras"
-                  housePrice={project.basePrice}
-                  offer={project.factoryOffer}
-                  saving={savingOffer}
-                  editable={editMode}
-                  onSave={(next) => void saveFactoryOffer(next)}
+                <CompanyProjectOptions
+                  key={project.id}
+                  projectId={project.id}
+                  groups={project.details?.optionGroups ?? []}
+                  onSaved={(optionGroups) => setProject((current) => current ? {
+                    ...current, details: { ...current.details, optionGroups }
+                  } : current)}
                 />
               </Panel>
             </TabsContent>

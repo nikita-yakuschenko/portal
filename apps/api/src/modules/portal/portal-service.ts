@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 
-import { and, desc, eq, inArray, isNull, ne, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import type {
@@ -1231,6 +1231,14 @@ export class PortalService {
   }
 
   /** Правка карточки проекта в кабинете компании (описание, характеристики) */
+  async updateCatalogOptionGroups(projectId: string, groups: CatalogProjectDetails["optionGroups"]) {
+    const [saved] = await db.update(catalogProjects)
+      .set({ details: sql`jsonb_set(${catalogProjects.details}, '{optionGroups}', ${JSON.stringify(groups)}::jsonb)` })
+      .where(eq(catalogProjects.id, projectId))
+      .returning({ id: catalogProjects.id });
+    return saved;
+  }
+
   async updateCatalogProject(
     projectId: string,
     patch: {

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import type { CatalogProjectDetails, CatalogTechnology, FactoryOffer } from "@b2b/domain";
 import { factoryOptionKey } from "../partners/partner-pricing.js";
@@ -326,7 +326,7 @@ export async function syncCmsCatalog() {
                 slug: next.slug,
                 description: kept(locked, "description", "", existing.description),
                 technology: kept(locked, "technology", next.technology, existing.technology),
-                details: next.details,
+                details: sql`jsonb_set(${JSON.stringify(next.details)}::jsonb, '{optionGroups}', coalesce(${catalogProjects.details}->'optionGroups', '[]'::jsonb))`,
                 area: kept(locked, "area", next.area, existing.area),
                 floors: kept(locked, "floors", next.floors, existing.floors),
                 bedrooms: kept(locked, "bedrooms", next.bedrooms, existing.bedrooms),

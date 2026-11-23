@@ -20,7 +20,7 @@ export type CatalogProjectDetails = {
   optionGroups: Array<{
     id: string;
     title: string;
-    items: Array<{ id: string; name: string; note?: string }>;
+    items: Array<{ id: string; name: string; note?: string | undefined; price?: number | undefined }>;
   }>;
   techDocs: Array<{
     id: string;
