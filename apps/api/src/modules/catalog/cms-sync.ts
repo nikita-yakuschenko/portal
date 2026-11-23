@@ -1,8 +1,9 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { and, eq } from "drizzle-orm";
 
-import type { CatalogProjectDetails, CatalogTechnology } from "@b2b/domain";
+import type { CatalogProjectDetails, CatalogTechnology, FactoryOffer } from "@b2b/domain";
+import { factoryOptionKey } from "../partners/partner-pricing.js";
 
 import { config } from "../../config.js";
 import { db } from "../../db/client.js";
@@ -50,7 +51,20 @@ type CmsCabinet = {
   cargo?: CatalogProjectDetails["cargo"];
   transport?: CatalogProjectDetails["transport"];
   dealerPrice?: number | null;
+  dealerOptions?: Array<{ name: string; price: number; kind: "assembly" | "extra" }> | null;
+  dealerOptionsUpdatedAt?: string | null;
 };
+
+function factoryOfferOf(cabinet: CmsCabinet | null): FactoryOffer | undefined {
+  if (!Array.isArray(cabinet?.dealerOptions)) return undefined;
+  const offer: FactoryOffer = { importedAt: cabinet.dealerOptionsUpdatedAt ?? "", sources: ["CMS"], assembly: [], extras: [] };
+  for (const option of cabinet.dealerOptions) {
+    const key = factoryOptionKey(option.name);
+    const id = createHash("sha256").update(key).digest("hex").slice(0, 20);
+    offer[option.kind === "assembly" ? "assembly" : "extras"].push({ id, name: option.name, price: option.price });
+  }
+  return offer;
+}
 
 type DesiredAsset = {
   sourceUrl: string;
@@ -277,6 +291,7 @@ export async function syncCmsCatalog() {
           const locked = overridesOf(existing?.syncOverrides);
           const currentDetails = (existing?.details ?? null) as CatalogProjectDetails | null;
           const dealerPrice = typeof cabinet?.dealerPrice === "number" && cabinet.dealerPrice > 0 ? Math.round(cabinet.dealerPrice) : null;
+          const factoryOffer = factoryOfferOf(cabinet);
           const next = {
             name: item.name.trim() || item.slug,
             slug: item.slug,
@@ -288,6 +303,7 @@ export async function syncCmsCatalog() {
             bedrooms: whole(item.bedrooms),
             bathrooms: item.bathrooms?.trim() || null,
             basePrice: dealerPrice,
+            ...(factoryOffer ? { factoryOffer } : {}),
             projectUrl: `https://avgst.ru${item.href || `/catalog/${item.slug}`}`,
             active: true,
             sourcePayload: { code: sourceUid, slug: item.slug },
@@ -316,6 +332,7 @@ export async function syncCmsCatalog() {
                 bedrooms: kept(locked, "bedrooms", next.bedrooms, existing.bedrooms),
                 bathrooms: kept(locked, "bathrooms", next.bathrooms, existing.bathrooms),
                 basePrice: kept(locked, "basePrice", next.basePrice, existing.basePrice),
+                ...(factoryOffer ? { factoryOffer } : {}),
                 projectUrl: next.projectUrl,
                 active: kept(locked, "active", next.active, existing.active),
                 sourcePayload: next.sourcePayload,

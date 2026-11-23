@@ -440,7 +440,7 @@ export function CompanyCatalogProject({ projectKey }: { projectKey: string }) {
             <TabsContent value="packages" className="mt-0">
               <Panel>
                 <FactoryPackagesPriceEditor
-                  section="assembly"
+                  section={!project.factoryOffer?.assembly?.length && project.factoryOffer?.extras?.length ? "extras" : "assembly"}
                   housePrice={project.basePrice}
                   offer={project.factoryOffer}
                   saving={savingOffer}
