@@ -219,15 +219,13 @@ export function PartnerCatalogProject({ projectKey }: { projectKey: string }) {
         ]);
         setProject(row);
         setCanManagePricing(me.user.role === "partner_owner");
-        const priceRow = pricing.find((item) => item.projectId === projectId);
-        if (priceRow) {
-          setFactorySelectedOptions(priceRow.factorySelectedOptions ?? []);
-          setPricingHint({
-            pricingMode: priceRow.pricingMode,
-            markupPercent: priceRow.markupPercent,
-            publicPrice: priceRow.publicPrice
-          });
-        }
+        const priceRow = pricing.find((item) => item.projectId === row.id);
+        setFactorySelectedOptions(priceRow?.factorySelectedOptions ?? []);
+        setPricingHint({
+          pricingMode: priceRow?.pricingMode ?? "on_request",
+          markupPercent: priceRow?.markupPercent ?? null,
+          publicPrice: priceRow?.publicPrice ?? null
+        });
         setForm({
           subject: `Запрос по проекту «${row.name}»`,
           message: ""
@@ -260,14 +258,15 @@ export function PartnerCatalogProject({ projectKey }: { projectKey: string }) {
   );
 
   async function persistFactoryOptions(nextKeys: string[]) {
+    if (!canManagePricing || !project?.active || savingFactoryOptions) return;
+    const previousKeys = factorySelectedOptions;
     setFactorySelectedOptions(nextKeys);
-    if (!canManagePricing || project?.active === false) return;
     setSavingFactoryOptions(true);
     try {
       await apiFetch("/api/partner/pricing", {
         method: "PUT",
         body: JSON.stringify({
-          projectId,
+          projectId: project.id,
           pricingMode: pricingHint.pricingMode,
           ...(pricingHint.pricingMode === "markup" && pricingHint.markupPercent != null
             ? { markupPercent: Math.round(pricingHint.markupPercent) }
@@ -279,6 +278,7 @@ export function PartnerCatalogProject({ projectKey }: { projectKey: string }) {
         })
       });
     } catch (err) {
+      setFactorySelectedOptions(previousKeys);
       toast.error(err instanceof Error ? err.message : "Не удалось сохранить комплектацию");
     } finally {
       setSavingFactoryOptions(false);
